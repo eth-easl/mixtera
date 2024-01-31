@@ -14,7 +14,6 @@ class MixteraDataset:
         cls.num_proc = kwargs.get("num_proc", 1)
         return cls()
 
-
     def __init__(self) -> None:
         pass
 
