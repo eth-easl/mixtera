@@ -8,11 +8,13 @@ class Query:
     dataset: MixteraDataset
     query_plan: QueryPlan
 
+    def __init__(self, ds) -> None:
+        self.dataset = ds
+        self.query_plan = QueryPlan()
+        
     @classmethod
     def from_dataset(cls, dataset: MixteraDataset):
-        cls.dataset = dataset
-        cls.query_plan = QueryPlan()
-        return cls()
+        return cls(dataset)
 
     @classmethod
     def register(cls, operator):
@@ -21,6 +23,9 @@ class Query:
 
         def process_op(self, *args, **kwargs):
             op = operator(*args, **kwargs)
+            print("args")
+            if isinstance(args[0], Query):
+                args[0].root.display(0)
             op.set_ds(self.dataset)
             logger.info(f"Processing operator {op_name}")
             """add op to the query plan"""
@@ -31,6 +36,10 @@ class Query:
 
     def display(self):
         self.query_plan.display()
+
+    @property
+    def root(self):
+        return self.query_plan.root
 
 
 def register(operator):

@@ -1,4 +1,5 @@
 from .query import Query
-from .builtins import Select, UnionOperator
+# import * such that all built-ins are registered
+from .builtins import *
 
 __all__ = ["Query"]

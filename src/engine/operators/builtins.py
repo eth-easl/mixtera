@@ -15,9 +15,6 @@ class Select(Operator):
     def __repr__(self):
         return f"select<{self.ds}>({self.condition})"
 
-    def process(self, condition):
-        print(f"selecting by {condition}")
-
     def insert(self, parent):
         """
         .select(condition) -> select<condition> -> remaining query plan
@@ -26,9 +23,12 @@ class Select(Operator):
         return self
 
 
-class UnionOperator(Operator):
-    def __init__(self, ds: MixteraDataset) -> None:
-        super().__init__(ds)
+class Union(Operator):
+    def __init__(self, operator_a) -> None:
+        super().__init__()
+
+        self.operator_a = operator_a
+        self.operator_a.root.display(0)
 
     def apply(self, operator_a, operator_b):
         # check if the apply method of operator_a and operator_b returned two lists
@@ -37,9 +37,16 @@ class UnionOperator(Operator):
         # deduplicate
         return list(set(res_a + res_b))
 
-    def insert(self, left):
-        # for union operator, insertion means adding the left operator as a child to the current union operator
-        self.children.append(left)
+    def __repr__(self):
+        return f"union<>()"
+
+    def insert(self, parent):
+        # op_a.union(op_b) -> union as new root with two children
+        parent.display(0)
+        self.operator_a.root.display(0)
+        self.children = [self.operator_a.root, parent]
+        return self
 
 
 register(Select)
+register(Union)

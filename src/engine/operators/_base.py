@@ -14,8 +14,8 @@ class Operator:
     def set_ds(self, ds):
         self.ds = ds
 
-    def display(self,level):
-        print(f"{'-'*level}> {str(self)}")
+    def display(self, level):
+        print(f"{'-'*level}{'> ' if level > 0 else ''}{str(self)}")
         for child in self.children:
             if child:
                 child.display(level+1)
