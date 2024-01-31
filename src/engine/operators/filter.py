@@ -1,3 +1,0 @@
-@operator
-def where(self, condition):
-    ...
