@@ -4,6 +4,7 @@ from src.engine.datasets import MixteraDataset
 class Operator:
     def __init__(self) -> None:
         self.children = []
+        self.results = []
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -20,7 +21,22 @@ class Operator:
             if child:
                 child.display(level+1)
 
+    def post_order_traverse(self):
+        for child in self.children:
+            if child:
+                child.post_order_traverse()
+        print(f"Applying {self}")
+        self.apply()
 
-def childOp(original_class):
+    def cleanup(self):
+        #todo(xiaozhe): we'd better remove 'none' while constructing...
+        self.children = [x for x in self.children if x]
+        for child in self.children:
+            child.cleanup()
 
+def parent_op(original_class):
+    def parent_op_insert(self, parent):
+        self.children.append(parent)
+        return self
+    original_class.insert = parent_op_insert
     return original_class

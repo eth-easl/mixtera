@@ -1,9 +1,9 @@
 import os
+import json
 import sqlite3
 from loguru import logger
 from typing import Callable
-
-
+import linecache
 class MixteraDataset:
     dataset_path: str
     num_proc: int
@@ -64,8 +64,16 @@ class MixteraDataset:
         cur = conn.cursor()
         cur.execute("SELECT value FROM metadata WHERE key=?;", (key,))
         res = cur.fetchone()[0]
-        print(res)
         # convert it back to a list
         filename = res.split(":")[0]
         line_ids = [int(x) for x in res.split(":")[1].split(",")]
         return [f"{filename}:{x}" for x in line_ids]
+
+    def read_values(self, keys):
+        self.results = []
+        for key in keys:
+            filename, lineid = key.split(":")
+            # TODO(xiaozhe): seems linecache starts at 1...?
+            res = linecache.getline(os.path.join(self.dataset_path, filename), int(lineid)+1)
+            self.results.append(json.loads(res))
+        return self.results

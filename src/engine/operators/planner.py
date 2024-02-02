@@ -8,7 +8,6 @@ class QueryPlan:
         self.root = None
 
     def add(self, node: Operator):
-        logger.info(f"Adding operator {node} to the query plan")
         self.root = node.insert(self.root)
 
     def display(self):
