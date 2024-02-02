@@ -1,0 +1,10 @@
+scikit-learn
+numpy
+loguru
+tokenizers
+tabulate
+sentencepiece
+scalene
+sphinx-autobuild
+myst-parser
+furo
