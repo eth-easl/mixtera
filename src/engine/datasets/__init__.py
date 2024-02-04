@@ -1,3 +1,3 @@
 from ._base import MixteraDataset
-
-__all__ = ["MixteraDataset"]
+from .remote import RemoteMixteraDataset
+__all__ = ["MixteraDataset", "RemoteMixteraDataset"]

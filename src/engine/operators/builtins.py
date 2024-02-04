@@ -31,7 +31,6 @@ class Union(Operator):
         self.children = [self.operator_a.root]
     
     def apply(self):
-        # check if the apply method of operator_a and operator_b returned two lists
         final_results = []
         self.results = [x.results for x in self.children]
         for result in self.results:
@@ -44,15 +43,19 @@ class Union(Operator):
 
 @parent_op
 class Materialize(Operator):
-    def __init__(self) -> None:
+    def __init__(self, streaming=False) -> None:
         super().__init__()
+        self.streaming = streaming
 
     def apply(self):
         assert len(self.children) == 1, f"Materialize operator should have exactly one child, Found {len(self.children)} children"
         self.results = self.children[0].results
         logger.info(f"Going to materialize {len(self.results)} results...")
-        self.results = self.ds.read_values(self.results)
-        return self.results
-
+        if self.streaming:
+            self.results = yield from self.ds.stream_values(self.results)
+        else:
+            self.results = self.ds.read_values(self.results)
+        return True
+    
     def __repr__(self):
         return f"materialize<>()"

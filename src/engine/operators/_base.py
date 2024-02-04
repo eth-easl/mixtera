@@ -25,7 +25,6 @@ class Operator:
         for child in self.children:
             if child:
                 child.post_order_traverse()
-        print(f"Applying {self}")
         self.apply()
 
     def cleanup(self):

@@ -34,19 +34,17 @@ class Query:
     def root(self):
         return self.query_plan.root
 
-    def execute(self, materialize=True):
+    def execute(self, materialize=True, streaming=False):
         if materialize:
-            mat_op = Materialize()
+            mat_op = Materialize(streaming=streaming)
             mat_op.set_ds(self.dataset)
             self.query_plan.add(mat_op)
         self.root.cleanup()
         self.root.post_order_traverse()
-        logger.info(f"Query returned {len(self.root.results)} samples")
+        if not streaming:
+            logger.info(f"Query returned {len(self.root.results)} samples")
         return self.root.results
 
-def register(operator):
-    Query.register(operator)
-
-register(Select)
-register(Union)
-register(Materialize)
+Query.register(Select)
+Query.register(Union)
+Query.register(Materialize)

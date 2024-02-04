@@ -4,18 +4,17 @@ import sqlite3
 from loguru import logger
 from typing import Callable
 import linecache
+
 class MixteraDataset:
-    dataset_path: str
-    num_proc: int
 
     @classmethod
     def from_folder(cls, dataset_path, **kwargs):
-        cls.dataset_path = dataset_path
-        cls.num_proc = kwargs.get("num_proc", 1)
-        return cls()
+        num_proc = kwargs.get("num_proc", 1)
+        return cls(dataset_path, int(num_proc))
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, dataset_path, num_proc=1) -> None:
+        self.dataset_path = dataset_path
+        self.num_proc = num_proc
 
     def __repr__(self) -> str:
         return f"MixteraDataset({self.dataset_path})"
@@ -59,6 +58,12 @@ class MixteraDataset:
         logger.info("Preparing dataset...")
         self.build_index(process_fn=process_fn)
 
+    def read_keys(self):
+        conn = sqlite3.connect(os.path.join(self.dataset_path, "invert_index.db"))
+        cur = conn.cursor()
+        cur.execute("SELECT key FROM metadata;")
+        return [x[0] for x in cur.fetchall()]
+
     def find_by_key(self, key):
         conn = sqlite3.connect(os.path.join(self.dataset_path, "invert_index.db"))
         cur = conn.cursor()
@@ -68,6 +73,12 @@ class MixteraDataset:
         filename = res.split(":")[0]
         line_ids = [int(x) for x in res.split(":")[1].split(",")]
         return [f"{filename}:{x}" for x in line_ids]
+
+    async def stream_values(self, keys):
+        for key in keys:
+            filename, lineid = key.split(":")
+            res = linecache.getline(os.path.join(self.dataset_path, filename), int(lineid)+1)
+            yield res
 
     def read_values(self, keys):
         self.results = []
