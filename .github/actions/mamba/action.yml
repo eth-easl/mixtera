@@ -25,6 +25,6 @@ runs:
 
       - name: Install dev requirements 
         run: | 
-          micromamba run -n modyn pip install -e .
-          micromamba run -n modyn pip install -r dev-requirements.txt
+          micromamba run -n mixtera pip install -e .
+          micromamba run -n mixtera pip install -r dev-requirements.txt
         shell: bash -l {0}
