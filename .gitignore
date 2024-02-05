@@ -1,0 +1,56 @@
+# Logging files
+*.log
+
+# Database files
+*.db
+
+# Visual Studio Code
+.vscode
+
+# Storage
+*.tar
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyc
+
+# C extensions
+*.so
+
+# Distribution / packaging
+bin/
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.eggs/
+*.egg-info
+
+# postgresql
+postgres-data/
+storage-postgres-data/
+metadata-postgres-data/
+
+# Trainer output data
+src/data/*
+
+.DS_Store
+
+# Pytest stuff
+.pytest_cache
+reports/
+htmlcov/
+assets/
+report.html
+.coverage
+# Pytest creates files that have the name of the local desktop included, so we need to wildcard here
+.coverage.*
