@@ -1,0 +1,1 @@
+echo "You're lucky, server integration tests are not set up yet."
