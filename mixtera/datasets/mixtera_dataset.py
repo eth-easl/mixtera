@@ -10,6 +10,18 @@ class MixteraDataset(ABC):
 
     @staticmethod
     def from_directory(directory: Path) -> LocalMixteraDataset:
+        """
+        Instantiates a LocalMixteraDataset from a directory.
+        In this directory, Mixtera might create arbitrary files to manage metadata (e.g., a sqlite database).
+        Information is persisted across instantiations in this database.
+        New datasets can be added using the `register_dataset` function.
+
+        Args:
+            directory (Path): The directory where Mixtera stores its metadata files
+
+        Returns:
+            A LocalMixteraDataset instance.
+        """
         if directory.exists():
             return LocalMixteraDataset(directory)
 
