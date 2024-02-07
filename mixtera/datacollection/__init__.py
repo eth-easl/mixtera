@@ -4,8 +4,8 @@ This submodule contains Mixtera's datasets, which are the main API of Mixtera
 
 import os
 
+from .data_collection import MixteraDataCollection  # noqa: F401
 from .dataset_types import DatasetTypes  # noqa: F401
-from .mixtera_dataset import MixteraDataset  # noqa: F401
 
 files = os.listdir(os.path.dirname(__file__))
 files.remove("__init__.py")

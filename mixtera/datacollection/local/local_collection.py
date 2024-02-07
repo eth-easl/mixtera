@@ -1,14 +1,15 @@
 import json
 import sqlite3
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from mixtera.datasets import DatasetTypes, MixteraDataset
+from mixtera.datacollection import DatasetTypes, MixteraDataCollection
 from mixtera.utils import ranges
 
 
-class LocalMixteraDataset(MixteraDataset):
+class LocalDataCollection(MixteraDataCollection):
 
     def __init__(self, directory: Path) -> None:
         if not directory.exists():
@@ -17,11 +18,13 @@ class LocalMixteraDataset(MixteraDataset):
         self._directory = directory
         self._database_path = self._directory / "mixtera.sqlite"
 
-        self._hacky_indx: dict[Any, Any] = {}  # TODO(#8): Actually store index in sqlite instead of memory
+        # 1st level: dataset 2nd level: categories 3rd level: buckets
+        # TODO(#8): Actually store index in sqlite instead of memory
+        self._hacky_indx: defaultdict[str, defaultdict[str, defaultdict[str, list]]] = defaultdict(
+            lambda: defaultdict(lambda: defaultdict(list))
+        )
 
         if not self._database_path.exists():
-            self._init_database()
-            assert self._database_path.exists()
             self._connection = self._init_database()
         else:
             self._connection = sqlite3.connect(self._database_path)
@@ -34,11 +37,11 @@ class LocalMixteraDataset(MixteraDataset):
         cur = conn.cursor()
         cur.execute(
             "CREATE TABLE IF NOT EXISTS datasets"
-            " (id PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL,"
+            " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE,"
             " location TEXT NOT NULL, type INTEGER NOT NULL);"
         )
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS files (id PRIMARY KEY AUTOINCREMENT NOT NULL, location TEXT NOT NULL,);"
+            "CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, location TEXT NOT NULL);"
         )
         conn.commit()
         logger.info("Database initialized.")
@@ -49,8 +52,8 @@ class LocalMixteraDataset(MixteraDataset):
         if not self._insert_dataset_into_table(identifier, loc, dtype):
             return False
 
-        if dtype == DatasetTypes.JSONL:
-            return self._register_jsonl_dataset(identifier, loc)
+        if dtype in [DatasetTypes.JSONL_COLLECTION, DatasetTypes.JSONL_SINGLEFILE]:
+            return self._register_jsonl_collection_or_file(identifier, loc)
 
         raise NotImplementedError(f"Unsupported dataset type: {dtype}")
 
@@ -58,10 +61,14 @@ class LocalMixteraDataset(MixteraDataset):
         raise NotImplementedError("Not yet implemented")
 
     def _insert_dataset_into_table(self, identifier: str, loc: str, dtype: DatasetTypes) -> bool:
-        query = "INSERT INTO datasets (name, location, type) VALUES (?, ?, ?)"
-        cur = self._connection.cursor()
-        cur.execute(query, (identifier, loc, dtype.value))
-        self._connection.commit()
+        try:
+            query = "INSERT INTO datasets (name, location, type) VALUES (?, ?, ?);"
+            cur = self._connection.cursor()
+            cur.execute(query, (identifier, loc, dtype.value))
+            self._connection.commit()
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during insertion: {err}")
+            return False
 
         if cur.rowcount == 1:
             logger.info(f"Sucessfully registered dataset {identifier}.")
@@ -72,9 +79,10 @@ class LocalMixteraDataset(MixteraDataset):
 
     def _insert_file_into_table(self, loc: str) -> int:
         # TODO(create issue): Potentially batch inserts of multiple files if this is too slow.
-        query = "INSERT INTO files (location) VALUES (?)"
+        query = "INSERT INTO files (location) VALUES (?);"
         cur = self._connection.cursor()
-        cur.execute(query, (loc))
+        logger.info(f"Inserting file at {loc}")
+        cur.execute(query, (loc,))
         self._connection.commit()
 
         if cur.rowcount == 1:
@@ -84,7 +92,7 @@ class LocalMixteraDataset(MixteraDataset):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _register_jsonl_dataset(self, identifier: str, loc: str) -> bool:
+    def _register_jsonl_collection_or_file(self, identifier: str, loc: str) -> bool:
         # TODO(create issue): Can we make this idempotent to allow users to update? / Allow for recalculation
 
         loc_path = Path(loc)
@@ -94,7 +102,8 @@ class LocalMixteraDataset(MixteraDataset):
 
         # TODO(#8): Initialize index here
 
-        for jsonl_file in loc_path.glob("*.jsonl"):
+        file_list = [loc_path] if loc_path.is_file() else loc_path.glob("*.jsonl")
+        for jsonl_file in file_list:
             if not self._register_jsonl_file(identifier, jsonl_file):
                 logger.error(f"Error while registering file {jsonl_file}.")
                 return False
@@ -113,7 +122,8 @@ class LocalMixteraDataset(MixteraDataset):
             return False
 
         # For now, I just hardcode the SlimPajama example. We have to generalize this to UDFs
-        index: dict[str, Any] = {"language": {}, "publication_date": {}}
+        # index is the local index which we merge into the global index
+        index: dict[str, Any] = {"language": defaultdict(list), "publication_date": defaultdict(list)}
         with open(file, encoding="utf-8") as fd:
             for line_id, line in enumerate(fd):
                 json_obj = json.loads(line)
@@ -126,33 +136,29 @@ class LocalMixteraDataset(MixteraDataset):
                 for index_field in index:  # pylint: disable=consider-using-dict-items
                     if index_field not in meta:
                         continue
-
-                    # TODO(#11): Support numerical buckets, not just categorical
-
                     value = meta[index_field]
-                    if value not in index[index_field]:
-                        index[index_field][value] = [line_id]
+
+                    if index_field == "language":
+                        # This is especially critical to generalize.
+                        for lang in value:
+                            lang_name = lang["name"]
+                            index[index_field][lang_name].append(line_id)
                     else:
+                        # TODO(#11): Support numerical buckets, not just categorical
+                        # logger.info(f"for index {index_field} the value is {value}")
                         index[index_field][value].append(line_id)
 
         # Rangi-fy the list for each index, i.e., we go from [1,2,3,5,6,7] to [(1,4), (5,8)] to compress
         # Additionally, we add the current file ID
         for index_field, buckets in index.items():
-            for bucket_key, bucket_vals in buckets.copy():
+            logger.info(buckets)
+            logger.info(index_field)
+            for bucket_key, bucket_vals in buckets.copy().items():
                 buckets[bucket_key] = ((file_id,) + rang for rang in ranges(bucket_vals))
 
         # TODO(#8): Extend sqlite index instead of in-memory index
-        if identifier not in self._hacky_indx:
-            self._hacky_indx[identifier] = {}
-
         for index_field, buckets in index.items():
-            if index_field not in self._hacky_indx[identifier]:
-                self._hacky_indx[identifier][index_field] = buckets
-            else:
-                for bucket_key, bucket_vals in buckets:
-                    if bucket_key not in self._hacky_indx[identifier][index_field]:
-                        self._hacky_indx[identifier][index_field][bucket_key] = bucket_vals
-                    else:
-                        self._hacky_indx[identifier][index_field][bucket_key].extend(bucket_vals)
+            for bucket_key, bucket_vals in buckets.items():
+                self._hacky_indx[identifier][index_field][bucket_key].extend(bucket_vals)
 
         return True

@@ -10,4 +10,4 @@ def ranges(nums: List[int]) -> List[Tuple[int, int]]:
     # Taken from https://stackoverflow.com/a/48106843
     gaps = [[s, e] for s, e in zip(nums, nums[1:]) if s + 1 < e]
     edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
-    return list(zip(edges, edges))
+    return [(s, e + 1) for s, e in zip(edges, edges)]

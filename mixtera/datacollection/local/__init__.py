@@ -1,10 +1,10 @@
 """
-This submodule contains Mixtera's local dataset
+This submodule contains Mixtera's local collection
 """
 
 import os
 
-from .local_mixtera_dataset import LocalMixteraDataset  # noqa: F401
+from .local_collection import LocalDataCollection  # noqa: F401
 
 files = os.listdir(os.path.dirname(__file__))
 files.remove("__init__.py")

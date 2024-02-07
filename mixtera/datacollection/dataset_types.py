@@ -2,4 +2,5 @@ from enum import Enum
 
 
 class DatasetTypes(Enum):
-    JSONL = 1
+    JSONL_COLLECTION = 1
+    JSONL_SINGLEFILE = 2

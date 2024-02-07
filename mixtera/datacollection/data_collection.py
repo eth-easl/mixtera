@@ -1,17 +1,20 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from mixtera.datasets import DatasetTypes
-from mixtera.datasets.local import LocalMixteraDataset
-from mixtera.datasets.remote import RemoteMixteraDataset
+from mixtera.datacollection.dataset_types import DatasetTypes
+
+if TYPE_CHECKING:
+    from mixtera.datacollection.local import LocalDataCollection
+    from mixtera.datacollection.remote import RemoteDataCollection
 
 
-class MixteraDataset(ABC):
+class MixteraDataCollection(ABC):
 
     @staticmethod
-    def from_directory(directory: Path) -> LocalMixteraDataset:
+    def from_directory(directory: Path | str) -> "LocalDataCollection":
         """
-        Instantiates a LocalMixteraDataset from a directory.
+        Instantiates a LocalCollection from a directory.
         In this directory, Mixtera might create arbitrary files to manage metadata (e.g., a sqlite database).
         Information is persisted across instantiations in this database.
         New datasets can be added using the `register_dataset` function.
@@ -22,24 +25,32 @@ class MixteraDataset(ABC):
         Returns:
             A LocalMixteraDataset instance.
         """
-        if directory.exists():
-            return LocalMixteraDataset(directory)
+        # Local import to avoid circular dependency
+        from mixtera.datacollection.local import LocalDataCollection  # pylint: disable=import-outside-toplevel
 
-        raise RuntimeError(f"Directory {directory} does not exist.")
+        if isinstance(directory, str):
+            dir_path = Path(directory)
+        else:
+            dir_path = directory
+
+        if dir_path.exists():
+            return LocalDataCollection(dir_path)
+
+        raise RuntimeError(f"Directory {dir_path} does not exist.")
 
     @staticmethod
-    def from_remote(endpoint: str) -> RemoteMixteraDataset:
+    def from_remote(endpoint: str) -> "RemoteDataCollection":
         raise NotImplementedError("Remote datasets are not yet supported.")
 
     @abstractmethod
     def register_dataset(self, identifier: str, loc: str, dtype: DatasetTypes) -> bool:
         """
-        This method registers a (sub)dataset in the MixteraDataset.
+        This method registers a dataset in the MixteraDataCollection.
 
         Args:
             identifier (str): The dataset identifier.
-            loc (str): The location where the (sub)dataset is stored.
-                       For example, a path to a jsonl file.
+            loc (str): The location where the dataset is stored.
+                       For example, a path to a directory of jsonl files.
             dtype (DatasetTypes): The type of the dataset.
 
         Returns:
