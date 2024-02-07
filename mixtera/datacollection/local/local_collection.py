@@ -2,7 +2,7 @@ import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from loguru import logger
 from mixtera.datacollection import DatasetTypes, MixteraDataCollection
@@ -56,9 +56,6 @@ class LocalDataCollection(MixteraDataCollection):
             return self._register_jsonl_collection_or_file(identifier, loc)
 
         raise NotImplementedError(f"Unsupported dataset type: {dtype}")
-
-    def check_dataset_exists(self, identifier: str) -> bool:
-        raise NotImplementedError("Not yet implemented")
 
     def _insert_dataset_into_table(self, identifier: str, loc: str, dtype: DatasetTypes) -> bool:
         try:
@@ -162,3 +159,34 @@ class LocalDataCollection(MixteraDataCollection):
                 self._hacky_indx[identifier][index_field][bucket_key].extend(bucket_vals)
 
         return True
+
+    def check_dataset_exists(self, identifier: str) -> bool:
+        try:
+            query = "SELECT COUNT(*) from datasets WHERE name = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (identifier,))
+            result = cur.fetchone()[0]
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during selection: {err}")
+            return False
+
+        assert result <= 1
+        return result == 1
+
+    def list_datasets(self) -> List[str]:
+        try:
+            query = "SELECT name from datasets;"
+            cur = self._connection.cursor()
+            cur.execute(
+                query,
+            )
+            result = cur.fetchall()
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during selection: {err}")
+            return []
+
+        return [dataset for (dataset,) in result]
+
+    def remove_dataset(self, identifier: str) -> bool:
+        # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
+        raise NotImplementedError("Not implemented for LocalCollection")

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from mixtera.datacollection.dataset_types import DatasetTypes
 
@@ -62,13 +62,41 @@ class MixteraDataCollection(ABC):
     @abstractmethod
     def check_dataset_exists(self, identifier: str) -> bool:
         """
-        Checks whether a (sub)dataset exists in the MixteraDataset
+        Checks whether a dataset exists in the MixteraDataCollection
+
+        Args:
+            identifier (str): The identifier of the dataset
+
+        Returns:
+            Boolean indicating whtether the dataset exists.
+        """
+
+        raise NotImplementedError()
+
+    @abstractmethod
+    def list_datasets(self) -> List[str]:
+        """
+        Lists all datasets that are part of the MixteraDataCollection
 
         Args:
             identifier (str): The identifier of the (sub)dataset
 
         Returns:
-            Boolean indicating whtether the dataset exists.
+            List of dataset identifiers.
+        """
+
+        raise NotImplementedError()
+
+    @abstractmethod
+    def remove_dataset(self, identifier: str) -> bool:
+        """
+        Removes a dataset from the MixteraDataCollection
+
+        Args:
+            identifier (str): The identifier of the dataset
+
+        Returns:
+            Boolean indicating success of the operation.
         """
 
         raise NotImplementedError()

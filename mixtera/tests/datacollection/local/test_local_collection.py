@@ -264,6 +264,31 @@ class TestLocalDataCollection(unittest.TestCase):
 
         self.assertEqual(defaultdict_to_dict(ldc._hacky_indx), expected_index)
 
+    def test_check_dataset_exists(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+        (directory / "loc").touch()
+
+        self.assertFalse(ldc.check_dataset_exists("test"))
+        self.assertFalse(ldc.check_dataset_exists("test2"))
+        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertTrue(ldc.check_dataset_exists("test"))
+        self.assertFalse(ldc.check_dataset_exists("test2"))
+        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertTrue(ldc.check_dataset_exists("test"))
+        self.assertTrue(ldc.check_dataset_exists("test2"))
+
+    def test_list_datasets(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+        (directory / "loc").touch()
+
+        self.assertListEqual([], ldc.list_datasets())
+        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertListEqual(["test"], ldc.list_datasets())
+        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertListEqual(["test", "test2"], ldc.list_datasets())
+
 
 def defaultdict_to_dict(d):
     if isinstance(d, defaultdict):
