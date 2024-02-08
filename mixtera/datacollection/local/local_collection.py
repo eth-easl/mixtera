@@ -2,10 +2,12 @@ import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Callable, List, Optional
 
 from loguru import logger
-from mixtera.datacollection import DatasetTypes, MixteraDataCollection
+from mixtera.core.processing import ExecutionMode
+from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
+from mixtera.datacollection import DatasetTypes, MixteraDataCollection, PropertyType
 from mixtera.utils import ranges
 
 
@@ -153,12 +155,14 @@ class LocalDataCollection(MixteraDataCollection):
             for bucket_key, bucket_vals in buckets.copy().items():
                 buckets[bucket_key] = ((file_id,) + rang for rang in ranges(bucket_vals))
 
-        # TODO(#8): Extend sqlite index instead of in-memory index
-        for index_field, buckets in index.items():
-            for bucket_key, bucket_vals in buckets.items():
-                self._hacky_indx[identifier][index_field][bucket_key].extend(bucket_vals)
-
+        self._merge_index(identifier, index)
         return True
+
+    def _merge_index(self, dataset_identifier: str, new_index: dict[str, Any]) -> None:
+        # TODO(#8): Extend sqlite index instead of in-memory index
+        for index_field, buckets in new_index.items():
+            for bucket_key, bucket_vals in buckets.items():
+                self._hacky_indx[dataset_identifier][index_field][bucket_key].extend(bucket_vals)
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
@@ -190,3 +194,56 @@ class LocalDataCollection(MixteraDataCollection):
     def remove_dataset(self, identifier: str) -> bool:
         # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
         raise NotImplementedError("Not implemented for LocalCollection")
+
+    def _get_files_for_dataset(self, identifier: str) -> bool:
+        raise NotImplementedError("Not implemented yet")
+
+    def add_property(
+        self,
+        property_name: str,
+        setup_func: Callable,
+        calc_func: Callable,
+        execution_mode: ExecutionMode,
+        property_type: PropertyType,
+        min_val: float = 0.0,
+        max_val: float = 1,
+        num_buckets: int = 10,
+        excluded_datasets: Optional[list[str]] = None,
+        batch_size: int = 1,
+        dop: int = 1,
+        data_only_on_primary: bool = True,
+    ) -> None:
+        if len(property_name) <= 0:
+            raise RuntimeError(f"Invalid property name: {property_name}")
+
+        if property_type == PropertyType.NUMERICAL and max_val <= min_val:
+            raise RuntimeError(f"max_val (= {max_val}) <= min_val (= {min_val})")
+
+        if num_buckets < 2:
+            raise RuntimeError(f"num_buckets = {num_buckets} < 2")
+
+        excluded_dataset_set = set([]) if excluded_datasets is None else set(excluded_datasets)
+        if any(not self.check_dataset_exists(excluded_dataset) for excluded_dataset in excluded_datasets):
+            raise RuntimeError("Some excluded dataset does not exist.")
+
+        if batch_size < 1:
+            raise RuntimeError(f"batch_size = {batch_size} < 1")
+
+        if property_type == PropertyType.CATEGORICAL and (min_val != 0.0 or max_val != 1.0 or num_buckets != 10):
+            logger.warning(
+                "For categorical properties, min_val/max_val/num_buckets do not have meaning, but deviate from their default value. Please ensure correct parameters."
+            )
+
+        # TODO(#11): support for numerical buckets
+        if property_type == PropertyType.NUMERICAL:
+            raise NotImplementedError("Numerical properties are not yet implemented")
+
+        datasets = [ds for ds in self.list_datasets() if ds not in excluded_dataset_set]
+        datasets_and_files = [(ds, file) for ds in datasets for file in self._get_files_for_dataset(ds)]
+
+        executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, setup_func, calc_func)
+        executor.load_data(datasets_and_files, data_only_on_primary)
+        results = executor.run()
+
+        for dataset_identifier, dataset_index in results.items():
+            self._merge_index(dataset_identifier, dataset_index)

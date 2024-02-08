@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Callable, List, Optional
 
+from mixtera.core.processing import ExecutionMode
 from mixtera.datacollection.dataset_types import DatasetTypes
 
 if TYPE_CHECKING:
+    from mixtera.datacollection import PropertyType
     from mixtera.datacollection.local import LocalDataCollection
     from mixtera.datacollection.remote import RemoteDataCollection
 
@@ -97,6 +99,45 @@ class MixteraDataCollection(ABC):
 
         Returns:
             Boolean indicating success of the operation.
+        """
+
+        raise NotImplementedError()
+
+    @abstractmethod
+    def add_property(
+        self,
+        property_name: str,
+        setup_func: Callable,
+        calc_func: Callable,
+        execution_mode: ExecutionMode,
+        property_type: PropertyType,
+        min_val: float = 0.0,
+        max_val: float = 1,
+        num_buckets: int = 10,
+        excluded_datasets: Optional[list[str]] = None,
+        batch_size: int = 1,
+        dop: int = 1,
+        data_only_on_primary: bool = True,
+    ) -> None:
+        """
+        Ex
+
+        Args:
+            property_name (str): The name of the new property that is added to the Mixtera index
+            setup_func (Callable): Function that performs setup (e.g., load model).
+                                   It is passed an instance of a class to put attributes on.
+            calc_func (Callable): The function that given a batch of data calculates a numerical or categorical value.
+                                  It has access to the class that was prepared by the setup_func.
+            execution_mode (ExecutionMode): How to execute the function, i.e., on Ray or locally
+            property_type (PropertyType): Whether it is a categorical or numerical property
+            min_val (float): Optional value for numerical properties specifying the min value the property can take
+            max_val (float): Optional value for numerical properties specifying the max value the property can take
+            num_buckets (int): The number of buckets for numeritcal properties
+            excluded_datasets (Optional[list[str]]): A list of dataset identifiers which should not be considered during calculation
+                                                     Note that any queries on the new property will then exclude these datasets.
+            batch_size (int): Size of one batch passed to one processing instance
+            dop (int): Degree of parallelism. How many processing units should be used in parallel. Meaning depends on execution_mode
+            data_only_on_primary (bool): If False, the processing units (may be remote machines) have access to the same paths as the primary.
         """
 
         raise NotImplementedError()
