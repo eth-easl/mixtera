@@ -55,6 +55,10 @@ setup(
     include_package_data=True,
     license="MIT",
     keywords=KEYWORDS,
+    scripts = [
+        'mixtera/cli/mixtera-cli',
+        'mixtera/cli/mixtera' # Duplication of mixtera-cli
+    ],
     classifiers=[
         # Trove classifiers
         # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
