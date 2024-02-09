@@ -1,4 +1,4 @@
-from mixtera.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import MixteraDataCollection
 
 
 class RemoteDataCollection(MixteraDataCollection):

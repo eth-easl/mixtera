@@ -6,8 +6,8 @@ from collections import defaultdict
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from mixtera.datacollection import DatasetTypes
-from mixtera.datacollection.local import LocalDataCollection
+from mixtera.core.datacollection import DatasetTypes
+from mixtera.core.datacollection.local import LocalDataCollection
 
 
 class TestLocalDataCollection(unittest.TestCase):
@@ -19,7 +19,7 @@ class TestLocalDataCollection(unittest.TestCase):
         self.temp_dir.cleanup()
 
     @patch("sqlite3.connect")
-    @patch("mixtera.datacollection.local.LocalDataCollection._init_database")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._init_database")
     def test_init_with_non_existing_database(self, mock_init_database: MagicMock, mock_connect: MagicMock):
         mock_connection = MagicMock()
         mock_init_database.return_value = mock_connection
@@ -33,7 +33,7 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertEqual(ldc._connection, mock_connection)
 
     @patch("sqlite3.connect")
-    @patch("mixtera.datacollection.local.LocalDataCollection._init_database")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._init_database")
     def test_init_with_existing_database(self, mock_init_database: MagicMock, mock_connect: MagicMock):
         mock_connection = MagicMock()
         mock_connect.return_value = mock_connection
@@ -98,8 +98,8 @@ class TestLocalDataCollection(unittest.TestCase):
         conn.close()
 
     @patch("sqlite3.connect")
-    @patch("mixtera.datacollection.local.LocalDataCollection._insert_dataset_into_table")
-    @patch("mixtera.datacollection.local.LocalDataCollection._register_jsonl_collection_or_file")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_collection_or_file")
     def test_register_dataset(self, mock_register_jsonl, mock_insert_into_table, mock_connect):
         mock_connection = MagicMock()
         mock_insert_into_table.return_value = True
@@ -147,7 +147,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
         self.assertTrue(ldc._insert_file_into_table("file_path"))
 
-    @patch("mixtera.datacollection.local.LocalDataCollection._register_jsonl_file")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_file")
     def test__register_jsonl_collection_or_file_file(self, mock_register_jsonl_file):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
@@ -165,7 +165,7 @@ class TestLocalDataCollection(unittest.TestCase):
         # Assert _register_jsonl_file is called once
         mock_register_jsonl_file.assert_called_once()
 
-    @patch("mixtera.datacollection.local.LocalDataCollection._register_jsonl_file")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_file")
     def test__register_jsonl_collection_or_file_failure(self, mock_register_jsonl_file):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
@@ -180,7 +180,7 @@ class TestLocalDataCollection(unittest.TestCase):
         # Assert that registration of a new JSONL file returns False
         self.assertFalse(ldc._register_jsonl_collection_or_file("test", str(jsonl_file_path)))
 
-    @patch("mixtera.datacollection.local.LocalDataCollection._register_jsonl_file")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_file")
     def test__register_jsonl_collection_or_file_directory(self, mock_register_jsonl_file):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
@@ -200,7 +200,7 @@ class TestLocalDataCollection(unittest.TestCase):
         # Assert _register_jsonl_file is called twice
         self.assertEqual(mock_register_jsonl_file.call_count, 2)
 
-    @patch("mixtera.datacollection.local.LocalDataCollection._insert_file_into_table")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
     def test_register_jsonl_file(self, mock_insert_file):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)

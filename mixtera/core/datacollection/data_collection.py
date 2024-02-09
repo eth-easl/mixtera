@@ -2,11 +2,11 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, List
 
-from mixtera.datacollection.dataset_types import DatasetTypes
+from mixtera.core.datacollection.dataset_types import DatasetTypes
 
 if TYPE_CHECKING:
-    from mixtera.datacollection.local import LocalDataCollection
-    from mixtera.datacollection.remote import RemoteDataCollection
+    from mixtera.core.datacollection.local import LocalDataCollection
+    from mixtera.core.datacollection.remote import RemoteDataCollection
 
 
 class MixteraDataCollection(ABC):
@@ -23,10 +23,10 @@ class MixteraDataCollection(ABC):
             directory (Path): The directory where Mixtera stores its metadata files
 
         Returns:
-            A LocalMixteraDataset instance.
+            A LocalDataCollection instance.
         """
         # Local import to avoid circular dependency
-        from mixtera.datacollection.local import LocalDataCollection  # pylint: disable=import-outside-toplevel
+        from mixtera.core.datacollection.local import LocalDataCollection  # pylint: disable=import-outside-toplevel
 
         if isinstance(directory, str):
             dir_path = Path(directory)
