@@ -88,7 +88,7 @@ class LocalDataCollection(MixteraDataCollection):
         return -1
 
     def _register_jsonl_collection_or_file(self, identifier: str, loc: str) -> bool:
-        # TODO(create issue): Can we make this idempotent to allow users to update? / Allow for recalculation
+        # TODO(#20): Can we make this idempotent to allow users to update? / Allow for recalculation
 
         loc_path = Path(loc)
 
