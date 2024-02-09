@@ -57,7 +57,7 @@ setup(
     keywords=KEYWORDS,
     scripts = [
         'mixtera/cli/mixtera-cli',
-        'mixtera/cli/mixtera'
+        'mixtera/cli/mixtera' # Duplication of mixtera-cli
     ],
     classifiers=[
         # Trove classifiers
