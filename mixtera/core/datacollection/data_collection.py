@@ -110,7 +110,7 @@ class MixteraDataCollection(ABC):
         setup_func: Callable,
         calc_func: Callable,
         execution_mode: ExecutionMode,
-        property_type: PropertyType,
+        property_type: "PropertyType",
         min_val: float = 0.0,
         max_val: float = 1,
         num_buckets: int = 10,
@@ -133,8 +133,10 @@ class MixteraDataCollection(ABC):
             max_val (float): Optional value for numerical properties specifying the max value the property can take
             num_buckets (int): The number of buckets for numeritcal properties
             batch_size (int): Size of one batch passed to one processing instance
-            dop (int): Degree of parallelism. How many processing units should be used in parallel. Meaning depends on execution_mode
-            data_only_on_primary (bool): If False, the processing units (may be remote machines) have access to the same paths as the primary.
+            dop (int): Degree of parallelism. How many processing units should be used in parallel.
+                       Meaning depends on execution_mode
+            data_only_on_primary (bool): If False, the processing units (may be remote machines)
+                                         have access to the same paths as the primary.
         """
 
         raise NotImplementedError()

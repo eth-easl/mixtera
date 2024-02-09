@@ -121,9 +121,7 @@ class LocalDataCollection(MixteraDataCollection):
         index = self._build_index_for_jsonl_file(identifier, file, file_id)
 
         # TODO(#8): Extend sqlite index instead of in-memory index
-        for index_field, buckets in index.items():
-            for bucket_key, bucket_vals in buckets.items():
-                self._hacky_indx[index_field][bucket_key].extend(bucket_vals)
+        self._merge_index(index)
 
         return True
 
@@ -168,8 +166,6 @@ class LocalDataCollection(MixteraDataCollection):
 
         index["dataset"] = {identifier: [(file_id, 0, max_line + 1)]}
 
-        self._merge_index(index)
-
         return index
 
     def _merge_index(self, new_index: dict[str, Any]) -> None:
@@ -207,7 +203,7 @@ class LocalDataCollection(MixteraDataCollection):
         # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
         raise NotImplementedError("Not implemented for LocalCollection")
 
-    def _get_files_for_dataset(self, identifier: str) -> bool:
+    def _get_files_for_dataset(self, identifier: str) -> list[str]:
         raise NotImplementedError("Not implemented yet")
 
     def add_property(
@@ -238,7 +234,8 @@ class LocalDataCollection(MixteraDataCollection):
 
         if property_type == PropertyType.CATEGORICAL and (min_val != 0.0 or max_val != 1.0 or num_buckets != 10):
             logger.warning(
-                "For categorical properties, min_val/max_val/num_buckets do not have meaning, but deviate from their default value. Please ensure correct parameters."
+                "For categorical properties, min_val/max_val/num_buckets do not have meaning,"
+                " but deviate from their default value. Please ensure correct parameters."
             )
 
         # TODO(#11): support for numerical buckets

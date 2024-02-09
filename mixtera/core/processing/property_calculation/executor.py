@@ -20,7 +20,8 @@ class PropertyCalculationExecutor(ABC):
 
         Args:
             mode (ExecutionMode): The execution mode to use
-            dop (int): Degree of parallelism. How many processing units should be used in parallel. Meaning depends on execution_mode
+            dop (int): Degree of parallelism. How many processing units should be used in parallel.
+                       Meaning depends on execution_mode
             setup_func (Callable): Function that performs setup (e.g., load model).
                                    It is passed an instance of a class to put attributes on.
             calc_func (Callable): The function that given a batch of data calculates a numerical or categorical value.
@@ -36,6 +37,7 @@ class PropertyCalculationExecutor(ABC):
             raise RuntimeError(f"batch_size = {batch_size} < 1")
 
         if mode == ExecutionMode.LOCAL:
+            # pylint: disable-next=import-outside-toplevel
             from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
 
             return LocalPropertyCalculationExecutor(dop, batch_size, setup_func, calc_func)
@@ -49,7 +51,8 @@ class PropertyCalculationExecutor(ABC):
 
         Args:
             datasets_and_files (list[str): A list of files to load to run processing on
-            data_only_on_primary (bool): If False, the processing units (may be remote machines) have access to the same paths as the primary.
+            data_only_on_primary (bool): If False, the processing units (may be remote machines)
+                                         have access to the same paths as the primary.
                                          Allows for non-centralized reading of files.
         """
 

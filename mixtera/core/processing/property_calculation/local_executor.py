@@ -37,14 +37,12 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
 
     def run(self) -> dict[str, list[Any]]:
         result: defaultdict[str, defaultdict[str, list]] = defaultdict(lambda: defaultdict(list))
-        # TODO should the calc func take one batch or "all" of them (to match Ray?) we want to use the same funcs for ray and local.
-        # this needs to change somehow to be independent of a batch
         for batch in self._sample_cache:
             dict_into_dict(result, self._calc_func(self, batch))
 
         return defaultdict_to_dict(result)
 
-    @classmethod
+    @staticmethod
     def _read_samples_from_file(file: str) -> list[str]:
         # TODO(create issue): This currently assumes everything is jsonl file
 
