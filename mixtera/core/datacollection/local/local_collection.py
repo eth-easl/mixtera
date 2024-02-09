@@ -2,14 +2,13 @@ import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List
 
 from loguru import logger
+from mixtera.core.datacollection import DatasetTypes, MixteraDataCollection, PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.datacollection import DatasetTypes, MixteraDataCollection, PropertyType
-from mixtera.utils import ranges
-from mixtera.utils import dict_into_dict
+from mixtera.utils import dict_into_dict, ranges
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -91,7 +90,7 @@ class LocalDataCollection(MixteraDataCollection):
         return -1
 
     def _register_jsonl_collection_or_file(self, identifier: str, loc: str) -> bool:
-        # TODO(create issue): Can we make this idempotent to allow users to update? / Allow for recalculation
+        # TODO(#20): Can we make this idempotent to allow users to update? / Allow for recalculation
 
         loc_path = Path(loc)
 
@@ -119,9 +118,22 @@ class LocalDataCollection(MixteraDataCollection):
             logger.error(f"Error while inserting file {file}")
             return False
 
+        index = self._build_index_for_jsonl_file(identifier, file, file_id)
+
+        # TODO(#8): Extend sqlite index instead of in-memory index
+        for index_field, buckets in index.items():
+            for bucket_key, bucket_vals in buckets.items():
+                self._hacky_indx[index_field][bucket_key].extend(bucket_vals)
+
+        return True
+
+    def _build_index_for_jsonl_file(self, identifier: str, file: Path, file_id: int) -> dict[str, dict[str, list]]:
         # For now, I just hardcode the SlimPajama example. We have to generalize this to UDFs
         # index is the local index which we merge into the global index
-        index: dict[str, Any] = {"language": defaultdict(list), "publication_date": defaultdict(list)}
+        index: dict[str, dict[str, list]] = {
+            "language": defaultdict(list),
+            "publication_date": defaultdict(list),
+        }
         max_line = 0
         with open(file, encoding="utf-8") as fd:
             for line_id, line in enumerate(fd):
@@ -152,12 +164,13 @@ class LocalDataCollection(MixteraDataCollection):
         # Additionally, we add the current file ID
         for index_field, buckets in index.items():
             for bucket_key, bucket_vals in buckets.copy().items():
-                buckets[bucket_key] = ((file_id,) + rang for rang in ranges(bucket_vals))
+                buckets[bucket_key] = [(file_id,) + rang for rang in ranges(bucket_vals)]
+
         index["dataset"] = {identifier: [(file_id, 0, max_line + 1)]}
 
         self._merge_index(index)
 
-        return True
+        return index
 
     def _merge_index(self, new_index: dict[str, Any]) -> None:
         # TODO(#8): Extend sqlite index instead of in-memory index

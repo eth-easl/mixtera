@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import Any, List, Tuple
 
 
@@ -12,10 +13,12 @@ def ranges(nums: List[int]) -> List[Tuple[int, int]]:
     edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
     return [(s, e + 1) for s, e in zip(edges, edges)]
 
+
 def dict_into_dict(target_index: dict[str, list[Any]], new_index: dict[str, list[Any]]) -> None:
     for index_field, buckets in new_index.items():
         for bucket_key, bucket_vals in buckets.items():
             target_index[index_field][bucket_key].extend(bucket_vals)
+
 
 def defaultdict_to_dict(d):
     if isinstance(d, defaultdict):

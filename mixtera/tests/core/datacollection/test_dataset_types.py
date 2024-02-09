@@ -1,4 +1,4 @@
-from mixtera.datacollection import DatasetTypes
+from mixtera.core.datacollection import DatasetTypes
 
 
 def test_enum_values():

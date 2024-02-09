@@ -2,12 +2,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from mixtera.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import MixteraDataCollection
 
 
 class TestMixteraDataCollection(unittest.TestCase):
 
-    @patch("mixtera.datacollection.local.LocalDataCollection")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection")
     def test_from_directory_with_existing_dir(self, mock_local_data_collection):
         mock_local_data_collection.return_value = MagicMock()
 
