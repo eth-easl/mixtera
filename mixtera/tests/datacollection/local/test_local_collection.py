@@ -252,14 +252,13 @@ class TestLocalDataCollection(unittest.TestCase):
         ldc._register_jsonl_file("test_dataset", jsonl_file_path2)
 
         expected_index = {
-            "test_dataset": {
-                "language": {
-                    "Go": [(1, 0, 2)],
-                    "Makefile": [(1, 0, 1)],
-                    "ApacheConf": [(2, 0, 1)],
-                    "CSS": [(1, 1, 2), (2, 0, 1)],
-                }
-            }
+            "language": {
+                "Go": [(1, 0, 2)],
+                "Makefile": [(1, 0, 1)],
+                "ApacheConf": [(2, 0, 1)],
+                "CSS": [(1, 1, 2), (2, 0, 1)],
+            },
+            "dataset": {"test_dataset": [(1, 0, 2), (2, 0, 1)]},
         }
 
         self.assertEqual(defaultdict_to_dict(ldc._hacky_indx), expected_index)

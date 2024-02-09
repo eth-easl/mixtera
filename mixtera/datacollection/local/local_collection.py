@@ -20,11 +20,9 @@ class LocalDataCollection(MixteraDataCollection):
         self._directory = directory
         self._database_path = self._directory / "mixtera.sqlite"
 
-        # 1st level: dataset 2nd level: categories 3rd level: buckets
+        # 1st level: categories 2nd level: buckets
         # TODO(#8): Actually store index in sqlite instead of memory
-        self._hacky_indx: defaultdict[str, defaultdict[str, defaultdict[str, list]]] = defaultdict(
-            lambda: defaultdict(lambda: defaultdict(list))
-        )
+        self._hacky_indx: defaultdict[str, defaultdict[str, list]] = defaultdict(lambda: defaultdict(list))
 
         if not self._database_path.exists():
             self._connection = self._init_database()
@@ -123,8 +121,10 @@ class LocalDataCollection(MixteraDataCollection):
         # For now, I just hardcode the SlimPajama example. We have to generalize this to UDFs
         # index is the local index which we merge into the global index
         index: dict[str, Any] = {"language": defaultdict(list), "publication_date": defaultdict(list)}
+        max_line = 0
         with open(file, encoding="utf-8") as fd:
             for line_id, line in enumerate(fd):
+                max_line = line_id
                 json_obj = json.loads(line)
                 if "meta" not in json_obj:
                     continue
@@ -150,19 +150,19 @@ class LocalDataCollection(MixteraDataCollection):
         # Rangi-fy the list for each index, i.e., we go from [1,2,3,5,6,7] to [(1,4), (5,8)] to compress
         # Additionally, we add the current file ID
         for index_field, buckets in index.items():
-            logger.info(buckets)
-            logger.info(index_field)
             for bucket_key, bucket_vals in buckets.copy().items():
                 buckets[bucket_key] = ((file_id,) + rang for rang in ranges(bucket_vals))
+        index["dataset"] = {identifier: [(file_id, 0, max_line + 1)]}
 
-        self._merge_index(identifier, index)
+        self._merge_index(index)
+
         return True
 
-    def _merge_index(self, dataset_identifier: str, new_index: dict[str, Any]) -> None:
+    def _merge_index(self, new_index: dict[str, Any]) -> None:
         # TODO(#8): Extend sqlite index instead of in-memory index
         for index_field, buckets in new_index.items():
             for bucket_key, bucket_vals in buckets.items():
-                self._hacky_indx[dataset_identifier][index_field][bucket_key].extend(bucket_vals)
+                self._hacky_indx[index_field][bucket_key].extend(bucket_vals)
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
