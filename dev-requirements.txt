@@ -9,3 +9,6 @@ pillow
 autopep8
 isort
 black
+sphinx-autobuild
+myst-parser
+furo
