@@ -9,6 +9,7 @@ from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.datacollection import DatasetTypes, MixteraDataCollection, PropertyType
 from mixtera.utils import ranges
+from mixtera.utils import dict_into_dict
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -160,9 +161,7 @@ class LocalDataCollection(MixteraDataCollection):
 
     def _merge_index(self, new_index: dict[str, Any]) -> None:
         # TODO(#8): Extend sqlite index instead of in-memory index
-        for index_field, buckets in new_index.items():
-            for bucket_key, bucket_vals in buckets.items():
-                self._hacky_indx[index_field][bucket_key].extend(bucket_vals)
+        dict_into_dict(self._hacky_indx, new_index)
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
@@ -208,7 +207,6 @@ class LocalDataCollection(MixteraDataCollection):
         min_val: float = 0.0,
         max_val: float = 1,
         num_buckets: int = 10,
-        excluded_datasets: Optional[list[str]] = None,
         batch_size: int = 1,
         dop: int = 1,
         data_only_on_primary: bool = True,
@@ -222,10 +220,6 @@ class LocalDataCollection(MixteraDataCollection):
         if num_buckets < 2:
             raise RuntimeError(f"num_buckets = {num_buckets} < 2")
 
-        excluded_dataset_set = set([]) if excluded_datasets is None else set(excluded_datasets)
-        if any(not self.check_dataset_exists(excluded_dataset) for excluded_dataset in excluded_datasets):
-            raise RuntimeError("Some excluded dataset does not exist.")
-
         if batch_size < 1:
             raise RuntimeError(f"batch_size = {batch_size} < 1")
 
@@ -238,12 +232,10 @@ class LocalDataCollection(MixteraDataCollection):
         if property_type == PropertyType.NUMERICAL:
             raise NotImplementedError("Numerical properties are not yet implemented")
 
-        datasets = [ds for ds in self.list_datasets() if ds not in excluded_dataset_set]
-        datasets_and_files = [(ds, file) for ds in datasets for file in self._get_files_for_dataset(ds)]
+        datasets = self.list_datasets()
+        files = [file for ds in datasets for file in self._get_files_for_dataset(ds)]
 
-        executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, setup_func, calc_func)
-        executor.load_data(datasets_and_files, data_only_on_primary)
-        results = executor.run()
-
-        for dataset_identifier, dataset_index in results.items():
-            self._merge_index(dataset_identifier, dataset_index)
+        # batch size?
+        executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
+        executor.load_data(files, data_only_on_primary)
+        self._merge_index(executor.run())

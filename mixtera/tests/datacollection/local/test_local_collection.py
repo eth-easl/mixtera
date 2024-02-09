@@ -2,12 +2,12 @@ import json
 import sqlite3
 import tempfile
 import unittest
-from collections import defaultdict
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.datacollection import DatasetTypes
 from mixtera.datacollection.local import LocalDataCollection
+from mixtera.utils import defaultdict_to_dict
 
 
 class TestLocalDataCollection(unittest.TestCase):
@@ -289,7 +289,3 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertListEqual(["test", "test2"], ldc.list_datasets())
 
 
-def defaultdict_to_dict(d):
-    if isinstance(d, defaultdict):
-        d = {k: defaultdict_to_dict(v) for k, v in d.items()}
-    return d

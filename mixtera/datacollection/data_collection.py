@@ -114,13 +114,12 @@ class MixteraDataCollection(ABC):
         min_val: float = 0.0,
         max_val: float = 1,
         num_buckets: int = 10,
-        excluded_datasets: Optional[list[str]] = None,
         batch_size: int = 1,
         dop: int = 1,
         data_only_on_primary: bool = True,
     ) -> None:
         """
-        Ex
+        TODO.
 
         Args:
             property_name (str): The name of the new property that is added to the Mixtera index
@@ -133,8 +132,6 @@ class MixteraDataCollection(ABC):
             min_val (float): Optional value for numerical properties specifying the min value the property can take
             max_val (float): Optional value for numerical properties specifying the max value the property can take
             num_buckets (int): The number of buckets for numeritcal properties
-            excluded_datasets (Optional[list[str]]): A list of dataset identifiers which should not be considered during calculation
-                                                     Note that any queries on the new property will then exclude these datasets.
             batch_size (int): Size of one batch passed to one processing instance
             dop (int): Degree of parallelism. How many processing units should be used in parallel. Meaning depends on execution_mode
             data_only_on_primary (bool): If False, the processing units (may be remote machines) have access to the same paths as the primary.

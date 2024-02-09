@@ -10,6 +10,7 @@ class PropertyCalculationExecutor(ABC):
     def from_mode(
         mode: ExecutionMode,
         dop: int,
+        batch_size: int,
         setup_func: Callable,
         calc_func: Callable,
     ) -> "PropertyCalculationExecutor":
@@ -31,20 +32,23 @@ class PropertyCalculationExecutor(ABC):
         if dop < 1:
             raise RuntimeError(f"dop = {dop} < 1")
 
+        if batch_size < 1:
+            raise RuntimeError(f"batch_size = {batch_size} < 1")
+
         if mode == ExecutionMode.LOCAL:
             from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
 
-            return LocalPropertyCalculationExecutor(dop, setup_func, calc_func)
+            return LocalPropertyCalculationExecutor(dop, batch_size, setup_func, calc_func)
 
         raise NotImplementedError(f"Mode {mode} not yet implemented.")
 
     @abstractmethod
-    def load_data(self, datasets_and_files: list[tuple[str, Any]], data_only_on_primary: bool) -> None:
+    def load_data(self, files: list[str], data_only_on_primary: bool) -> None:
         """
         Loads the data, i.e., all files, into the executor. Needs to be done before calling run.
 
         Args:
-            datasets_and_files (list[tuple[str, Any]): A list of tuples (dataset identifier, file path)
+            datasets_and_files (list[str): A list of files to load to run processing on
             data_only_on_primary (bool): If False, the processing units (may be remote machines) have access to the same paths as the primary.
                                          Allows for non-centralized reading of files.
         """
@@ -52,14 +56,12 @@ class PropertyCalculationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def run(
-        self,
-    ) -> dict[str, dict[str, Any]]:
+    def run(self) -> dict[str, list]:
         """
         Actually runs calculation of the new property and returns the new property for the index.
 
         Returns:
-            A dictionary to be merged into the main index. Currently partitioned by dataset on the first level (probably we will get rid of that)
+            A dictionary to be merged into the main index.
         """
 
         raise NotImplementedError()
