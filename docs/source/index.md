@@ -16,5 +16,11 @@ hide-toc: true
 :caption: Development
 :hidden:
 
+```
 
+```{toctree}
+:caption: API Reference
+:hidden:
+
+references/dataset
 ```
