@@ -30,6 +30,10 @@ class PropertyCalculationExecutor(ABC):
         """
         if dop < 1:
             raise RuntimeError(f"dop = {dop} < 1")
+        
+        if mode == ExecutionMode.LOCAL:
+            from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
+            return LocalPropertyCalculationExecutor(dop, setup_func, calc_func)
 
         raise NotImplementedError(f"Mode {mode} not yet implemented.")
 

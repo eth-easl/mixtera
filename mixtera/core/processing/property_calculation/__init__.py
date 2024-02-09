@@ -5,6 +5,7 @@ This submodule contains code for calculating new properties of datasets
 import os
 
 from .executor import PropertyCalculationExecutor  # noqa: F401
+from .local_executor import LocalPropertyCalculationExecutor  # noqa: F401
 
 files = os.listdir(os.path.dirname(__file__))
 files.remove("__init__.py")
