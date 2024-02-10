@@ -1,10 +1,10 @@
 """
-This submodule contains general utility functions
+This submodule contains Mixtera's remote collection
 """
 
 import os
 
-from .utils import flatten, ranges  # noqa: F401
+from .remote_collection import RemoteDataCollection  # noqa: F401
 
 files = os.listdir(os.path.dirname(__file__))
 files.remove("__init__.py")
