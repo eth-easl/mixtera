@@ -3,10 +3,11 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
-from mixtera.core.datacollection import DatasetTypes
+from mixtera.core.datacollection import DatasetTypes, PropertyType
 from mixtera.core.datacollection.local import LocalDataCollection
+from mixtera.core.processing import ExecutionMode
 from mixtera.utils import defaultdict_to_dict
 
 
@@ -287,3 +288,90 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertListEqual(["test"], ldc.list_datasets())
         self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
         self.assertListEqual(["test", "test2"], ldc.list_datasets())
+
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_all_files")
+    @patch("mixtera.core.processing.property_calculation.PropertyCalculationExecutor.from_mode")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._merge_index")
+    def test_add_property_with_mocks(
+        self,
+        mock_merge_index,
+        mock_from_mode,
+        mock_get_all_files,
+    ):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+        (directory / "loc").touch()
+
+        # Set up the mocks
+        mock_get_all_files.return_value = ["file1", "file2"]
+        mock_executor = mock_from_mode.return_value
+        mock_executor.run.return_value = {"property": {"bucket": [1]}}
+
+        # Call the method
+        ldc.add_property(
+            "property_name",
+            lambda: None,
+            lambda: None,
+            ExecutionMode.LOCAL,
+            PropertyType.CATEGORICAL,
+            min_val=0.0,
+            max_val=1.0,
+            num_buckets=10,
+            batch_size=1,
+            dop=1,
+            data_only_on_primary=True,
+        )
+
+        # Check that the mocks were called as expected
+        mock_get_all_files.assert_called_once()
+        mock_from_mode.assert_called_once_with(
+            ExecutionMode.LOCAL,
+            1,
+            1,
+            ANY,
+            ANY,
+        )
+        mock_executor.load_data.assert_called_once_with(["file1", "file2"], True)
+        mock_executor.run.assert_called_once()
+        mock_merge_index.assert_called_once_with({"property": {"bucket": [1]}})
+
+    def test_add_property_end_to_end(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        # Create test dataset
+        data = [
+            {"meta": {"language": [{"name": "Python"}], "publication_date": "2022"}},
+            {"meta": {"language": [{"name": "Java"}], "publication_date": "2021"}},
+        ]
+        dataset_file = directory / "dataset.jsonl"
+        with open(dataset_file, "w") as f:
+            for item in data:
+                f.write(json.dumps(item) + "\n")
+
+        ldc.register_dataset("test_dataset", str(dataset_file), DatasetTypes.JSONL_SINGLEFILE)
+
+        # Define setup and calculation functions
+        def setup_func(executor):
+            return None
+
+        def calc_func(executor, batch):
+            return {json.loads(sample)["meta"]["publication_date"]: {"bucket1": [1]} for sample in batch}
+
+        # Add property
+        ldc.add_property(
+            "test_property",
+            setup_func,
+            calc_func,
+            ExecutionMode.LOCAL,
+            PropertyType.CATEGORICAL,
+            batch_size=1,
+            dop=1,
+            data_only_on_primary=True,
+        )
+
+        # Assert that the property was added to the index
+        index = defaultdict_to_dict(ldc._hacky_indx)
+
+        self.assertIn("test_property", index)
+        self.assertEqual(index["test_property"], {"2022": [(1, 0, 1)], "2021": [(1, 1, 2)]})

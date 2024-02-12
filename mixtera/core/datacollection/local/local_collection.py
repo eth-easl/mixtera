@@ -203,8 +203,19 @@ class LocalDataCollection(MixteraDataCollection):
         # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
         raise NotImplementedError("Not implemented for LocalCollection")
 
-    def _get_files_for_dataset(self, identifier: str) -> list[str]:
-        raise NotImplementedError("Not implemented yet")
+    def _get_all_files(self) -> list[tuple[int, str]]:
+        try:
+            query = "SELECT id,location from files;"
+            cur = self._connection.cursor()
+            cur.execute(
+                query,
+            )
+            result = cur.fetchall()
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during selection: {err}")
+            return []
+
+        return result
 
     def add_property(
         self,
@@ -242,10 +253,13 @@ class LocalDataCollection(MixteraDataCollection):
         if property_type == PropertyType.NUMERICAL:
             raise NotImplementedError("Numerical properties are not yet implemented")
 
-        datasets = self.list_datasets()
-        files = [file for ds in datasets for file in self._get_files_for_dataset(ds)]
+        files = self._get_all_files()
+        logger.info(f"Extending index for {len(files)} files.")
 
-        # batch size?
-        executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
+        executor = PropertyCalculationExecutor.from_mode(
+            execution_mode, property_name, dop, batch_size, setup_func, calc_func
+        )
         executor.load_data(files, data_only_on_primary)
-        self._merge_index(executor.run())
+        self._merge_index({property_name: executor.run()})
+
+        # TODO(create issue): add functions to query all available properties

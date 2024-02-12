@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Any, Callable
 
+import numpy as np
 from mixtera.core.processing import ExecutionMode
 
 
@@ -9,22 +10,27 @@ class PropertyCalculationExecutor(ABC):
     @staticmethod
     def from_mode(
         mode: ExecutionMode,
+        property_name: str,
         dop: int,
         batch_size: int,
-        setup_func: Callable,
-        calc_func: Callable,
+        setup_func: Callable[[Any], None],
+        calc_func: Callable[[Any, dict[str, np.ndarray]], list[Any]],
     ) -> "PropertyCalculationExecutor":
         """
         This function instantiates a new PropertyCalculationExecutor based on the mode.
-
 
         Args:
             mode (ExecutionMode): The execution mode to use
             dop (int): Degree of parallelism. How many processing units should be used in parallel.
                        Meaning depends on execution_mode
             setup_func (Callable): Function that performs setup (e.g., load model).
-                                   It is passed an instance of a class to put attributes on.
-            calc_func (Callable): The function that given a batch of data calculates a numerical or categorical value.
+                                   It is passed an instance of a class (type "Any") to put attributes on.
+                                   This class will be available in the calc_func.
+            calc_func (Callable): Given a batch of data in form of a dict
+                                  { "data": [...], "file_id": [...], "line_id": [...] },
+                                  i.e., batched along the properties in numpy arrays (depicted above as a list),
+                                  this returns one prediction (class or score) per item in the batch.
+                                  The batching is taken care of by the concrete executor.
                                   It has access to the class that was prepared by the setup_func.
 
         Returns:
@@ -40,7 +46,7 @@ class PropertyCalculationExecutor(ABC):
             # pylint: disable-next=import-outside-toplevel
             from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
 
-            return LocalPropertyCalculationExecutor(dop, batch_size, setup_func, calc_func)
+            return LocalPropertyCalculationExecutor(property_name, dop, batch_size, setup_func, calc_func)
 
         raise NotImplementedError(f"Mode {mode} not yet implemented.")
 
@@ -59,12 +65,12 @@ class PropertyCalculationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def run(self) -> dict[str, list]:
+    def run(self) -> dict[str, list[tuple[int, int, int]]]:
         """
         Actually runs calculation of the new property and returns the new property for the index.
 
         Returns:
-            A dictionary to be merged into the main index.
+            A dictionary to be merged into the main index under the appropriate key for the property.
         """
 
         raise NotImplementedError()
