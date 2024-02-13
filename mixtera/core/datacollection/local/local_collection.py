@@ -259,5 +259,3 @@ class LocalDataCollection(MixteraDataCollection):
         executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
         executor.load_data(files, data_only_on_primary)
         self._merge_index({property_name: executor.run()})
-
-        # TODO(create issue): add functions to query all available properties

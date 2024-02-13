@@ -289,6 +289,25 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
         self.assertListEqual(["test", "test2"], ldc.list_datasets())
 
+    def test__get_all_files(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        # Create a temporary directory containing two JSONL files
+        temp_dir = directory / "temp_dir"
+        temp_dir.mkdir()
+        (temp_dir / "temp1.jsonl").touch()
+        (temp_dir / "temp2.jsonl").touch()
+
+        # Assert that registration of a new JSONL directory returns True
+        self.assertTrue(ldc._register_jsonl_collection_or_file("test", str(temp_dir)))
+
+        # Assert _register_jsonl_file is called twice
+        self.assertListEqual(
+            sorted([file_path for _, file_path in ldc._get_all_files()]),
+            sorted([str(temp_dir / "temp1.jsonl"), str(temp_dir / "temp2.jsonl")]),
+        )
+
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_all_files")
     @patch("mixtera.core.processing.property_calculation.PropertyCalculationExecutor.from_mode")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._merge_index")

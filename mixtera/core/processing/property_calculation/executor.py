@@ -25,7 +25,7 @@ class PropertyCalculationExecutor(ABC):
             setup_func (Callable): Function that performs setup (e.g., load model).
                                    It is passed an instance of a class (type "Any") to put attributes on.
                                    This class will be available in the calc_func.
-            calc_func (Callable): Given a batch of data in form of a dict
+            calc_func (Callable): Given a batch of data in form of a dict[str, np.ndarray]]
                                   { "data": [...], "file_id": [...], "line_id": [...] },
                                   i.e., batched along the properties in numpy arrays (depicted above as a list),
                                   this returns one prediction (class or score) per item in the batch.
@@ -52,7 +52,7 @@ class PropertyCalculationExecutor(ABC):
     @abstractmethod
     def load_data(self, files: list[str], data_only_on_primary: bool) -> None:
         """
-        Loads the data, i.e., all files, into the executor. Needs to be done before calling run.
+        Loads the data, i.e., all files, into the executor. Needs to be called before calling `run`.
 
         Args:
             datasets_and_files (list[str): A list of files to load to run processing on

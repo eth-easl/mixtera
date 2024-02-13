@@ -17,13 +17,16 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
         setup_func: Callable[[Any], None],
         calc_func: Callable[[Any, dict[str, np.ndarray]], list[Any]],
     ):
-        self._dop = dop  # TODO(create issue): support dop using multiprocessing or so
+        self._dop = dop  # TODO(#24): support dop using multiprocessing or so
         self._setup_func = setup_func
         self._calc_func = calc_func
         self._batch_size = batch_size
 
         self._batches: list[dict[str, np.ndarray]] = []
         self._setup_func(self)  # We need to explicitly pass self here
+
+        if self._dop > 1:
+            raise NotImplementedError("The LocalPropertyCalculationExecutor currently does not support parallelism.")
 
     def load_data(self, files: list[tuple[int, str]], data_only_on_primary: bool) -> None:
         if not data_only_on_primary:
@@ -63,6 +66,11 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
             for prediction, file_id, line_id in zip(batch_predictions, batch["file_id"], batch["line_id"]):
                 # TODO(#11): This currently assumes we are in a categorical bucket and do not need to discretize
                 # (prediction directly gives bucket)
+                if not isinstance(prediction, str):
+                    raise NotImplementedError(
+                        "Right now we assume prediction to be a category, numerical values not yet supporetd."
+                    )
+
                 inference_result_per_file[prediction][file_id].append(line_id)
 
         return {
@@ -72,8 +80,7 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
 
     @staticmethod
     def _read_samples_from_file(file_id: int, file: str) -> Generator[tuple[int, int, str], None, None]:
-        # TODO(create issue): This currently assumes everything is jsonl file
-
+        # TODO(#22): This currently assumes everything is jsonl file
         if not file.endswith(".jsonl"):  # hacky check for extension to have some kind of check
             raise NotImplementedError("The current implementation assumes jsonl files.")
 
