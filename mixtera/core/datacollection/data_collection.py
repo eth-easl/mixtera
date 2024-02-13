@@ -119,7 +119,10 @@ class MixteraDataCollection(ABC):
         data_only_on_primary: bool = True,
     ) -> None:
         """
-        TODO.
+        This function extends the index with a new property that is calculated per sample in the collection.
+
+        This can, for example, be some classification result (e.g., toxicity score or a language classifier).
+        We can then use this new property in subsequent queries to the data.
 
         Args:
             property_name (str): The name of the new property that is added to the Mixtera index
