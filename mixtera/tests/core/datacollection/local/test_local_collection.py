@@ -303,9 +303,9 @@ class TestLocalDataCollection(unittest.TestCase):
         (directory / "loc").touch()
 
         # Set up the mocks
-        mock_get_all_files.return_value = ["file1", "file2"]
+        mock_get_all_files.return_value = [(0, "file1"), (1, "file2")]
         mock_executor = mock_from_mode.return_value
-        mock_executor.run.return_value = {"property": {"bucket": [1]}}
+        mock_executor.run.return_value = {"bucket": [(0, 0, 1)]}
 
         # Call the method
         ldc.add_property(
@@ -331,9 +331,9 @@ class TestLocalDataCollection(unittest.TestCase):
             ANY,
             ANY,
         )
-        mock_executor.load_data.assert_called_once_with(["file1", "file2"], True)
+        mock_executor.load_data.assert_called_once_with([(0, "file1"), (1, "file2")], True)
         mock_executor.run.assert_called_once()
-        mock_merge_index.assert_called_once_with({"property": {"bucket": [1]}})
+        mock_merge_index.assert_called_once_with({"property_name": {"bucket": [(0, 0, 1)]}})
 
     def test_add_property_end_to_end(self):
         directory = Path(self.temp_dir.name)
@@ -345,7 +345,7 @@ class TestLocalDataCollection(unittest.TestCase):
             {"meta": {"language": [{"name": "Java"}], "publication_date": "2021"}},
         ]
         dataset_file = directory / "dataset.jsonl"
-        with open(dataset_file, "w") as f:
+        with open(dataset_file, "w", encoding="utf-8") as f:
             for item in data:
                 f.write(json.dumps(item) + "\n")
 
@@ -353,10 +353,10 @@ class TestLocalDataCollection(unittest.TestCase):
 
         # Define setup and calculation functions
         def setup_func(executor):
-            return None
+            executor.prefix = "pref_"
 
         def calc_func(executor, batch):
-            return {json.loads(sample)["meta"]["publication_date"]: {"bucket1": [1]} for sample in batch}
+            return [executor.prefix + json.loads(sample)["meta"]["publication_date"] for sample in batch["data"]]
 
         # Add property
         ldc.add_property(
@@ -370,8 +370,7 @@ class TestLocalDataCollection(unittest.TestCase):
             data_only_on_primary=True,
         )
 
-        # Assert that the property was added to the index
         index = defaultdict_to_dict(ldc._hacky_indx)
 
         self.assertIn("test_property", index)
-        self.assertEqual(index["test_property"], {"2022": [(1, 0, 1)], "2021": [(1, 1, 2)]})
+        self.assertEqual(index["test_property"], {"pref_2022": [(1, 0, 1)], "pref_2021": [(1, 1, 2)]})

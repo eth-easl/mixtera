@@ -256,9 +256,7 @@ class LocalDataCollection(MixteraDataCollection):
         files = self._get_all_files()
         logger.info(f"Extending index for {len(files)} files.")
 
-        executor = PropertyCalculationExecutor.from_mode(
-            execution_mode, property_name, dop, batch_size, setup_func, calc_func
-        )
+        executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
         executor.load_data(files, data_only_on_primary)
         self._merge_index({property_name: executor.run()})
 

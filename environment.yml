@@ -9,3 +9,4 @@ dependencies:
   - pip
   - tqdm
   - loguru
+  - numpy

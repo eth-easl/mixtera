@@ -12,17 +12,15 @@ from tqdm import tqdm
 class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
     def __init__(
         self,
-        property_name: str,
         dop: int,
         batch_size: int,
         setup_func: Callable[[Any], None],
         calc_func: Callable[[Any, dict[str, np.ndarray]], list[Any]],
     ):
-        self._dop = dop  # TODO (create issue): support dop using multiprocessing or so
+        self._dop = dop  # TODO(create issue): support dop using multiprocessing or so
         self._setup_func = setup_func
         self._calc_func = calc_func
         self._batch_size = batch_size
-        self._property_name = property_name
 
         self._batches: list[dict[str, np.ndarray]] = []
         self._setup_func(self)  # We need to explicitly pass self here
@@ -52,9 +50,8 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
             self._batches.append(self._create_batch(data, file_ids, line_ids))
 
     def run(self) -> dict[str, list[tuple[int, int, int]]]:
-        # We use self._property_name here as first index to rely on dict_into_dict
         inference_result_per_file: defaultdict[str, defaultdict[int, list[tuple[int, int]]]] = defaultdict(
-            defaultdict(list)
+            lambda: defaultdict(list)
         )
 
         for batch in tqdm(self._batches, desc="Processing batches", total=len(self._batches)):
@@ -63,19 +60,18 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
             if len(batch_predictions) != len(batch["file_id"]) or len(batch_predictions) != len(batch["line_id"]):
                 raise RuntimeError(f"Length mismatch: {batch_predictions} vs {batch}.")
 
-            # Build up index { "bucket_name": [(file_id, line_id) tuples]}
             for prediction, file_id, line_id in zip(batch_predictions, batch["file_id"], batch["line_id"]):
                 # TODO(#11): This currently assumes we are in a categorical bucket and do not need to discretize
                 # (prediction directly gives bucket)
                 inference_result_per_file[prediction][file_id].append(line_id)
 
         return {
-            bucket: [(file_id,) + ranges(sorted(lines)) for file_id, lines in file_dict.items()]
+            bucket: [(file_id,) + range for file_id, lines in file_dict.items() for range in ranges(sorted(lines))]
             for bucket, file_dict in inference_result_per_file.items()
         }
 
     @staticmethod
-    def _read_samples_from_file(file_id: int, file: str) -> Generator[tuple[int, int, str]]:
+    def _read_samples_from_file(file_id: int, file: str) -> Generator[tuple[int, int, str], None, None]:
         # TODO(create issue): This currently assumes everything is jsonl file
 
         if not file.endswith(".jsonl"):  # hacky check for extension to have some kind of check

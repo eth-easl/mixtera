@@ -10,7 +10,6 @@ class PropertyCalculationExecutor(ABC):
     @staticmethod
     def from_mode(
         mode: ExecutionMode,
-        property_name: str,
         dop: int,
         batch_size: int,
         setup_func: Callable[[Any], None],
@@ -46,7 +45,7 @@ class PropertyCalculationExecutor(ABC):
             # pylint: disable-next=import-outside-toplevel
             from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
 
-            return LocalPropertyCalculationExecutor(property_name, dop, batch_size, setup_func, calc_func)
+            return LocalPropertyCalculationExecutor(dop, batch_size, setup_func, calc_func)
 
         raise NotImplementedError(f"Mode {mode} not yet implemented.")
 
