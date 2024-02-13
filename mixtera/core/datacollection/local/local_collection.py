@@ -2,11 +2,13 @@ import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import List
+from typing import Any, Callable, List
 
 from loguru import logger
-from mixtera.core.datacollection import DatasetTypes, MixteraDataCollection
-from mixtera.utils import ranges
+from mixtera.core.datacollection import DatasetTypes, MixteraDataCollection, PropertyType
+from mixtera.core.processing import ExecutionMode
+from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
+from mixtera.utils import dict_into_dict, ranges
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -119,9 +121,7 @@ class LocalDataCollection(MixteraDataCollection):
         index = self._build_index_for_jsonl_file(identifier, file, file_id)
 
         # TODO(#8): Extend sqlite index instead of in-memory index
-        for index_field, buckets in index.items():
-            for bucket_key, bucket_vals in buckets.items():
-                self._hacky_indx[index_field][bucket_key].extend(bucket_vals)
+        self._merge_index(index)
 
         return True
 
@@ -168,6 +168,10 @@ class LocalDataCollection(MixteraDataCollection):
 
         return index
 
+    def _merge_index(self, new_index: dict[str, Any]) -> None:
+        # TODO(#8): Extend sqlite index instead of in-memory index
+        dict_into_dict(self._hacky_indx, new_index)
+
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
             query = "SELECT COUNT(*) from datasets WHERE name = ?;"
@@ -198,3 +202,60 @@ class LocalDataCollection(MixteraDataCollection):
     def remove_dataset(self, identifier: str) -> bool:
         # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
         raise NotImplementedError("Not implemented for LocalCollection")
+
+    def _get_all_files(self) -> list[tuple[int, str]]:
+        try:
+            query = "SELECT id,location from files;"
+            cur = self._connection.cursor()
+            cur.execute(
+                query,
+            )
+            result = cur.fetchall()
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during selection: {err}")
+            return []
+
+        return result
+
+    def add_property(
+        self,
+        property_name: str,
+        setup_func: Callable,
+        calc_func: Callable,
+        execution_mode: ExecutionMode,
+        property_type: PropertyType,
+        min_val: float = 0.0,
+        max_val: float = 1,
+        num_buckets: int = 10,
+        batch_size: int = 1,
+        dop: int = 1,
+        data_only_on_primary: bool = True,
+    ) -> None:
+        if len(property_name) <= 0:
+            raise RuntimeError(f"Invalid property name: {property_name}")
+
+        if property_type == PropertyType.NUMERICAL and max_val <= min_val:
+            raise RuntimeError(f"max_val (= {max_val}) <= min_val (= {min_val})")
+
+        if num_buckets < 2:
+            raise RuntimeError(f"num_buckets = {num_buckets} < 2")
+
+        if batch_size < 1:
+            raise RuntimeError(f"batch_size = {batch_size} < 1")
+
+        if property_type == PropertyType.CATEGORICAL and (min_val != 0.0 or max_val != 1.0 or num_buckets != 10):
+            logger.warning(
+                "For categorical properties, min_val/max_val/num_buckets do not have meaning,"
+                " but deviate from their default value. Please ensure correct parameters."
+            )
+
+        # TODO(#11): support for numerical buckets
+        if property_type == PropertyType.NUMERICAL:
+            raise NotImplementedError("Numerical properties are not yet implemented")
+
+        files = self._get_all_files()
+        logger.info(f"Extending index for {len(files)} files.")
+
+        executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
+        executor.load_data(files, data_only_on_primary)
+        self._merge_index({property_name: executor.run()})

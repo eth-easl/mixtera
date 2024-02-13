@@ -1,10 +1,10 @@
 """
-This submodule contains general utility functions
+This submodule contains code for executing pre-query operations
 """
 
 import os
 
-from .utils import defaultdict_to_dict, dict_into_dict, flatten, ranges  # noqa: F401
+from .execution_mode import ExecutionMode  # noqa: F401
 
 files = os.listdir(os.path.dirname(__file__))
 files.remove("__init__.py")

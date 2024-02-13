@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 project = "Mixtera"
 copyright = "2024, EASL"
