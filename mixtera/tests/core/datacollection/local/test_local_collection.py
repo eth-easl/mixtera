@@ -2,10 +2,12 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from collections import defaultdict
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
-from mixtera.core.datacollection import DatasetTypes, PropertyType
+from mixtera.core.datacollection import PropertyType
+from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.datacollection.local import LocalDataCollection
 from mixtera.core.processing import ExecutionMode
 from mixtera.utils import defaultdict_to_dict
@@ -100,19 +102,30 @@ class TestLocalDataCollection(unittest.TestCase):
 
     @patch("sqlite3.connect")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_collection_or_file")
-    def test_register_dataset(self, mock_register_jsonl, mock_insert_into_table, mock_connect):
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._merge_index")
+    def test_register_dataset(
+        self, mock_merge_index, mock_insert_file_into_table, mock_insert_dataset_into_table, mock_connect
+    ):
+        dataset_id = 42
         mock_connection = MagicMock()
-        mock_insert_into_table.return_value = True
-        mock_register_jsonl.return_value = True
         mock_connect.return_value = mock_connection
+        mock_insert_file_into_table.return_value = 0
+        mock_insert_dataset_into_table.return_value = dataset_id
 
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
 
-        self.assertTrue(ldc.register_dataset("test", "loc", DatasetTypes.JSONL_COLLECTION))
-        mock_insert_into_table.assert_called_once_with("test", "loc", DatasetTypes.JSONL_COLLECTION)
-        mock_register_jsonl.assert_called_once_with("test", "loc")
+        mocked_dtype = MagicMock()
+        mocked_dtype.iterate_files = MagicMock()
+        mocked_dtype.iterate_files.return_value = [Path("test1.jsonl"), Path("test2.jsonl")]
+
+        self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype))
+        mock_insert_dataset_into_table.assert_called_once_with("test", "loc", mocked_dtype)
+        assert mock_insert_file_into_table.call_count == 2
+        mock_insert_file_into_table.assert_any_call(dataset_id, Path("test1.jsonl"))
+        mock_insert_file_into_table.assert_any_call(dataset_id, Path("test2.jsonl"))
+        assert mock_merge_index.call_count == 2
 
     def test_register_dataset_with_existing_dataset(self):
         directory = Path(self.temp_dir.name)
@@ -120,96 +133,66 @@ class TestLocalDataCollection(unittest.TestCase):
         (directory / "loc").touch()
 
         # First time, the dataset registration should succeed.
-        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
 
         # Second time, the dataset registration should fail (because the dataset already exists).
-        self.assertFalse(ldc.register_dataset("test", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertFalse(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
 
     def test_register_dataset_with_non_existent_location(self):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
 
         with self.assertRaises(RuntimeError):
-            ldc.register_dataset("test", "/non/existent/location", DatasetTypes.JSONL_COLLECTION)
+            ldc.register_dataset("test", "/non/existent/location", JSONLDataset)
 
-    def test_insert_dataset_into_table(self):
-        directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
-
-        # Inserting a new dataset should return True.
-        self.assertTrue(ldc._insert_dataset_into_table("test", "loc", DatasetTypes.JSONL_COLLECTION))
-
-        # Inserting an existing dataset should return False.
-        self.assertFalse(ldc._insert_dataset_into_table("test", "loc", DatasetTypes.JSONL_COLLECTION))
-
-    def test_insert_file_into_table(self):
-        directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
-
-        self.assertTrue(ldc._insert_file_into_table("file_path"))
-
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_file")
-    def test__register_jsonl_collection_or_file_file(self, mock_register_jsonl_file):
-        directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
-
-        # Create a temporary JSONL file
-        jsonl_file_path = directory / "temp.jsonl"
-        jsonl_file_path.touch()
-
-        # Mock _register_jsonl_file to return True
-        mock_register_jsonl_file.return_value = True
-
-        # Assert that registration of a new JSONL file returns True
-        self.assertTrue(ldc._register_jsonl_collection_or_file("test", str(jsonl_file_path)))
-
-        # Assert _register_jsonl_file is called once
-        mock_register_jsonl_file.assert_called_once()
-
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_file")
-    def test__register_jsonl_collection_or_file_failure(self, mock_register_jsonl_file):
-        directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
-
-        # Create a temporary JSONL file
-        jsonl_file_path = directory / "temp.jsonl"
-        jsonl_file_path.touch()
-
-        # Mock _register_jsonl_file to return False
-        mock_register_jsonl_file.return_value = False
-
-        # Assert that registration of a new JSONL file returns False
-        self.assertFalse(ldc._register_jsonl_collection_or_file("test", str(jsonl_file_path)))
-
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._register_jsonl_file")
-    def test__register_jsonl_collection_or_file_directory(self, mock_register_jsonl_file):
-        directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
-
-        # Create a temporary directory containing two JSONL files
-        temp_dir = directory / "temp_dir"
-        temp_dir.mkdir()
-        (temp_dir / "temp1.jsonl").touch()
-        (temp_dir / "temp2.jsonl").touch()
-
-        # Mock _register_jsonl_file to return True
-        mock_register_jsonl_file.return_value = True
-
-        # Assert that registration of a new JSONL directory returns True
-        self.assertTrue(ldc._register_jsonl_collection_or_file("test", str(temp_dir)))
-
-        # Assert _register_jsonl_file is called twice
-        self.assertEqual(mock_register_jsonl_file.call_count, 2)
-
+    @patch("sqlite3.connect")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
-    def test_register_jsonl_file(self, mock_insert_file):
+    def test_register_dataset_updates_index(
+        self, mock_insert_file_into_table, mock_insert_dataset_into_table, mock_connect
+    ):
+        mock_connection = MagicMock()
+        dataset_id = 42
+        mock_connect.return_value = mock_connection
+        mock_insert_file_into_table.side_effect = [0, 1]
+        mock_insert_dataset_into_table.return_value = dataset_id
+
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
 
-        # Mock _insert_file_into_table to return an increasing number of file ids
-        mock_insert_file.side_effect = iter(range(1, 4))
+        mocked_dtype = MagicMock()
+        mocked_dtype.iterate_files = MagicMock()
+        mocked_dtype.iterate_files.return_value = [Path("test1.jsonl"), Path("test2.jsonl")]
 
-        # Create the first temporary JSONL file with 2 lines
+        def get_result_index(file, dataset_id, file_id):
+            del file
+            res = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+            res["language"]["English"][dataset_id][file_id] = [(0, 42)]
+            return res
+
+        mocked_dtype.build_file_index = MagicMock()
+        mocked_dtype.build_file_index.side_effect = get_result_index
+
+        self.assertDictEqual(defaultdict_to_dict(ldc._hacky_indx), {})
+        self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype))
+        self.assertDictEqual(
+            defaultdict_to_dict(ldc._hacky_indx),
+            {
+                "language": {
+                    "English": {
+                        dataset_id: {
+                            0: [(0, 42)],
+                            1: [(0, 42)],
+                        }
+                    }
+                }
+            },
+        )
+
+    def test_register_dataset_e2e_json(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
         jsonl_file_path1 = directory / "temp1.jsonl"
         with open(jsonl_file_path1, "w", encoding="utf-8") as f:
             json.dump(
@@ -234,7 +217,6 @@ class TestLocalDataCollection(unittest.TestCase):
                 f,
             )
 
-        # Create the second temporary JSONL file with 1 line
         jsonl_file_path2 = directory / "temp2.jsonl"
         with open(jsonl_file_path2, "w", encoding="utf-8") as f:
             json.dump(
@@ -248,21 +230,37 @@ class TestLocalDataCollection(unittest.TestCase):
                 f,
             )
 
-        # Register both JSONL files
-        ldc._register_jsonl_file("test_dataset", jsonl_file_path1)
-        ldc._register_jsonl_file("test_dataset", jsonl_file_path2)
+        ldc.register_dataset("test_dataset", str(directory), JSONLDataset)
+        files = ldc._get_all_files()
+        file1_id = [file_id for file_id, _, path in files if "temp1.jsonl" in path][0]
+        file2_id = [file_id for file_id, _, path in files if "temp2.jsonl" in path][0]
 
         expected_index = {
             "language": {
-                "Go": [(1, 0, 2)],
-                "Makefile": [(1, 0, 1)],
-                "ApacheConf": [(2, 0, 1)],
-                "CSS": [(1, 1, 2), (2, 0, 1)],
+                "Go": {1: {file1_id: [(0, 2)]}},
+                "Makefile": {1: {file1_id: [(0, 1)]}},
+                "ApacheConf": {1: {file2_id: [(0, 1)]}},
+                "CSS": {1: {file1_id: [(1, 2)], file2_id: [(0, 1)]}},
             },
-            "dataset": {"test_dataset": [(1, 0, 2), (2, 0, 1)]},
         }
 
         self.assertEqual(defaultdict_to_dict(ldc._hacky_indx), expected_index)
+
+    def test_insert_dataset_into_table(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        # Inserting a new dataset should return 1 (first dataset)
+        self.assertEqual(1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset))
+
+        # Inserting an existing dataset should return -1.
+        self.assertEqual(-1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset))
+
+    def test_insert_file_into_table(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        self.assertTrue(ldc._insert_file_into_table(0, "file_path"))
 
     def test_check_dataset_exists(self):
         directory = Path(self.temp_dir.name)
@@ -271,10 +269,10 @@ class TestLocalDataCollection(unittest.TestCase):
 
         self.assertFalse(ldc.check_dataset_exists("test"))
         self.assertFalse(ldc.check_dataset_exists("test2"))
-        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
         self.assertTrue(ldc.check_dataset_exists("test"))
         self.assertFalse(ldc.check_dataset_exists("test2"))
-        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), JSONLDataset))
         self.assertTrue(ldc.check_dataset_exists("test"))
         self.assertTrue(ldc.check_dataset_exists("test2"))
 
@@ -284,36 +282,31 @@ class TestLocalDataCollection(unittest.TestCase):
         (directory / "loc").touch()
 
         self.assertListEqual([], ldc.list_datasets())
-        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
         self.assertListEqual(["test"], ldc.list_datasets())
-        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
+        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), JSONLDataset))
         self.assertListEqual(["test", "test2"], ldc.list_datasets())
 
     def test__get_all_files(self):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
 
-        # Create a temporary directory containing two JSONL files
         temp_dir = directory / "temp_dir"
         temp_dir.mkdir()
         (temp_dir / "temp1.jsonl").touch()
         (temp_dir / "temp2.jsonl").touch()
 
-        # Assert that registration of a new JSONL directory returns True
-        self.assertTrue(ldc._register_jsonl_collection_or_file("test", str(temp_dir)))
+        self.assertTrue(ldc.register_dataset("test", str(temp_dir), JSONLDataset))
 
-        # Assert _register_jsonl_file is called twice
         self.assertListEqual(
-            sorted([file_path for _, file_path in ldc._get_all_files()]),
+            sorted([file_path for _, _, file_path in ldc._get_all_files()]),
             sorted([str(temp_dir / "temp1.jsonl"), str(temp_dir / "temp2.jsonl")]),
         )
 
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_all_files")
     @patch("mixtera.core.processing.property_calculation.PropertyCalculationExecutor.from_mode")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._merge_index")
     def test_add_property_with_mocks(
         self,
-        mock_merge_index,
         mock_from_mode,
         mock_get_all_files,
     ):
@@ -322,9 +315,9 @@ class TestLocalDataCollection(unittest.TestCase):
         (directory / "loc").touch()
 
         # Set up the mocks
-        mock_get_all_files.return_value = [(0, "file1"), (1, "file2")]
+        mock_get_all_files.return_value = [(0, "ds", "file1"), (1, "ds", "file2")]
         mock_executor = mock_from_mode.return_value
-        mock_executor.run.return_value = {"bucket": [(0, 0, 1)]}
+        mock_executor.run.return_value = {"bucket": {"ds": {0: [(0, 1)]}}}
 
         # Call the method
         ldc.add_property(
@@ -350,9 +343,10 @@ class TestLocalDataCollection(unittest.TestCase):
             ANY,
             ANY,
         )
-        mock_executor.load_data.assert_called_once_with([(0, "file1"), (1, "file2")], True)
+        mock_executor.load_data.assert_called_once_with([(0, "ds", "file1"), (1, "ds", "file2")], True)
         mock_executor.run.assert_called_once()
-        mock_merge_index.assert_called_once_with({"property_name": {"bucket": [(0, 0, 1)]}})
+
+        self.assertDictEqual(ldc._hacky_indx["property_name"], {"bucket": {"ds": {0: [(0, 1)]}}})
 
     def test_add_property_end_to_end(self):
         directory = Path(self.temp_dir.name)
@@ -368,9 +362,10 @@ class TestLocalDataCollection(unittest.TestCase):
             for item in data:
                 f.write(json.dumps(item) + "\n")
 
-        ldc.register_dataset("test_dataset", str(dataset_file), DatasetTypes.JSONL_SINGLEFILE)
-
+        ldc.register_dataset("test_dataset", str(dataset_file), JSONLDataset)
+        dataset_id = 1
         # Define setup and calculation functions
+
         def setup_func(executor):
             executor.prefix = "pref_"
 
@@ -392,4 +387,6 @@ class TestLocalDataCollection(unittest.TestCase):
         index = defaultdict_to_dict(ldc._hacky_indx)
 
         self.assertIn("test_property", index)
-        self.assertEqual(index["test_property"], {"pref_2022": [(1, 0, 1)], "pref_2021": [(1, 1, 2)]})
+        self.assertEqual(
+            index["test_property"], {"pref_2022": {dataset_id: {1: [(0, 1)]}}, "pref_2021": {dataset_id: {1: [(1, 2)]}}}
+        )

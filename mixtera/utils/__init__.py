@@ -2,6 +2,8 @@
 This submodule contains general utility functions
 """
 
-from .utils import defaultdict_to_dict, dict_into_dict, flatten, ranges  # noqa: F401
+import os
 
-__all__ = ["flatten", "ranges", "defaultdict_to_dict", "dict_into_dict"]
+from .utils import defaultdict_to_dict, flatten, merge_defaultdicts, ranges  # noqa: F401
+
+__all__ = ["defaultdict_to_dict", "flatten", "merge_defaultdicts", "ranges"]
