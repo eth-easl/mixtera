@@ -28,58 +28,73 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
         if self._dop > 1:
             raise NotImplementedError("The LocalPropertyCalculationExecutor currently does not support parallelism.")
 
-    def load_data(self, files: list[tuple[int, str]], data_only_on_primary: bool) -> None:
+    def load_data(self, files: list[tuple[int, int, str]], data_only_on_primary: bool) -> None:
         if not data_only_on_primary:
             logger.warning("Set data_only_on_primary = False, but LocalExecutor is running only on primary anyways.")
 
         data = []
         file_ids = []
+        dataset_ids = []
         line_ids = []
         count = 0
-        for file_id, path in files:
-            for file_id, line_id, line in self._read_samples_from_file(file_id, path):
+        for file_id, dataset_id, path in files:
+            for line_id, line in self._read_samples_from_file(path):
                 data.append(line)
                 file_ids.append(file_id)
                 line_ids.append(line_id)
+                dataset_ids.append(dataset_id)
                 count += 1
                 if count == self._batch_size:
-                    self._batches.append(self._create_batch(data, file_ids, line_ids))
+                    self._batches.append(self._create_batch(data, file_ids, dataset_ids, line_ids))
                     data = []
                     file_ids = []
                     line_ids = []
+                    dataset_ids = []
                     count = 0
 
         if count > 0:
-            self._batches.append(self._create_batch(data, file_ids, line_ids))
+            self._batches.append(self._create_batch(data, file_ids, dataset_ids, line_ids))
 
-    def run(self) -> dict[str, list[tuple[int, int, int]]]:
-        inference_result_per_file: defaultdict[str, defaultdict[int, list[tuple[int, int]]]] = defaultdict(
-            lambda: defaultdict(list)
+    def run(self) -> defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int, int]]]]]:
+        inference_result_per_file: defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int]]]]] = defaultdict(
+            lambda: defaultdict(lambda: defaultdict(list))
         )
 
         for batch in tqdm(self._batches, desc="Processing batches", total=len(self._batches)):
             batch_predictions = self._calc_func(self, batch)
 
-            if len(batch_predictions) != len(batch["file_id"]) or len(batch_predictions) != len(batch["line_id"]):
+            if (
+                len(batch_predictions) != len(batch["file_id"])
+                or len(batch_predictions) != len(batch["line_id"])
+                or len(batch_predictions) != len(batch["dataset_id"])
+            ):
                 raise RuntimeError(f"Length mismatch: {batch_predictions} vs {batch}.")
 
-            for prediction, file_id, line_id in zip(batch_predictions, batch["file_id"], batch["line_id"]):
+            for prediction, file_id, dataset_id, line_id in zip(
+                batch_predictions, batch["file_id"], batch["dataset_id"], batch["line_id"]
+            ):
                 # TODO(#11): This currently assumes we are in a categorical bucket and do not need to discretize
                 # (prediction directly gives bucket)
                 if not isinstance(prediction, str):
                     raise NotImplementedError(
-                        "Right now we assume prediction to be a category, numerical values not yet supporetd."
+                        "Right now we assume prediction to be a category, numerical values not yet supported."
                     )
 
-                inference_result_per_file[prediction][file_id].append(line_id)
+                inference_result_per_file[prediction][dataset_id][file_id].append(line_id)
 
-        return {
-            bucket: [(file_id,) + range for file_id, lines in file_dict.items() for range in ranges(sorted(lines))]
-            for bucket, file_dict in inference_result_per_file.items()
-        }
+        rangified: defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int, int]]]]] = defaultdict(
+            lambda: defaultdict(lambda: defaultdict(list))
+        )
+
+        for bucket_val, datasets in inference_result_per_file.items():
+            for dataset_id, files in datasets.items():
+                for file_id, list_of_lines in files.items():
+                    rangified[bucket_val][dataset_id][file_id] = ranges(list_of_lines)
+
+        return rangified
 
     @staticmethod
-    def _read_samples_from_file(file_id: int, file: str) -> Generator[tuple[int, int, str], None, None]:
+    def _read_samples_from_file(file: str) -> Generator[tuple[int, str], None, None]:
         # TODO(#22): This currently assumes everything is jsonl file
         if not file.endswith(".jsonl"):  # hacky check for extension to have some kind of check
             raise NotImplementedError("The current implementation assumes jsonl files.")
@@ -91,7 +106,14 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
 
         with open(file_path, encoding="utf-8") as fp:
             for line_id, line in enumerate(fp):
-                yield file_id, line_id, line.rstrip()
+                yield line_id, line.rstrip()
 
-    def _create_batch(self, data: list[str], file_ids: list[int], line_ids: list[int]) -> dict[str, np.ndarray]:
-        return {"data": np.array(data), "file_id": np.array(file_ids), "line_id": np.array(line_ids)}
+    def _create_batch(
+        self, data: list[str], file_ids: list[int], dataset_ids: list[int], line_ids: list[int]
+    ) -> dict[str, np.ndarray]:
+        return {
+            "data": np.array(data),
+            "file_id": np.array(file_ids),
+            "dataset_id": np.array(dataset_ids),
+            "line_id": np.array(line_ids),
+        }

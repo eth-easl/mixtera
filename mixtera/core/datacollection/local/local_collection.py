@@ -1,14 +1,14 @@
-import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Callable, List, Type
 
 from loguru import logger
-from mixtera.core.datacollection import DatasetTypes, MixteraDataCollection, PropertyType
+from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
+from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils import dict_into_dict, ranges
+from mixtera.utils.utils import merge_defaultdicts
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -20,9 +20,12 @@ class LocalDataCollection(MixteraDataCollection):
         self._directory = directory
         self._database_path = self._directory / "mixtera.sqlite"
 
-        # 1st level: categories 2nd level: buckets
+        self._properties: list[Property] = []
+        self._datasets: list[Dataset] = []
+
+        # 1st level: Variable 2nd Level: Buckets for that Variable 3rd level: datasets 4th: files -> ranges
         # TODO(#8): Actually store index in sqlite instead of memory
-        self._hacky_indx: defaultdict[str, defaultdict[str, list]] = defaultdict(lambda: defaultdict(list))
+        self._hacky_indx: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
 
         if not self._database_path.exists():
             self._connection = self._init_database()
@@ -40,46 +43,76 @@ class LocalDataCollection(MixteraDataCollection):
             " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE,"
             " location TEXT NOT NULL, type INTEGER NOT NULL);"
         )
+
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, location TEXT NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS files"
+            " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+            " dataset_id INTEGER NOT NULL,"
+            " location TEXT NOT NULL,"
+            " FOREIGN KEY(dataset_id) REFERENCES datasets(id)"
+            " ON DELETE CASCADE);"
         )
+
         conn.commit()
         logger.info("Database initialized.")
 
         return conn
 
-    def register_dataset(self, identifier: str, loc: str, dtype: DatasetTypes) -> bool:
-        if not self._insert_dataset_into_table(identifier, loc, dtype):
+    def register_dataset(self, identifier: str, loc: str, dtype: Type[Dataset]) -> bool:
+        if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype)) == -1:
             return False
 
-        if dtype in [DatasetTypes.JSONL_COLLECTION, DatasetTypes.JSONL_SINGLEFILE]:
-            return self._register_jsonl_collection_or_file(identifier, loc)
+        file: Path
+        for file in dtype.iterate_files(loc):
+            # TODO(#7, #8): Extend dataset index correctly with this file
+            if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
+                logger.error(f"Error while inserting file {file}")
+                return False
 
-        raise NotImplementedError(f"Unsupported dataset type: {dtype}")
+            # TODO(#8): Extend sqlite index instead of in-memory index
+            self._merge_index(dtype.build_file_index(file, dataset_id, file_id))
 
-    def _insert_dataset_into_table(self, identifier: str, loc: str, dtype: DatasetTypes) -> bool:
+        return True
+
+    def _insert_dataset_into_table(self, identifier: str, loc: str, dtype: Type[Dataset]) -> int:
+        if not issubclass(dtype, Dataset):
+            logger.error(f"Invalid dataset type: {dtype}")
+            return -1
+
+        type_id = dtype.type_id
+        if type_id == 0:
+            logger.error("Cannot use generic Dataset class as dtype.")
+            return -1
+
         try:
             query = "INSERT INTO datasets (name, location, type) VALUES (?, ?, ?);"
             cur = self._connection.cursor()
-            cur.execute(query, (identifier, loc, dtype.value))
+            cur.execute(query, (identifier, loc, type_id))
             self._connection.commit()
+            inserted_id = cur.lastrowid
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during insertion: {err}")
-            return False
+            return -1
 
-        if cur.rowcount == 1:
-            logger.info(f"Sucessfully registered dataset {identifier}.")
-            return True
+        if inserted_id:
+            logger.info(f"Successfully registered dataset {identifier} with id {inserted_id}.")
+            return inserted_id  # Return the last inserted id
 
         logger.error(f"Failed to register dataset {identifier}.")
-        return False
+        return -1
 
-    def _insert_file_into_table(self, loc: str) -> int:
+    def _insert_file_into_table(self, dataset_id: int, loc: Path) -> int:
         # TODO(create issue): Potentially batch inserts of multiple files if this is too slow.
-        query = "INSERT INTO files (location) VALUES (?);"
+        query = "INSERT INTO files (dataset_id, location) VALUES (?, ?);"
         cur = self._connection.cursor()
-        logger.info(f"Inserting file at {loc}")
-        cur.execute(query, (loc,))
+        logger.info(f"Inserting file at {loc} for dataset id = {dataset_id}")
+        cur.execute(
+            query,
+            (
+                dataset_id,
+                str(loc),
+            ),
+        )
         self._connection.commit()
 
         if cur.rowcount == 1:
@@ -89,88 +122,9 @@ class LocalDataCollection(MixteraDataCollection):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _register_jsonl_collection_or_file(self, identifier: str, loc: str) -> bool:
-        # TODO(#20): Can we make this idempotent to allow users to update? / Allow for recalculation
-
-        loc_path = Path(loc)
-
-        if not loc_path.exists():
-            raise RuntimeError(f"Could not find directory {loc_path}")
-
-        # TODO(#8): Initialize index here
-
-        file_list = [loc_path] if loc_path.is_file() else loc_path.glob("*.jsonl")
-        for jsonl_file in file_list:
-            if not self._register_jsonl_file(identifier, jsonl_file):
-                logger.error(f"Error while registering file {jsonl_file}.")
-                return False
-
-        return True
-
-    def _register_jsonl_file(self, identifier: str, file: Path) -> bool:
-        assert file.exists()
-
-        logger.debug(f"Registering file {file}")
-
-        # TODO(#7, #8): Extend dataset index correctly with this file
-        file_id = self._insert_file_into_table(str(file))
-        if file_id == -1:
-            logger.error(f"Error while inserting file {file}")
-            return False
-
-        index = self._build_index_for_jsonl_file(identifier, file, file_id)
-
+    def _merge_index(self, new_index: IndexType) -> None:
         # TODO(#8): Extend sqlite index instead of in-memory index
-        self._merge_index(index)
-
-        return True
-
-    def _build_index_for_jsonl_file(self, identifier: str, file: Path, file_id: int) -> dict[str, dict[str, list]]:
-        # For now, I just hardcode the SlimPajama example. We have to generalize this to UDFs
-        # index is the local index which we merge into the global index
-        index: dict[str, dict[str, list]] = {
-            "language": defaultdict(list),
-            "publication_date": defaultdict(list),
-        }
-        max_line = 0
-        with open(file, encoding="utf-8") as fd:
-            for line_id, line in enumerate(fd):
-                max_line = line_id
-                json_obj = json.loads(line)
-                if "meta" not in json_obj:
-                    continue
-
-                meta = json_obj["meta"]
-                del json_obj
-
-                for index_field in index:  # pylint: disable=consider-using-dict-items
-                    if index_field not in meta:
-                        continue
-                    value = meta[index_field]
-
-                    if index_field == "language":
-                        # This is especially critical to generalize.
-                        for lang in value:
-                            lang_name = lang["name"]
-                            index[index_field][lang_name].append(line_id)
-                    else:
-                        # TODO(#11): Support numerical buckets, not just categorical
-                        # logger.info(f"for index {index_field} the value is {value}")
-                        index[index_field][value].append(line_id)
-
-        # Rangi-fy the list for each index, i.e., we go from [1,2,3,5,6,7] to [(1,4), (5,8)] to compress
-        # Additionally, we add the current file ID
-        for index_field, buckets in index.items():
-            for bucket_key, bucket_vals in buckets.copy().items():
-                buckets[bucket_key] = [(file_id,) + rang for rang in ranges(bucket_vals)]
-
-        index["dataset"] = {identifier: [(file_id, 0, max_line + 1)]}
-
-        return index
-
-    def _merge_index(self, new_index: dict[str, Any]) -> None:
-        # TODO(#8): Extend sqlite index instead of in-memory index
-        dict_into_dict(self._hacky_indx, new_index)
+        self._hacky_indx = merge_defaultdicts(self._hacky_indx, new_index)
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
@@ -203,9 +157,9 @@ class LocalDataCollection(MixteraDataCollection):
         # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
         raise NotImplementedError("Not implemented for LocalCollection")
 
-    def _get_all_files(self) -> list[tuple[int, str]]:
+    def _get_all_files(self) -> list[tuple[int, int, str]]:
         try:
-            query = "SELECT id,location from files;"
+            query = "SELECT id,dataset_id,location from files;"
             cur = self._connection.cursor()
             cur.execute(
                 query,
@@ -258,4 +212,4 @@ class LocalDataCollection(MixteraDataCollection):
 
         executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
         executor.load_data(files, data_only_on_primary)
-        self._merge_index({property_name: executor.run()})
+        self._hacky_indx[property_name] = executor.run()
