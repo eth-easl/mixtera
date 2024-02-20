@@ -20,7 +20,8 @@ class TestJSONLDataset(unittest.TestCase):
         jsonl_file_path.touch()
 
         self.assertListEqual(
-            list(JSONLDataset.iterate_files(str(directory))), [directory / "temp.jsonl", directory / "temp2.jsonl"]
+            sorted(list(JSONLDataset.iterate_files(str(directory)))),
+            sorted([directory / "temp.jsonl", directory / "temp2.jsonl"]),
         )
 
     def test_iterate_files_singlefile(self):
