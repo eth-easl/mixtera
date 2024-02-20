@@ -2,12 +2,13 @@ import json
 import sqlite3
 import tempfile
 import unittest
-from collections import defaultdict
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
-from mixtera.core.datacollection import DatasetTypes
+from mixtera.core.datacollection import DatasetTypes, PropertyType
 from mixtera.core.datacollection.local import LocalDataCollection
+from mixtera.core.processing import ExecutionMode
+from mixtera.utils import defaultdict_to_dict
 
 
 class TestLocalDataCollection(unittest.TestCase):
@@ -288,8 +289,107 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), DatasetTypes.JSONL_COLLECTION))
         self.assertListEqual(["test", "test2"], ldc.list_datasets())
 
+    def test__get_all_files(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
 
-def defaultdict_to_dict(d):
-    if isinstance(d, defaultdict):
-        d = {k: defaultdict_to_dict(v) for k, v in d.items()}
-    return d
+        # Create a temporary directory containing two JSONL files
+        temp_dir = directory / "temp_dir"
+        temp_dir.mkdir()
+        (temp_dir / "temp1.jsonl").touch()
+        (temp_dir / "temp2.jsonl").touch()
+
+        # Assert that registration of a new JSONL directory returns True
+        self.assertTrue(ldc._register_jsonl_collection_or_file("test", str(temp_dir)))
+
+        # Assert _register_jsonl_file is called twice
+        self.assertListEqual(
+            sorted([file_path for _, file_path in ldc._get_all_files()]),
+            sorted([str(temp_dir / "temp1.jsonl"), str(temp_dir / "temp2.jsonl")]),
+        )
+
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_all_files")
+    @patch("mixtera.core.processing.property_calculation.PropertyCalculationExecutor.from_mode")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._merge_index")
+    def test_add_property_with_mocks(
+        self,
+        mock_merge_index,
+        mock_from_mode,
+        mock_get_all_files,
+    ):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+        (directory / "loc").touch()
+
+        # Set up the mocks
+        mock_get_all_files.return_value = [(0, "file1"), (1, "file2")]
+        mock_executor = mock_from_mode.return_value
+        mock_executor.run.return_value = {"bucket": [(0, 0, 1)]}
+
+        # Call the method
+        ldc.add_property(
+            "property_name",
+            lambda: None,
+            lambda: None,
+            ExecutionMode.LOCAL,
+            PropertyType.CATEGORICAL,
+            min_val=0.0,
+            max_val=1.0,
+            num_buckets=10,
+            batch_size=1,
+            dop=1,
+            data_only_on_primary=True,
+        )
+
+        # Check that the mocks were called as expected
+        mock_get_all_files.assert_called_once()
+        mock_from_mode.assert_called_once_with(
+            ExecutionMode.LOCAL,
+            1,
+            1,
+            ANY,
+            ANY,
+        )
+        mock_executor.load_data.assert_called_once_with([(0, "file1"), (1, "file2")], True)
+        mock_executor.run.assert_called_once()
+        mock_merge_index.assert_called_once_with({"property_name": {"bucket": [(0, 0, 1)]}})
+
+    def test_add_property_end_to_end(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        # Create test dataset
+        data = [
+            {"meta": {"language": [{"name": "Python"}], "publication_date": "2022"}},
+            {"meta": {"language": [{"name": "Java"}], "publication_date": "2021"}},
+        ]
+        dataset_file = directory / "dataset.jsonl"
+        with open(dataset_file, "w", encoding="utf-8") as f:
+            for item in data:
+                f.write(json.dumps(item) + "\n")
+
+        ldc.register_dataset("test_dataset", str(dataset_file), DatasetTypes.JSONL_SINGLEFILE)
+
+        # Define setup and calculation functions
+        def setup_func(executor):
+            executor.prefix = "pref_"
+
+        def calc_func(executor, batch):
+            return [executor.prefix + json.loads(sample)["meta"]["publication_date"] for sample in batch["data"]]
+
+        # Add property
+        ldc.add_property(
+            "test_property",
+            setup_func,
+            calc_func,
+            ExecutionMode.LOCAL,
+            PropertyType.CATEGORICAL,
+            batch_size=1,
+            dop=1,
+            data_only_on_primary=True,
+        )
+
+        index = defaultdict_to_dict(ldc._hacky_indx)
+
+        self.assertIn("test_property", index)
+        self.assertEqual(index["test_property"], {"pref_2022": [(1, 0, 1)], "pref_2021": [(1, 1, 2)]})
