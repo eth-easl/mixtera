@@ -22,5 +22,5 @@ hide-toc: true
 :caption: API Reference
 :hidden:
 
-references/dataset
+references/data_collection
 ```
