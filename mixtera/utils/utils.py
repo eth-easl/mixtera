@@ -14,10 +14,19 @@ def ranges(nums: List[int]) -> List[Tuple[int, int]]:
     return [(s, e + 1) for s, e in zip(edges, edges)]
 
 
-def dict_into_dict(target_index: dict[str, dict[str, list[Any]]], new_index: dict[str, dict[str, list[Any]]]) -> None:
-    for index_field, buckets in new_index.items():
-        for bucket_key, bucket_vals in buckets.items():
-            target_index[index_field][bucket_key].extend(bucket_vals)
+def merge_defaultdicts(d1: defaultdict, d2: defaultdict) -> defaultdict:
+    """
+    Recursively merges two defaultdict structures. Assumes that the innermost
+    dictionaries have unique keys and thus can be merged without concern for collisions.
+    """
+    for key, value in d2.items():
+        if isinstance(value, defaultdict):
+            node = d1[key]
+            d1[key] = merge_defaultdicts(node, value)
+        else:
+            # We're at the innermost level, which has unique keys, so just add them
+            d1[key] = value
+    return d1
 
 
 def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:

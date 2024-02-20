@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, List
+from typing import TYPE_CHECKING, Callable, List, Type
 
-from mixtera.core.datacollection.dataset_types import DatasetTypes
+from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError("Remote datasets are not yet supported.")
 
     @abstractmethod
-    def register_dataset(self, identifier: str, loc: str, dtype: DatasetTypes) -> bool:
+    def register_dataset(self, identifier: str, loc: str, dtype: Type[Dataset]) -> bool:
         """
         This method registers a dataset in the MixteraDataCollection.
 
