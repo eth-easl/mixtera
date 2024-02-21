@@ -52,7 +52,15 @@ class LocalDataCollection(MixteraDataCollection):
             " FOREIGN KEY(dataset_id) REFERENCES datasets(id)"
             " ON DELETE CASCADE);"
         )
-
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS indices"
+            " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+            " property_name TEXT NOT NULL,"
+            " property_value TEXT NOT NULL,"
+            " dataset_id INTEGER NOT NULL,"
+            " file_id INTEGER NOT NULL,"
+            " line_ids TEXT NOT NULL);"
+        )
         conn.commit()
         logger.info("Database initialized.")
 
@@ -122,10 +130,35 @@ class LocalDataCollection(MixteraDataCollection):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
+    def _insert_index_into_table(self, property_name: str, index: IndexType) -> int:
+        query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_ids) VALUES (?, ?, ?, ?, ?);"
+        cur = self._connection.cursor()
+        for prediction in index:
+            for dataset_id in index[prediction]:
+                for file_id in index[prediction][dataset_id]:
+                    for line_id in index[prediction][dataset_id][file_id]:
+                        cur.execute(
+                            query,
+                            (
+                                property_name,
+                                prediction,
+                                dataset_id.item(),
+                                file_id.item(),
+                                str(line_id),
+                            ),
+                        )
+        self._connection.commit()
+        if cur.rowcount == 1:
+            assert cur.lastrowid is not None and cur.lastrowid >= 0
+            return cur.lastrowid
+        
+        logger.error(f"Failed to register index for property {property_name}.")
+        return -1
+    
     def _merge_index(self, new_index: IndexType) -> None:
         # TODO(#8): Extend sqlite index instead of in-memory index
         self._hacky_indx = merge_defaultdicts(self._hacky_indx, new_index)
-
+        
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
             query = "SELECT COUNT(*) from datasets WHERE name = ?;"
@@ -212,4 +245,6 @@ class LocalDataCollection(MixteraDataCollection):
 
         executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
         executor.load_data(files, data_only_on_primary)
-        self._hacky_indx[property_name] = executor.run()
+        self._insert_index_into_table(property_name, executor.run())
+        # self._hacky_indx[property_name] = executor.run()
+        
