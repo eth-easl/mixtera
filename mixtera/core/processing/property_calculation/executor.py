@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Callable, Type
 
 import numpy as np
+from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 
 
@@ -50,12 +51,13 @@ class PropertyCalculationExecutor(ABC):
         raise NotImplementedError(f"Mode {mode} not yet implemented.")
 
     @abstractmethod
-    def load_data(self, files: list[str], data_only_on_primary: bool) -> None:
+    def load_data(self, files: list[tuple[int, int, Type[Dataset], str]], data_only_on_primary: bool) -> None:
         """
         Loads the data, i.e., all files, into the executor. Needs to be called before calling `run`.
 
         Args:
-            datasets_and_files (list[str): A list of files to load to run processing on
+            files (list[tuple[int, int, Type[Dataset], str]]): A list of file_ids, dataset_ids,
+                dataset type of this id, and file paths to load
             data_only_on_primary (bool): If False, the processing units (may be remote machines)
                                          have access to the same paths as the primary.
                                          Allows for non-centralized reading of files.

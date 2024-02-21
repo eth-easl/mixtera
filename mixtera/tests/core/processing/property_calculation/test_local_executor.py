@@ -4,6 +4,8 @@ import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
 import numpy as np
+from mixtera.core.datacollection.datasets import JSONLDataset
+from mixtera.core.datacollection.datasets.crossaint_dataset import CrossaintDataset
 from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
 
 
@@ -20,9 +22,10 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
         self.setup_func.assert_called_once_with(self.executor)
 
     def test_load_data(self):
-        test_files = [(0, 42, "test_file_0.jsonl"), (1, 42, "test_file_1.jsonl")]
+        test_files = [(0, 42, JSONLDataset, "test_file_0.jsonl"), (1, 42, JSONLDataset, "test_file_1.jsonl")]
 
-        def mock_samples_generator(path):
+        def mock_samples_generator(path, dtype):
+            del dtype
             if path == "test_file_0.jsonl":
                 yield (0, "line0")
                 yield (1, "line1")
@@ -54,18 +57,18 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
         file = "test_file.jsonl"
 
         # Call the method
-        samples = list(self.executor._read_samples_from_file(file))
+        samples = list(self.executor._read_samples_from_file(file, JSONLDataset))
 
         # Check the returned values
         self.assertEqual(samples, [(0, "sample1"), (1, "sample2")])
 
     def test_read_samples_from_invalid_file_raises_runtime_error(self):
         with self.assertRaises(RuntimeError):
-            list(LocalPropertyCalculationExecutor._read_samples_from_file("nonexistent.jsonl"))
+            list(LocalPropertyCalculationExecutor._read_samples_from_file("nonexistent.jsonl", JSONLDataset))
 
-    def test_read_samples_from_non_jsonl_file_raises_not_implemented_error(self):
+    def test_read_samples_from_jsonldataset_file_raises_not_implemented_error(self):
         with self.assertRaises(NotImplementedError):
-            list(LocalPropertyCalculationExecutor._read_samples_from_file("file.txt"))
+            list(LocalPropertyCalculationExecutor._read_samples_from_file("file.txt", CrossaintDataset))
 
     def test_run_aggregates_results(self):
         self.executor._batches = [
@@ -112,7 +115,8 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
             executor = LocalPropertyCalculationExecutor(1, 2, setup_func, calc_func)
             dataset_id = 42
             executor.load_data(
-                [(0, dataset_id, temp_file1.name), (1, dataset_id, temp_file2.name)], data_only_on_primary=True
+                [(0, dataset_id, JSONLDataset, temp_file1.name), (1, dataset_id, JSONLDataset, temp_file2.name)],
+                data_only_on_primary=True,
             )
             result = executor.run()
 

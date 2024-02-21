@@ -239,8 +239,8 @@ class TestLocalDataCollection(unittest.TestCase):
 
         ldc.register_dataset("test_dataset", str(directory), JSONLDataset, lambda data: f"prefix_{data}")
         files = ldc._get_all_files()
-        file1_id = [file_id for file_id, _, path in files if "temp1.jsonl" in path][0]
-        file2_id = [file_id for file_id, _, path in files if "temp2.jsonl" in path][0]
+        file1_id = [file_id for file_id, _, _, path in files if "temp1.jsonl" in path][0]
+        file2_id = [file_id for file_id, _, _, path in files if "temp2.jsonl" in path][0]
 
         expected_index = {
             "language": {
@@ -314,9 +314,11 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertTrue(ldc.register_dataset("test", str(temp_dir), JSONLDataset, lambda data: f"prefix_{data}"))
 
         self.assertListEqual(
-            sorted([file_path for _, _, file_path in ldc._get_all_files()]),
+            sorted([file_path for _, _, _, file_path in ldc._get_all_files()]),
             sorted([str(temp_dir / "temp1.jsonl"), str(temp_dir / "temp2.jsonl")]),
         )
+
+        self.assertSetEqual(set(dtype for _, _, dtype, _ in ldc._get_all_files()), set([JSONLDataset]))
 
     def test__get_dataset_func_by_id(self):
         directory = Path(self.temp_dir.name)
