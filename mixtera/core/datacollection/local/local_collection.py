@@ -1,8 +1,9 @@
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, List, Type
+from typing import Callable, Iterable, List, Type
 
+import dill
 from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
@@ -41,7 +42,7 @@ class LocalDataCollection(MixteraDataCollection):
         cur.execute(
             "CREATE TABLE IF NOT EXISTS datasets"
             " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE,"
-            " location TEXT NOT NULL, type INTEGER NOT NULL);"
+            " location TEXT NOT NULL, type INTEGER NOT NULL, parsing_func BLOB NOT NULL);"
         )
 
         cur.execute(
@@ -58,8 +59,10 @@ class LocalDataCollection(MixteraDataCollection):
 
         return conn
 
-    def register_dataset(self, identifier: str, loc: str, dtype: Type[Dataset]) -> bool:
-        if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype)) == -1:
+    def register_dataset(
+        self, identifier: str, loc: str, dtype: Type[Dataset], parsing_func: Callable[[str], str]
+    ) -> bool:
+        if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, parsing_func)) == -1:
             return False
 
         file: Path
@@ -74,7 +77,9 @@ class LocalDataCollection(MixteraDataCollection):
 
         return True
 
-    def _insert_dataset_into_table(self, identifier: str, loc: str, dtype: Type[Dataset]) -> int:
+    def _insert_dataset_into_table(
+        self, identifier: str, loc: str, dtype: Type[Dataset], parsing_func: Callable[[str], str]
+    ) -> int:
         if not issubclass(dtype, Dataset):
             logger.error(f"Invalid dataset type: {dtype}")
             return -1
@@ -84,10 +89,12 @@ class LocalDataCollection(MixteraDataCollection):
             logger.error("Cannot use generic Dataset class as dtype.")
             return -1
 
+        serialized_parsing_func = sqlite3.Binary(dill.dumps(parsing_func))
+
         try:
-            query = "INSERT INTO datasets (name, location, type) VALUES (?, ?, ?);"
+            query = "INSERT INTO datasets (name, location, type, parsing_func) VALUES (?, ?, ?, ?);"
             cur = self._connection.cursor()
-            cur.execute(query, (identifier, loc, type_id))
+            cur.execute(query, (identifier, loc, type_id, serialized_parsing_func))
             self._connection.commit()
             inserted_id = cur.lastrowid
         except sqlite3.Error as err:
@@ -170,6 +177,68 @@ class LocalDataCollection(MixteraDataCollection):
             return []
 
         return result
+
+    def _get_dataset_func_by_id(self, did: int) -> Callable[[str], str]:
+        try:
+            query = "SELECT parsing_func from datasets WHERE id = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (did,))
+            result = cur.fetchone()
+        except sqlite3.Error as err:
+            logger.error(f"Error while selecting parsing_func for did {did}")
+            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+
+        if result is None:
+            raise RuntimeError(f"Could not get dataset parsing func by id for did {did}")
+
+        return dill.loads(result[0])
+
+    def _get_dataset_type_by_id(self, did: int) -> Type[Dataset]:
+        try:
+            query = "SELECT type from datasets WHERE id = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (did,))
+            result = cur.fetchone()
+        except sqlite3.Error as err:
+            logger.error(f"Error while selecting parsing_func for did {did}")
+            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+
+        if result is None:
+            raise RuntimeError(f"Could not get dataset type by id for did {did}")
+
+        result = result[0]
+
+        if not isinstance(result, int):
+            raise RuntimeError(f"Dataset type {result} for dataset {did} is not an int")
+
+        return Dataset.from_type_id(result)
+
+    def _get_file_path_by_id(self, fid: int) -> str:
+        try:
+            query = "SELECT location from files WHERE id = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (fid,))
+            result = cur.fetchone()
+        except sqlite3.Error as err:
+            logger.error(f"Error while selecting location for fid {fid}")
+            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+
+        if result is None:
+            raise RuntimeError(f"Could not get file path by id for file id {fid}")
+
+        return result[0]
+
+    def get_samples_from_ranges(
+        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
+    ) -> Iterable[str]:
+        for dataset_id, file_dict in ranges_per_dataset_and_file.items():
+            dataset_parsing_func = self._get_dataset_func_by_id(dataset_id)
+            filename_dict = {
+                self._get_file_path_by_id(file_id): file_ranges for file_id, file_ranges in file_dict.items()
+            }
+            yield from self._get_dataset_type_by_id(dataset_id).read_ranges_from_files(
+                filename_dict, dataset_parsing_func
+            )
 
     def add_property(
         self,

@@ -120,8 +120,11 @@ class TestLocalDataCollection(unittest.TestCase):
         mocked_dtype.iterate_files = MagicMock()
         mocked_dtype.iterate_files.return_value = [Path("test1.jsonl"), Path("test2.jsonl")]
 
-        self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype))
-        mock_insert_dataset_into_table.assert_called_once_with("test", "loc", mocked_dtype)
+        def proc_func(data):
+            return f"prefix_{data}"
+
+        self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype, proc_func))
+        mock_insert_dataset_into_table.assert_called_once_with("test", "loc", mocked_dtype, proc_func)
         assert mock_insert_file_into_table.call_count == 2
         mock_insert_file_into_table.assert_any_call(dataset_id, Path("test1.jsonl"))
         mock_insert_file_into_table.assert_any_call(dataset_id, Path("test2.jsonl"))
@@ -133,17 +136,21 @@ class TestLocalDataCollection(unittest.TestCase):
         (directory / "loc").touch()
 
         # First time, the dataset registration should succeed.
-        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
+        self.assertTrue(
+            ldc.register_dataset("test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}")
+        )
 
         # Second time, the dataset registration should fail (because the dataset already exists).
-        self.assertFalse(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
+        self.assertFalse(
+            ldc.register_dataset("test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}")
+        )
 
     def test_register_dataset_with_non_existent_location(self):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
 
         with self.assertRaises(RuntimeError):
-            ldc.register_dataset("test", "/non/existent/location", JSONLDataset)
+            ldc.register_dataset("test", "/non/existent/location", JSONLDataset, lambda data: f"prefix_{data}")
 
     @patch("sqlite3.connect")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
@@ -174,7 +181,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mocked_dtype.build_file_index.side_effect = get_result_index
 
         self.assertDictEqual(defaultdict_to_dict(ldc._hacky_indx), {})
-        self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype))
+        self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype, lambda data: f"prefix_{data}"))
         self.assertDictEqual(
             defaultdict_to_dict(ldc._hacky_indx),
             {
@@ -230,7 +237,7 @@ class TestLocalDataCollection(unittest.TestCase):
                 f,
             )
 
-        ldc.register_dataset("test_dataset", str(directory), JSONLDataset)
+        ldc.register_dataset("test_dataset", str(directory), JSONLDataset, lambda data: f"prefix_{data}")
         files = ldc._get_all_files()
         file1_id = [file_id for file_id, _, path in files if "temp1.jsonl" in path][0]
         file2_id = [file_id for file_id, _, path in files if "temp2.jsonl" in path][0]
@@ -251,10 +258,10 @@ class TestLocalDataCollection(unittest.TestCase):
         ldc = LocalDataCollection(directory)
 
         # Inserting a new dataset should return 1 (first dataset)
-        self.assertEqual(1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset))
+        self.assertEqual(1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset, lambda data: f"prefix_{data}"))
 
         # Inserting an existing dataset should return -1.
-        self.assertEqual(-1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset))
+        self.assertEqual(-1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset, lambda data: f"prefix_{data}"))
 
     def test_insert_file_into_table(self):
         directory = Path(self.temp_dir.name)
@@ -269,10 +276,14 @@ class TestLocalDataCollection(unittest.TestCase):
 
         self.assertFalse(ldc.check_dataset_exists("test"))
         self.assertFalse(ldc.check_dataset_exists("test2"))
-        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
+        self.assertTrue(
+            ldc.register_dataset("test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}")
+        )
         self.assertTrue(ldc.check_dataset_exists("test"))
         self.assertFalse(ldc.check_dataset_exists("test2"))
-        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), JSONLDataset))
+        self.assertTrue(
+            ldc.register_dataset("test2", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}")
+        )
         self.assertTrue(ldc.check_dataset_exists("test"))
         self.assertTrue(ldc.check_dataset_exists("test2"))
 
@@ -282,9 +293,13 @@ class TestLocalDataCollection(unittest.TestCase):
         (directory / "loc").touch()
 
         self.assertListEqual([], ldc.list_datasets())
-        self.assertTrue(ldc.register_dataset("test", str(directory / "loc"), JSONLDataset))
+        self.assertTrue(
+            ldc.register_dataset("test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}")
+        )
         self.assertListEqual(["test"], ldc.list_datasets())
-        self.assertTrue(ldc.register_dataset("test2", str(directory / "loc"), JSONLDataset))
+        self.assertTrue(
+            ldc.register_dataset("test2", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}")
+        )
         self.assertListEqual(["test", "test2"], ldc.list_datasets())
 
     def test__get_all_files(self):
@@ -296,12 +311,45 @@ class TestLocalDataCollection(unittest.TestCase):
         (temp_dir / "temp1.jsonl").touch()
         (temp_dir / "temp2.jsonl").touch()
 
-        self.assertTrue(ldc.register_dataset("test", str(temp_dir), JSONLDataset))
+        self.assertTrue(ldc.register_dataset("test", str(temp_dir), JSONLDataset, lambda data: f"prefix_{data}"))
 
         self.assertListEqual(
             sorted([file_path for _, _, file_path in ldc._get_all_files()]),
             sorted([str(temp_dir / "temp1.jsonl"), str(temp_dir / "temp2.jsonl")]),
         )
+
+    def test__get_dataset_func_by_id(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        did = ldc._insert_dataset_into_table(
+            "test_dataset", str(directory), JSONLDataset, lambda data: f"prefix_{data}"
+        )
+        func = ldc._get_dataset_func_by_id(did)
+
+        self.assertEqual(func("abc"), "prefix_abc")
+
+    def test__get_dataset_type_by_id(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        did = ldc._insert_dataset_into_table(
+            "test_dataset", str(directory), JSONLDataset, lambda data: f"prefix_{data}"
+        )
+        dtype = ldc._get_dataset_type_by_id(did)
+        self.assertEqual(dtype, JSONLDataset)
+
+    def test__get_file_path_by_id(self):
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        temp_dir = directory / "temp_dir"
+        temp_dir.mkdir()
+        (temp_dir / "temp1.jsonl").touch()
+
+        self.assertTrue(ldc.register_dataset("test", str(temp_dir), JSONLDataset, lambda data: f"prefix_{data}"))
+
+        self.assertEqual(ldc._get_file_path_by_id(1), str(temp_dir / "temp1.jsonl"))
 
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_all_files")
     @patch("mixtera.core.processing.property_calculation.PropertyCalculationExecutor.from_mode")
@@ -362,7 +410,7 @@ class TestLocalDataCollection(unittest.TestCase):
             for item in data:
                 f.write(json.dumps(item) + "\n")
 
-        ldc.register_dataset("test_dataset", str(dataset_file), JSONLDataset)
+        ldc.register_dataset("test_dataset", str(dataset_file), JSONLDataset, lambda data: f"prefix_{data}")
         dataset_id = 1
         # Define setup and calculation functions
 
