@@ -144,6 +144,7 @@ class MixteraDataCollection(ABC):
 
         raise NotImplementedError()
 
+    @abstractmethod
     def get_index(self, property_name: Optional[str] = None) -> "IndexType":
         """
         This function returns the index of the MixteraDataCollection.

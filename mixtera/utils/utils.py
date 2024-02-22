@@ -1,6 +1,6 @@
 from collections import defaultdict
 from typing import Any, List, Tuple, Union
-
+import numpy as np
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
     return [item for sublist in non_flat_list for item in sublist]
@@ -39,6 +39,8 @@ def numpy_to_native_type(obj: Any) -> Any:
     """
     Converts numpy types to native python types
     """
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
     if isinstance(obj, dict):
         return {numpy_to_native_type(k): numpy_to_native_type(v) for k, v in obj.items()}
     if isinstance(obj, list):

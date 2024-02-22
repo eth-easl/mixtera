@@ -171,32 +171,23 @@ class LocalDataCollection(MixteraDataCollection):
         index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
         for prop_name, prop_val, dataset_id, file_id, line_start, line_end in raw_indices:
             index[prop_name][prop_val][dataset_id][file_id] = [(line_start, line_end)]
-        return defaultdict_to_dict(index)
+        return index
 
-    def _read_all_index_from_database(self) -> IndexType:
+    def _read_index_from_database(self, property_name: Optional[str] = None) -> IndexType:
+        cur = self._connection.cursor()
         try:
-            query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices;"
-            cur = self._connection.cursor()
-            cur.execute(query)
+            query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices"
+            if property_name:
+                query += " WHERE property_name = ?;"
+                cur.execute(query, (property_name,))
+            else:
+                query += ";"
+                cur.execute(query)
             results = cur.fetchall()
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during selection: {err}")
             results = []
         results = self._reformat_index(results)
-        return results
-
-    def _read_property_index_from_database(self, property_name: str) -> IndexType:
-        try:
-            query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices \
-                WHERE property_name = ?;"
-            cur = self._connection.cursor()
-            cur.execute(query, (property_name,))
-            results = cur.fetchall()
-
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during selection: {err}")
-            results = []
-        results = self._reformat_index(results)[property_name]
         return results
 
     def check_dataset_exists(self, identifier: str) -> bool:
@@ -290,5 +281,5 @@ class LocalDataCollection(MixteraDataCollection):
 
     def get_index(self, property_name: Optional[str] = None) -> IndexType:
         if property_name is None:
-            return merge_defaultdicts(self._index, self._read_all_index_from_database())
-        return self._read_property_index_from_database(property_name)
+            return merge_defaultdicts(self._index, self._read_index_from_database())
+        return self._read_index_from_database(property_name)[property_name]
