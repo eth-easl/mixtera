@@ -169,10 +169,10 @@ class TestLocalDataCollection(unittest.TestCase):
         mocked_dtype.build_file_index = MagicMock()
         mocked_dtype.build_file_index.side_effect = get_result_index
 
-        self.assertDictEqual(defaultdict_to_dict(ldc.index), {})
+        self.assertDictEqual(defaultdict_to_dict(ldc.get_index()), {})
         self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype))
         self.assertDictEqual(
-            defaultdict_to_dict(ldc.index),
+            defaultdict_to_dict(ldc.get_index()),
             {
                 "language": {
                     "English": {
@@ -240,7 +240,7 @@ class TestLocalDataCollection(unittest.TestCase):
             },
         }
 
-        self.assertEqual(defaultdict_to_dict(ldc.index), expected_index)
+        self.assertEqual(defaultdict_to_dict(ldc.get_index()), expected_index)
 
     def test_insert_dataset_into_table(self):
         directory = Path(self.temp_dir.name)
@@ -342,7 +342,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_executor.load_data.assert_called_once_with([(0, "ds", "file1"), (1, "ds", "file2")], True)
         mock_executor.run.assert_called_once()
 
-        self.assertDictEqual(ldc.index["property_name"], {"bucket": {"ds": {0: [(0, 1)]}}})
+        self.assertDictEqual(ldc.get_index(property_name="property_name"), {"bucket": {"ds": {0: [(0, 1)]}}})
 
     def test_add_property_end_to_end(self):
         directory = Path(self.temp_dir.name)
@@ -380,7 +380,7 @@ class TestLocalDataCollection(unittest.TestCase):
             data_only_on_primary=True,
         )
 
-        index = defaultdict_to_dict(ldc.index)
+        index = defaultdict_to_dict(ldc.get_index())
 
         self.assertIn("test_property", index)
         self.assertEqual(
