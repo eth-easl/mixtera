@@ -1,6 +1,8 @@
 from collections import defaultdict
 from typing import Any, List, Tuple, Union
+
 import numpy as np
+
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
     return [item for sublist in non_flat_list for item in sublist]

@@ -1,5 +1,6 @@
-from mixtera.utils import flatten, numpy_to_native_type, ranges
 import numpy as np
+from mixtera.utils import flatten, numpy_to_native_type, ranges
+
 
 def test_flatten():
     assert flatten([[1, 2, 3, 4]]) == [1, 2, 3, 4]
