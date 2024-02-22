@@ -196,7 +196,6 @@ class LocalDataCollection(MixteraDataCollection):
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during selection: {err}")
             results = []
-        print(results)
         results = self._reformat_index(results)[property_name]
         return results
 
