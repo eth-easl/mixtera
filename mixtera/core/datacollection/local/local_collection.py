@@ -71,13 +71,10 @@ class LocalDataCollection(MixteraDataCollection):
 
         file: Path
         for file in dtype.iterate_files(loc):
-            # TODO(#7, #8): Extend dataset index correctly with this file
             if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
                 logger.error(f"Error while inserting file {file}")
                 return False
-
             pre_index = dtype.build_file_index(file, dataset_id, file_id)
-            self._index = merge_defaultdicts(self._index, pre_index)
             for property_name in pre_index:
                 self._insert_index_into_table(property_name, pre_index[property_name])
         return True
@@ -281,5 +278,17 @@ class LocalDataCollection(MixteraDataCollection):
 
     def get_index(self, property_name: Optional[str] = None) -> IndexType:
         if property_name is None:
-            return merge_defaultdicts(self._index, self._read_index_from_database())
-        return self._read_index_from_database(property_name)[property_name]
+            logger.warning(
+                "No property name provided, returning all indices from database. ",
+                "This may be slow, consider providing a property name.",
+            )
+            self._index = self._read_index_from_database()
+            return self._index
+        if property_name not in self._index:
+            # If the property is not in the index, it may be in the database, so we check it there
+            # TODO(xiaozhe): user may also interested to force refresh the index from database.
+            self._index = merge_defaultdicts(self._index, self._read_index_from_database(property_name))
+        if property_name not in self._index:
+            logger.warning(f"Property {property_name} not found in index, returning None.")
+            return None
+        return self._index[property_name]
