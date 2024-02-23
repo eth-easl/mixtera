@@ -276,7 +276,7 @@ class LocalDataCollection(MixteraDataCollection):
         new_index = executor.run()
         self._insert_index_into_table(property_name, new_index)
 
-    def get_index(self, property_name: Optional[str] = None) -> IndexType:
+    def get_index(self, property_name: Optional[str] = None) -> Optional[IndexType]:
         if property_name is None:
             logger.warning(
                 "No property name provided, returning all indices from database. ",
