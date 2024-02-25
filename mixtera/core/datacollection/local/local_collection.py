@@ -7,8 +7,7 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import MetadataParserRegistry, \
-    MetadataParserFactory
+from mixtera.core.datacollection.index import MetadataParserFactory, MetadataParserRegistry
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type
@@ -83,10 +82,10 @@ class LocalDataCollection(MixteraDataCollection):
                 logger.error(f"Error while inserting file {file}")
                 return False
             metadata_parser = MetadataParserFactory.create_metadata_parser(
-                self._metadata_parser_type, dataset_id, file_id)
+                self._metadata_parser_type, dataset_id, file_id
+            )
             # TODO(DanGraur): dataset_id, file_id are redundant; should remove
-            pre_index = dtype.build_file_index(file, dataset_id, file_id,
-                                               metadata_parser)
+            pre_index = dtype.build_file_index(file, dataset_id, file_id, metadata_parser)
             for property_name in pre_index:
                 self._insert_index_into_table(property_name, pre_index[property_name])
         return True

@@ -10,8 +10,7 @@ class CrossaintDataset(Dataset):
     type_id = 2
 
     @staticmethod
-    def build_file_index(loc: Path, dataset_id: int, file_id: int,
-                         metadata_parser: MetadataParser) -> IndexType:
+    def build_file_index(loc: Path, dataset_id: int, file_id: int, metadata_parser: MetadataParser) -> IndexType:
         raise NotImplementedError("CrossaintDataset not yet supported.")
 
     @staticmethod
