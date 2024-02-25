@@ -7,6 +7,8 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
+from mixtera.core.datacollection.index import MetadataParserRegistry, \
+    MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type
@@ -25,6 +27,9 @@ class LocalDataCollection(MixteraDataCollection):
         self._datasets: list[Dataset] = []
         # 1st level: Variable 2nd Level: Buckets for that Variable 3rd level: datasets 4th: files -> ranges
         self._index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+
+        # TODO(DanGraur): This should be a parameter to MixteraDataCollection
+        self._metadata_parser_type = MetadataParserRegistry.RED_PAJAMA
 
         if not self._database_path.exists():
             self._connection = self._init_database()
@@ -77,7 +82,11 @@ class LocalDataCollection(MixteraDataCollection):
             if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
                 logger.error(f"Error while inserting file {file}")
                 return False
-            pre_index = dtype.build_file_index(file, dataset_id, file_id)
+            metadata_parser = MetadataParserFactory.create_metadata_parser(
+                self._metadata_parser_type, dataset_id, file_id)
+            # TODO(DanGraur): dataset_id, file_id are redundant; should remove
+            pre_index = dtype.build_file_index(file, dataset_id, file_id,
+                                               metadata_parser)
             for property_name in pre_index:
                 self._insert_index_into_table(property_name, pre_index[property_name])
         return True

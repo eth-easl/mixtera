@@ -49,5 +49,17 @@ class RedPajamaMetadataParser(MetadataParser):
     return self._index
 
 
-class ParserCollectionRegistry(Enum):
-  RedPajama = RedPajamaMetadataParser
+class MetadataParserRegistry(Enum):
+  """Each metadata parser is registered with this enum."""
+  RED_PAJAMA = RedPajamaMetadataParser
+
+
+class MetadataParserFactory:
+  """Handles the creation of metadata parsers."""
+  @staticmethod
+  def create_metadata_parser(parser_type: MetadataParserRegistry,
+                             dataset_id: int, file_id: int) -> MetadataParser:
+    if parser_type == MetadataParserRegistry.RED_PAJAMA:
+      return RedPajamaMetadataParser(dataset_id, file_id)
+    raise NotImplementedError(f"The {parser_type} metadata parser is not "
+                              "implemented!")
