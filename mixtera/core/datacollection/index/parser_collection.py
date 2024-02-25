@@ -27,7 +27,7 @@ class RedPajamaMetadataParser(MetadataParser):
                 # logger.info(f"for index {index_field} the value is {value}")
                 self._index[index_field][value][self.dataset_id][self.file_id].append(line_number)
 
-    def _compress_index(self):
+    def _compress_index(self) -> None:
         """
         Compresses the internal index, reducing contiguous line ranges to spans.
         E.g. [1,2,3,5,6] --> [(1,3), (5,6)]. All modifications are done in place

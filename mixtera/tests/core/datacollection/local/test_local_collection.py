@@ -163,8 +163,9 @@ class TestLocalDataCollection(unittest.TestCase):
         mocked_dtype.iterate_files = MagicMock()
         mocked_dtype.iterate_files.return_value = [Path("test1.jsonl"), Path("test2.jsonl")]
 
-        def get_result_index(file, dataset_id, file_id):
+        def get_result_index(file, dataset_id, file_id, metadata_parser):
             del file
+            del metadata_parser
             res = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
             res["language"]["English"][dataset_id][file_id] = [(0, 42)]
             return res
