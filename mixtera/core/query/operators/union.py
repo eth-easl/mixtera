@@ -1,0 +1,20 @@
+from mixtera.core.query.query import Query
+
+from ._base import Operator
+
+
+class Union(Operator):
+    def __init__(self, query_a: Query) -> None:
+        super().__init__()
+        self.children.append(query_a.root)
+
+    def apply(self) -> None:
+        assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
+        final_results = []
+        self.results = [x.results for x in self.children]
+        for result in self.results:
+            final_results.extend(result)
+        self.results = list(set(final_results))
+
+    def __repr__(self) -> str:
+        return "union<>()"
