@@ -3,7 +3,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Type
 
-
 import dill
 from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
@@ -226,9 +225,9 @@ class LocalDataCollection(MixteraDataCollection):
         # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
         raise NotImplementedError("Not implemented for LocalCollection")
 
-    def _get_all_files(self) -> list[tuple[int, int, str]]:
+    def _get_all_files(self) -> list[tuple[int, int, Type[Dataset], str]]:
         try:
-            query = "SELECT id,dataset_id,location from files;"
+            query = "SELECT files.id, files.dataset_id, files.location from files;"
             cur = self._connection.cursor()
             cur.execute(
                 query,
@@ -238,7 +237,10 @@ class LocalDataCollection(MixteraDataCollection):
             logger.error(f"A sqlite error occured during selection: {err}")
             return []
 
-        return result
+        dataset_ids = set(did for _, did, _ in result)
+        id_to_type_map = {did: self._get_dataset_type_by_id(did) for did in dataset_ids}
+
+        return [(fid, did, id_to_type_map[did], loc) for fid, did, loc in result]
 
     def _get_dataset_func_by_id(self, did: int) -> Callable[[str], str]:
         try:

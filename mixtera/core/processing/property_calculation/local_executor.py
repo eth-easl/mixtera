@@ -1,9 +1,10 @@
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, Type
 
 import numpy as np
 from loguru import logger
+from mixtera.core.datacollection.datasets import Dataset, JSONLDataset
 from mixtera.core.processing.property_calculation import PropertyCalculationExecutor
 from mixtera.utils import ranges
 from tqdm import tqdm
@@ -28,7 +29,7 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
         if self._dop > 1:
             raise NotImplementedError("The LocalPropertyCalculationExecutor currently does not support parallelism.")
 
-    def load_data(self, files: list[tuple[int, int, str]], data_only_on_primary: bool) -> None:
+    def load_data(self, files: list[tuple[int, int, Type[Dataset], str]], data_only_on_primary: bool) -> None:
         if not data_only_on_primary:
             logger.warning("Set data_only_on_primary = False, but LocalExecutor is running only on primary anyways.")
 
@@ -37,8 +38,8 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
         dataset_ids = []
         line_ids = []
         count = 0
-        for file_id, dataset_id, path in files:
-            for line_id, line in self._read_samples_from_file(path):
+        for file_id, dataset_id, dtype, path in files:
+            for line_id, line in self._read_samples_from_file(path, dtype):
                 data.append(line)
                 file_ids.append(file_id)
                 line_ids.append(line_id)
@@ -94,11 +95,14 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
         return rangified
 
     @staticmethod
-    def _read_samples_from_file(file: str) -> Generator[tuple[int, str], None, None]:
-        # TODO(#22): This currently assumes everything is jsonl file
-        if not file.endswith(".jsonl"):  # hacky check for extension to have some kind of check
-            raise NotImplementedError("The current implementation assumes jsonl files.")
+    def _read_samples_from_file(file: str, dtype: Type[Dataset]) -> Generator[tuple[int, str], None, None]:
+        if dtype is JSONLDataset:
+            return LocalPropertyCalculationExecutor._read_samples_from_jsonl_file(file)
 
+        raise NotImplementedError(f"LocalExecutor currently does not support dataset type {dtype}")
+
+    @staticmethod
+    def _read_samples_from_jsonl_file(file: str) -> Generator[tuple[int, str], None, None]:
         file_path = Path(file)
 
         if not file_path.exists():
