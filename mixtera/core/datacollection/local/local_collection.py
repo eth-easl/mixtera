@@ -305,6 +305,68 @@ class LocalDataCollection(MixteraDataCollection):
                 filename_dict, dataset_parsing_func
             )
 
+    def _get_dataset_func_by_id(self, did: int) -> Callable[[str], str]:
+        try:
+            query = "SELECT parsing_func from datasets WHERE id = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (did,))
+            result = cur.fetchone()
+        except sqlite3.Error as err:
+            logger.error(f"Error while selecting parsing_func for did {did}")
+            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+
+        if result is None:
+            raise RuntimeError(f"Could not get dataset parsing func by id for did {did}")
+
+        return dill.loads(result[0])
+
+    def _get_dataset_type_by_id(self, did: int) -> Type[Dataset]:
+        try:
+            query = "SELECT type from datasets WHERE id = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (did,))
+            result = cur.fetchone()
+        except sqlite3.Error as err:
+            logger.error(f"Error while selecting parsing_func for did {did}")
+            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+
+        if result is None:
+            raise RuntimeError(f"Could not get dataset type by id for did {did}")
+
+        result = result[0]
+
+        if not isinstance(result, int):
+            raise RuntimeError(f"Dataset type {result} for dataset {did} is not an int")
+
+        return Dataset.from_type_id(result)
+
+    def _get_file_path_by_id(self, fid: int) -> str:
+        try:
+            query = "SELECT location from files WHERE id = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (fid,))
+            result = cur.fetchone()
+        except sqlite3.Error as err:
+            logger.error(f"Error while selecting location for fid {fid}")
+            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+
+        if result is None:
+            raise RuntimeError(f"Could not get file path by id for file id {fid}")
+
+        return result[0]
+
+    def get_samples_from_ranges(
+        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
+    ) -> Iterable[str]:
+        for dataset_id, file_dict in ranges_per_dataset_and_file.items():
+            dataset_parsing_func = self._get_dataset_func_by_id(dataset_id)
+            filename_dict = {
+                self._get_file_path_by_id(file_id): file_ranges for file_id, file_ranges in file_dict.items()
+            }
+            yield from self._get_dataset_type_by_id(dataset_id).read_ranges_from_files(
+                filename_dict, dataset_parsing_func
+            )
+
     def add_property(
         self,
         property_name: str,

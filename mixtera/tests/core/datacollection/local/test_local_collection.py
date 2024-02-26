@@ -311,6 +311,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
         self.assertSetEqual(set(dtype for _, _, dtype, _ in ldc._get_all_files()), set([JSONLDataset]))
 
+
     def test__get_dataset_func_by_id(self):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)
