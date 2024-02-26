@@ -14,11 +14,10 @@ class RedPajamaMetadataParser(MetadataParser):
     target_index_fields = ["language", "publication_date"]
 
     def parse(self, line_number: int, metadata: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
-        for index_field in RedPajamaMetadataParser.target_index_fields:  # pylint: disable=consider-using-dict-items
+        for index_field in RedPajamaMetadataParser.target_index_fields:
             if index_field not in metadata:
                 continue
             value = metadata[index_field]
-
             if index_field == "language":
                 for language in value:
                     self._index[index_field][language["name"]][self.dataset_id][self.file_id].append(line_number)
@@ -30,8 +29,9 @@ class RedPajamaMetadataParser(MetadataParser):
     def _compress_index(self) -> None:
         """
         Compresses the internal index, reducing contiguous line ranges to spans.
-        E.g. [1,2,3,5,6] --> [(1,3), (5,6)]. All modifications are done in place
-        on the index.
+        E.g. [1,2,3,5,6] --> [(1,4), (5,7)]. All modifications are done in place
+        on the index. Note that the lower bound of each range is inclusive, but
+        the upper bound is exclusive.
         """
         for _, buckets in self._index.items():
             for __, bucket_vals in buckets.items():
