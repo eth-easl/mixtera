@@ -34,8 +34,7 @@ class Dataset(ABC):
 
     @staticmethod
     @abstractmethod
-    def build_file_index(loc: Path, dataset_id: int, file_id: int,
-                         metadata_parser: MetadataParser) -> IndexType:
+    def build_file_index(loc: Path, dataset_id: int, file_id: int, metadata_parser: MetadataParser) -> IndexType:
         """
         Build up the file index for the file stored at loc.
 
