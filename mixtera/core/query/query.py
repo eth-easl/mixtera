@@ -3,7 +3,7 @@ from typing import Any
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.query.operators.operator import Operator
 from mixtera.core.query.operators.select import Select
-
+from mixtera.core.query.operators.materialize import Materialize
 
 class QueryPlan:
     """
@@ -59,9 +59,9 @@ class Query:
 
     def execute(self, materialize: bool = False, streaming: bool = False) -> list:
         if materialize:
-            raise NotImplementedError("Materialization is not supported yet")
-        if streaming:
-            raise NotImplementedError("Streaming is not supported yet")
+            mat_op = Materialize(streaming)
+            mat_op.set_datacollection(self.mdc)
+            self.query_plan.add(mat_op)
         self.root.post_order_traverse()
         return self.root.results
 

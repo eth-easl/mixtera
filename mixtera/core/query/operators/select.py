@@ -1,5 +1,5 @@
 from typing import Any, Tuple, Union
-
+from mixtera.utils import defaultdict_to_dict
 from .operator import Operator
 
 valid_operators = ["==", ">", "<", ">=", "<=", "!="]
@@ -46,7 +46,8 @@ class Select(Operator):
         assert len(self.children) <= 1, f"Select operator must have at most 1 child, got {len(self.children)}"
         if len(self.children) == 0:
             index = self.mdc.get_index(self.condition.field)
-            self.results = [i for i, x in enumerate(index) if self.condition.meet(x)]
+            index = defaultdict_to_dict(index)
+            self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
 
     def __repr__(self) -> str:
         return f"select<{self.mdc}>({self.condition})"
