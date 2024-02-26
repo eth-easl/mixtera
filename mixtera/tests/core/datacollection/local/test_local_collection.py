@@ -69,7 +69,7 @@ class TestLocalDataCollection(unittest.TestCase):
         ldc._init_database()
 
         mock_connect.assert_called_with(ldc._database_path)
-        self.assertEqual(mock_cursor_instance.execute.call_count, 2)
+        self.assertEqual(mock_cursor_instance.execute.call_count, 3)
         mock_connection.commit.assert_called_once()
 
     def test_init_database_without_mocked_sqlite(self):
@@ -103,10 +103,7 @@ class TestLocalDataCollection(unittest.TestCase):
     @patch("sqlite3.connect")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._merge_index")
-    def test_register_dataset(
-        self, mock_merge_index, mock_insert_file_into_table, mock_insert_dataset_into_table, mock_connect
-    ):
+    def test_register_dataset(self, mock_insert_file_into_table, mock_insert_dataset_into_table, mock_connect):
         dataset_id = 42
         mock_connection = MagicMock()
         mock_connect.return_value = mock_connection
@@ -128,7 +125,6 @@ class TestLocalDataCollection(unittest.TestCase):
         assert mock_insert_file_into_table.call_count == 2
         mock_insert_file_into_table.assert_any_call(dataset_id, Path("test1.jsonl"))
         mock_insert_file_into_table.assert_any_call(dataset_id, Path("test2.jsonl"))
-        assert mock_merge_index.call_count == 2
 
     def test_register_dataset_with_existing_dataset(self):
         directory = Path(self.temp_dir.name)
@@ -152,15 +148,11 @@ class TestLocalDataCollection(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             ldc.register_dataset("test", "/non/existent/location", JSONLDataset, lambda data: f"prefix_{data}")
 
-    @patch("sqlite3.connect")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
-    def test_register_dataset_updates_index(
-        self, mock_insert_file_into_table, mock_insert_dataset_into_table, mock_connect
-    ):
-        mock_connection = MagicMock()
+    def test_register_dataset_updates_index(self, mock_insert_file_into_table, mock_insert_dataset_into_table):
+
         dataset_id = 42
-        mock_connect.return_value = mock_connection
         mock_insert_file_into_table.side_effect = [0, 1]
         mock_insert_dataset_into_table.return_value = dataset_id
 
@@ -180,17 +172,16 @@ class TestLocalDataCollection(unittest.TestCase):
         mocked_dtype.build_file_index = MagicMock()
         mocked_dtype.build_file_index.side_effect = get_result_index
 
-        self.assertDictEqual(defaultdict_to_dict(ldc._hacky_indx), {})
+        self.assertDictEqual(defaultdict_to_dict(ldc.get_index()), {})
         self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype, lambda data: f"prefix_{data}"))
+
         self.assertDictEqual(
-            defaultdict_to_dict(ldc._hacky_indx),
+            defaultdict_to_dict(ldc.get_index("language")),
             {
-                "language": {
-                    "English": {
-                        dataset_id: {
-                            0: [(0, 42)],
-                            1: [(0, 42)],
-                        }
+                "English": {
+                    dataset_id: {
+                        0: [(0, 42)],
+                        1: [(0, 42)],
                     }
                 }
             },
@@ -251,7 +242,7 @@ class TestLocalDataCollection(unittest.TestCase):
             },
         }
 
-        self.assertEqual(defaultdict_to_dict(ldc._hacky_indx), expected_index)
+        self.assertEqual(defaultdict_to_dict(ldc.get_index()), expected_index)
 
     def test_insert_dataset_into_table(self):
         directory = Path(self.temp_dir.name)
@@ -396,7 +387,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_executor.load_data.assert_called_once_with([(0, "ds", "file1"), (1, "ds", "file2")], True)
         mock_executor.run.assert_called_once()
 
-        self.assertDictEqual(ldc._hacky_indx["property_name"], {"bucket": {"ds": {0: [(0, 1)]}}})
+        self.assertDictEqual(ldc.get_index(property_name="property_name"), {"bucket": {"ds": {0: [(0, 1)]}}})
 
     def test_add_property_end_to_end(self):
         directory = Path(self.temp_dir.name)
@@ -434,9 +425,119 @@ class TestLocalDataCollection(unittest.TestCase):
             data_only_on_primary=True,
         )
 
-        index = defaultdict_to_dict(ldc._hacky_indx)
+        index = defaultdict_to_dict(ldc.get_index())
 
         self.assertIn("test_property", index)
         self.assertEqual(
             index["test_property"], {"pref_2022": {dataset_id: {1: [(0, 1)]}}, "pref_2021": {dataset_id: {1: [(1, 2)]}}}
         )
+
+    @patch("sqlite3.connect")
+    def test_insert_index_into_table(self, mock_connect):
+        mock_connection = MagicMock()
+        mock_connect.return_value = mock_connection
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+        index = {"prediction1": {"dataset1": {"file1": [(1, 2)]}}}
+        # Test successful insertion
+        mock_cursor.lastrowid = 1
+        mock_cursor.rowcount = 1
+        result = ldc._insert_index_into_table("property1", index)
+        self.assertEqual(result, 1)
+        # Test sqlite error during insertion
+        mock_cursor.execute.side_effect = sqlite3.Error("Test error")
+        result = ldc._insert_index_into_table("property1", index)
+        self.assertEqual(result, -1)
+        # Test failed insertion (no rows affected)
+        mock_cursor.execute.side_effect = None
+        mock_cursor.rowcount = 0
+        result = ldc._insert_index_into_table("property1", index)
+        self.assertEqual(result, -1)
+
+    def test_reformat_index(self):
+        ldc = LocalDataCollection(Path(self.temp_dir.name))
+
+        # Test with empty list
+        raw_indices = []
+        expected = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        result = ldc._reformat_index(raw_indices)
+        self.assertEqual(result, expected)
+
+        # Test with single item in list
+        raw_indices = [("prop1", "val1", "dataset1", "file1", 1, 2)]
+        expected = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        expected["prop1"]["val1"]["dataset1"]["file1"] = [(1, 2)]
+        result = ldc._reformat_index(raw_indices)
+        self.assertEqual(result, expected)
+
+        # Test with multiple items in list
+        raw_indices = [
+            ("prop1", "val1", "dataset1", "file1", 1, 2),
+            ("prop1", "val1", "dataset1", "file2", 3, 4),
+            ("prop1", "val2", "dataset2", "file1", 5, 6),
+            ("prop2", "val1", "dataset1", "file1", 7, 8),
+        ]
+        expected = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        expected["prop1"]["val1"]["dataset1"]["file1"] = [(1, 2)]
+        expected["prop1"]["val1"]["dataset1"]["file2"] = [(3, 4)]
+        expected["prop1"]["val2"]["dataset2"]["file1"] = [(5, 6)]
+        expected["prop2"]["val1"]["dataset1"]["file1"] = [(7, 8)]
+        result = ldc._reformat_index(raw_indices)
+        self.assertEqual(result, expected)
+
+    @patch("sqlite3.connect")
+    def test_read_index_from_database_with_property_name(self, mock_connect: MagicMock):
+        mock_connection = MagicMock()
+        mock_connect.return_value = mock_connection
+        mock_cursor_instance = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor_instance
+        mock_cursor_instance.fetchall.return_value = [
+            ("property_name", "property_value", "dataset_id", "file_id", 1, 2)
+        ]
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+        ldc._connection = mock_connection
+
+        result = ldc._read_index_from_database("property_name")
+        self.assertEqual(result, {"property_name": {"property_value": {"dataset_id": {"file_id": [(1, 2)]}}}})
+        # test sqlite error
+        mock_cursor_instance.execute.side_effect = sqlite3.Error("Test error")
+        result = ldc._read_index_from_database("property_name")
+        self.assertEqual(result, {})
+
+    @patch("sqlite3.connect")
+    def test_read_index_from_database_without_property_name(self, mock_connect: MagicMock):
+        mock_connection = MagicMock()
+        mock_connect.return_value = mock_connection
+        mock_cursor_instance = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor_instance
+        mock_cursor_instance.fetchall.return_value = [
+            ("property_name", "property_value", "dataset_id", "file_id", 1, 2)
+        ]
+
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+        ldc._connection = mock_connection
+
+        result = ldc._read_index_from_database()
+
+        self.assertEqual(result, {"property_name": {"property_value": {"dataset_id": {"file_id": [(1, 2)]}}}})
+
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._read_index_from_database")
+    def test_get_index(self, mock_read_index_from_database: MagicMock):
+        mock_read_index_from_database.return_value = {"property1": "value1"}
+        ldc = LocalDataCollection(Path(self.temp_dir.name))
+        result = ldc.get_index()
+        mock_read_index_from_database.assert_called_once()
+        self.assertEqual(result, {"property1": "value1"})
+        result = ldc.get_index("property1")
+        # here it should still be called once, because the result is already cached
+        mock_read_index_from_database.assert_called_once()
+        self.assertEqual(result, "value1")
+
+        # test with non-existing property
+        result = ldc.get_index("property2")
+        mock_read_index_from_database.assert_called_with("property2")
+        self.assertEqual(result, None)

@@ -1,7 +1,8 @@
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Iterable, List, Type
+from typing import Callable, Iterable, List, Optional, Type
+
 
 import dill
 from loguru import logger
@@ -9,7 +10,7 @@ from mixtera.core.datacollection import IndexType, MixteraDataCollection, Proper
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import merge_defaultdicts
+from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -23,10 +24,8 @@ class LocalDataCollection(MixteraDataCollection):
 
         self._properties: list[Property] = []
         self._datasets: list[Dataset] = []
-
         # 1st level: Variable 2nd Level: Buckets for that Variable 3rd level: datasets 4th: files -> ranges
-        # TODO(#8): Actually store index in sqlite instead of memory
-        self._hacky_indx: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        self._index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
 
         if not self._database_path.exists():
             self._connection = self._init_database()
@@ -53,7 +52,16 @@ class LocalDataCollection(MixteraDataCollection):
             " FOREIGN KEY(dataset_id) REFERENCES datasets(id)"
             " ON DELETE CASCADE);"
         )
-
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS indices"
+            " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+            " property_name TEXT NOT NULL,"
+            " property_value TEXT NOT NULL,"
+            " dataset_id INTEGER NOT NULL,"
+            " file_id INTEGER NOT NULL,"
+            " line_start INTEGER NOT NULL,"
+            " line_end INTEGER NOT NULL);"
+        )
         conn.commit()
         logger.info("Database initialized.")
 
@@ -67,14 +75,12 @@ class LocalDataCollection(MixteraDataCollection):
 
         file: Path
         for file in dtype.iterate_files(loc):
-            # TODO(#7, #8): Extend dataset index correctly with this file
             if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
                 logger.error(f"Error while inserting file {file}")
                 return False
-
-            # TODO(#8): Extend sqlite index instead of in-memory index
-            self._merge_index(dtype.build_file_index(file, dataset_id, file_id))
-
+            pre_index = dtype.build_file_index(file, dataset_id, file_id)
+            for property_name in pre_index:
+                self._insert_index_into_table(property_name, pre_index[property_name])
         return True
 
     def _insert_dataset_into_table(
@@ -129,9 +135,65 @@ class LocalDataCollection(MixteraDataCollection):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _merge_index(self, new_index: IndexType) -> None:
-        # TODO(#8): Extend sqlite index instead of in-memory index
-        self._hacky_indx = merge_defaultdicts(self._hacky_indx, new_index)
+    def _insert_index_into_table(self, property_name: str, index: IndexType) -> int:
+        query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
+            VALUES (?, ?, ?, ?, ?, ?);"
+        cur = self._connection.cursor()
+        index = defaultdict_to_dict(index)
+        index = numpy_to_native_type(index)
+        try:
+            for prediction in index:
+                for dataset_id in index[prediction]:
+                    for file_id in index[prediction][dataset_id]:
+                        for line_id in index[prediction][dataset_id][file_id]:
+                            cur.execute(
+                                query,
+                                (
+                                    property_name,
+                                    prediction,
+                                    dataset_id,
+                                    file_id,
+                                    line_id[0],
+                                    line_id[1],
+                                ),
+                            )
+            self._connection.commit()
+
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during insertion: {err}")
+            return -1
+        if cur.rowcount == 1:
+            assert cur.lastrowid is not None and cur.lastrowid >= 0
+            return cur.lastrowid
+
+        logger.error(f"Failed to register index for property {property_name}.")
+
+        return -1
+
+    def _reformat_index(self, raw_indices: List) -> IndexType:
+        # received from database: [(property_name, property_value, dataset_id, file_id, line_ids), ...]
+        # converts to: {property_name: {property_value: {dataset_id: {file_id: [line_ids]}}}}
+        index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        for prop_name, prop_val, dataset_id, file_id, line_start, line_end in raw_indices:
+            index[prop_name][prop_val][dataset_id][file_id] = [(line_start, line_end)]
+        return index
+
+    def _read_index_from_database(self, property_name: Optional[str] = None) -> IndexType:
+        cur = self._connection.cursor()
+        try:
+            query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices"
+            if property_name:
+                query += " WHERE property_name = ?;"
+                cur.execute(query, (property_name,))
+            else:
+                query += ";"
+                cur.execute(query)
+            results = cur.fetchall()
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during selection: {err}")
+            results = []
+        results = self._reformat_index(results)
+        return results
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
@@ -284,4 +346,22 @@ class LocalDataCollection(MixteraDataCollection):
 
         executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
         executor.load_data(files, data_only_on_primary)
-        self._hacky_indx[property_name] = executor.run()
+        new_index = executor.run()
+        self._insert_index_into_table(property_name, new_index)
+
+    def get_index(self, property_name: Optional[str] = None) -> Optional[IndexType]:
+        if property_name is None:
+            logger.warning(
+                "No property name provided, returning all indices from database. ",
+                "This may be slow, consider providing a property name.",
+            )
+            self._index = self._read_index_from_database()
+            return self._index
+        if property_name not in self._index:
+            # If the property is not in the index, it may be in the database, so we check it there
+            # TODO(xiaozhe): user may also interested to force refresh the index from database.
+            self._index = merge_defaultdicts(self._index, self._read_index_from_database(property_name))
+        if property_name not in self._index:
+            logger.warning(f"Property {property_name} not found in index, returning None.")
+            return None
+        return self._index[property_name]
