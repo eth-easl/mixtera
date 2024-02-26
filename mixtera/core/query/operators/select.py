@@ -1,6 +1,8 @@
 from typing import Any, Tuple, Union
+
 from mixtera.utils import defaultdict_to_dict
-from .operator import Operator
+
+from ._base import Operator
 
 valid_operators = ["==", ">", "<", ">=", "<=", "!="]
 

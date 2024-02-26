@@ -1,9 +1,10 @@
 from typing import Any
 
 from mixtera.core.datacollection import MixteraDataCollection
-from mixtera.core.query.operators.operator import Operator
-from mixtera.core.query.operators.select import Select
+from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.operators.materialize import Materialize
+from mixtera.core.query.operators.select import Select
+
 
 class QueryPlan:
     """

@@ -1,4 +1,5 @@
-from typing import List
+from itertools import chain
+from typing import List, Union
 
 from mixtera.core.datacollection import MixteraDataCollection
 
@@ -15,7 +16,7 @@ class Operator:
 
     def __init__(self) -> None:
         self.children: List[Operator] = []
-        self.results: List = []
+        self.results: Union[List, chain] = []
         self._materialized = False
         self.mdc: MixteraDataCollection = None
 
