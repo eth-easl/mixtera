@@ -50,6 +50,12 @@ class Select(Operator):
             index = self.mdc.get_index(self.condition.field)
             index = defaultdict_to_dict(index)
             self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
+        else:
+            child_results = self.children[0].results
+            index = self.mdc.get_index(self.condition.field)
+            index = defaultdict_to_dict(index)
+            self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
+            self.results = [i for i in self.results if i in child_results]
 
     def __repr__(self) -> str:
         return f"select<{self.mdc}>({self.condition})"
