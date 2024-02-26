@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
@@ -45,7 +45,9 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError("Remote datasets are not yet supported.")
 
     @abstractmethod
-    def register_dataset(self, identifier: str, loc: str, dtype: Type[Dataset]) -> bool:
+    def register_dataset(
+        self, identifier: str, loc: str, dtype: Type[Dataset], parsing_func: Callable[[str], str]
+    ) -> bool:
         """
         This method registers a dataset in the MixteraDataCollection.
 
@@ -54,6 +56,11 @@ class MixteraDataCollection(ABC):
             loc (str): The location where the dataset is stored.
                        For example, a path to a directory of jsonl files.
             dtype (DatasetTypes): The type of the dataset.
+            parsing_func (Callable[[str], str]): A function that given one "base unit"
+                of a file in the data set extracts the actual sample. The meaning depends
+                on the dataset type at hand. For example, for the JSONLDataset, every line
+                is processed with this function and it can be used to extract the actual
+                payload out of the metadata.
 
         Returns:
             Boolean indicating success.
@@ -101,6 +108,23 @@ class MixteraDataCollection(ABC):
             Boolean indicating success of the operation.
         """
 
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_samples_from_ranges(
+        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
+    ) -> Iterable[str]:
+        """
+        Given a list of ranges for each file in each datasets, returns an Iterable over the samples.
+
+        Args:
+            ranges_per_dataset_and_file (dict[int, dict[int, list[tuple[int, int]]]]): Dict that
+                maps each dataset ID to another dict containing file IDs as keys. This dict then
+                contains the ranges as values.
+
+        Returns:
+            Iterable over the samples.
+        """
         raise NotImplementedError()
 
     @abstractmethod
