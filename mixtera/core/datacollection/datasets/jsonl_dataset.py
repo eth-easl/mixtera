@@ -1,7 +1,8 @@
+import itertools
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from loguru import logger
 from mixtera.core.datacollection import IndexType
@@ -69,12 +70,37 @@ class JSONLDataset(Dataset):
         return index
 
     @staticmethod
-    def read_file(ranges_per_file: list[str]) -> Iterable[str]:
-        raise NotImplementedError()
+    def read_ranges_from_files(
+        ranges_per_file: dict[str, list[tuple[int, int]]], parsing_func: Callable[[str], str]
+    ) -> Iterable[str]:
+        for file, range_list in ranges_per_file.items():
+            yield from JSONLDataset.read_ranges_from_file(file, range_list, parsing_func)
 
     @staticmethod
-    def read_ranges_from_files(ranges_per_file: dict[str, list[tuple[int, int]]]) -> Iterable[str]:
-        raise NotImplementedError()
+    def read_ranges_from_file(
+        file: str, range_list: list[tuple[int, int]], parsing_func: Callable[[str], str]
+    ) -> Iterable[str]:
+        with open(file, "r", encoding="utf-8") as text_file:
+            last_line_read = 0
+            last_r_start = -1
+            for r_start, r_end in range_list:
+                if r_start < last_r_start:
+                    raise RuntimeError(f"Ranges not sorted by start ({last_r_start} vs {r_start})")
+
+                if last_line_read > r_start:
+                    raise RuntimeError(f"Overlapping ranges: start at {r_start} but previous ended at {last_line_read}")
+
+                last_r_start = r_start
+
+                # Skip lines to reach the start of the new range if necessary
+                if r_start > last_line_read:
+                    for _ in range(r_start - last_line_read):
+                        text_file.readline()
+                    last_line_read = r_start
+
+                # Yield the lines in the current range
+                yield from (parsing_func(line) for line in itertools.islice(text_file, r_end - r_start))
+                last_line_read = r_end
 
     @staticmethod
     def _is_valid_jsonl(path: Path) -> bool:
