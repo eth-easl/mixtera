@@ -4,7 +4,7 @@ from queue import Empty, Queue
 from typing import TYPE_CHECKING, Any, Callable, Generator, Optional, Type
 
 from loguru import logger
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import IndexType, MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.server.server import ID_BYTES, SAMPLE_SIZE_BYTES
@@ -222,4 +222,14 @@ class RemoteDataCollection(MixteraDataCollection):
         dop: int = 1,
         data_only_on_primary: bool = True,
     ) -> None:
+        raise NotImplementedError()
+
+    def get_index(self, property_name: Optional[str] = None) -> IndexType:
+        """
+        This function returns the index of the MixteraDataCollection.
+
+        Args:
+            property_name (Optional[str], optional): The name of the property to query.
+                If not provided, all properties are returned.
+        """
         raise NotImplementedError()
