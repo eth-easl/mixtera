@@ -33,6 +33,12 @@ class Condition:
 
 
 class Select(Operator):
+    """Select operator is used to filter data based on a condition.
+
+    Args:
+        condition (Union[Condition, Tuple]): The condition to filter the data.
+    """
+
     def __init__(self, condition: Union[Condition, Tuple]) -> None:
         super().__init__()
         if isinstance(condition, Condition):

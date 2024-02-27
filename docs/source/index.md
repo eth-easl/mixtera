@@ -23,4 +23,5 @@ hide-toc: true
 :hidden:
 
 references/data_collection
+references/query
 ```

@@ -4,6 +4,13 @@ from ._base import Operator
 
 
 class Union(Operator):
+    """Union operator is used to combine the results of two queries.
+
+
+    Args:
+        Operator (_type_): a query to combine with the current query.
+    """
+
     def __init__(self, query_a: Query) -> None:
         super().__init__()
         self.children.append(query_a.root)

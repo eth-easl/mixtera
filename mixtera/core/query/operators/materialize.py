@@ -4,6 +4,12 @@ from ._base import Operator
 
 
 class Materialize(Operator):
+    """Materialize operator is used to materialize the results of a query.
+
+    Args:
+        streaming (bool): If True, the results will be streamed. Defaults to False.
+    """
+
     def __init__(self, streaming: bool = False) -> None:
         super().__init__()
         self.streaming = streaming

@@ -7,10 +7,11 @@ from mixtera.core.datacollection import MixteraDataCollection
 class Operator:
     """
     Operator is a single node in the query plan tree. It has two main attributes:
-    - children: List of child nodes.
+
+    * children: List of child nodes.
         Child nodes are executed before the current node,
         The orders of the children are irrelevant - they can be executed in parallel.
-    - results: List of results of the current node.
+    * results: List of results of the current node.
         Each item in the list is an index/pointer to a data sample (if not materialized).
     """
 
