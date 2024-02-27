@@ -17,6 +17,7 @@ QueryType = dict[int, dict[int, list[tuple[int, int]]]]
 # TODO(MaxiBoether): We might actually need to move some of this functionality to the LDC and forward the calls
 # That makes more sense from an abstraction POV, and also if somebody uses a local collection with multiple workers,
 # that should work smoothly and can share logic
+# For example, the LDC should store the query (to also support local multi-worker) - change as outlined in the new simple_client.py!
 
 
 class MixteraServer:
