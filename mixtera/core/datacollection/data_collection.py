@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, List, Type
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, List, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection import PropertyType
+    from mixtera.core.datacollection import IndexType, PropertyType
     from mixtera.core.datacollection.local import LocalDataCollection
     from mixtera.core.datacollection.remote import RemoteDataCollection
 
@@ -130,8 +130,8 @@ class MixteraDataCollection(ABC):
         """
         raise NotImplementedError()
 
-    @abstractmethod
     # TODO(MaxiBoether): Change Query type accordingly
+    @abstractmethod
     def register_query(self, query: Any, training_id: str, num_nodes: int, num_workers_per_node: int) -> int:
         """
         TODO
@@ -212,4 +212,15 @@ class MixteraDataCollection(ABC):
                                          have access to the same paths as the primary.
         """
 
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_index(self, property_name: Optional[str] = None) -> "IndexType":
+        """
+        This function returns the index of the MixteraDataCollection.
+
+        Args:
+            property_name (Optional[str], optional): The name of the property to query.
+                If not provided, all properties are returned.
+        """
         raise NotImplementedError()

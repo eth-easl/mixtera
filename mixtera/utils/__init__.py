@@ -6,6 +6,7 @@ from .utils import (  # noqa: F401
     defaultdict_to_dict,
     flatten,
     merge_defaultdicts,
+    numpy_to_native_type,
     ranges,
     run_in_async_loop_and_return,
     wait_for_key_in_dict,
@@ -18,4 +19,5 @@ __all__ = [
     "ranges",
     "wait_for_key_in_dict",
     "run_in_async_loop_and_return",
+    "numpy_to_native_type",
 ]
