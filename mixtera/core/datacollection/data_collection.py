@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterable, List, Type
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, List, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
@@ -41,8 +41,11 @@ class MixteraDataCollection(ABC):
         raise RuntimeError(f"Directory {dir_path} does not exist.")
 
     @staticmethod
-    def from_remote(endpoint: str) -> "RemoteDataCollection":
-        raise NotImplementedError("Remote datasets are not yet supported.")
+    def from_remote(host: str, port: int, prefetch_buffer_size: int) -> "RemoteDataCollection":
+        # Local import to avoid circular dependency
+        from mixtera.core.datacollection.remote import RemoteDataCollection  # pylint: disable=import-outside-toplevel
+
+        return RemoteDataCollection(host, port, prefetch_buffer_size)
 
     @abstractmethod
     def register_dataset(
@@ -125,6 +128,49 @@ class MixteraDataCollection(ABC):
         Returns:
             Iterable over the samples.
         """
+        raise NotImplementedError()
+
+    @abstractmethod
+    # TODO(MaxiBoether): Change Query type accordingly
+    def register_query(self, query: Any, training_id: str, num_nodes: int, num_workers_per_node: int) -> int:
+        """
+        TODO
+
+        Args:
+            TODO
+
+        Returns:
+            TODO
+        """
+
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_query_id(self, training_id: str) -> int:
+        """
+        TODO
+
+        Args:
+            TODO
+
+        Returns:
+            TODO
+        """
+
+        raise NotImplementedError()
+
+    @abstractmethod
+    def stream_query_results(self, query_id: int, node_id: int, worker_id: int) -> Generator[str, None, None]:
+        """
+        TODO
+
+        Args:
+            TODO
+
+        Returns:
+            TODO
+        """
+
         raise NotImplementedError()
 
     @abstractmethod

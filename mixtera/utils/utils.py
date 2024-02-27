@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from typing import Any, List, Tuple, Union
 
@@ -33,3 +34,24 @@ def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
     if isinstance(ddict, defaultdict):
         ddict = {k: defaultdict_to_dict(v) for k, v in ddict.items()}
     return ddict
+
+
+def run_in_async_loop_and_return(call: Any) -> Any:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        result = loop.run_until_complete(call)
+    finally:
+        loop.close()
+
+    return result
+
+
+async def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
+    end_time = asyncio.get_event_loop().time() + timeout
+    while True:
+        if key in dictionary:
+            return True
+        if asyncio.get_event_loop().time() >= end_time:
+            return False
+        await asyncio.sleep(0.1)

@@ -1,7 +1,7 @@
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Iterable, List, Type
+from typing import Any, Callable, Generator, Iterable, List, Type
 
 import dill
 from loguru import logger
@@ -285,3 +285,13 @@ class LocalDataCollection(MixteraDataCollection):
         executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
         executor.load_data(files, data_only_on_primary)
         self._hacky_indx[property_name] = executor.run()
+
+    # TODO(MaxiBoether): Change Query type accordingly
+    def register_query(self, query: Any, training_id: str, num_nodes: int, num_workers_per_node: int) -> int:
+        raise NotImplementedError()
+
+    def get_query_id(self, training_id: str) -> int:
+        raise NotImplementedError()
+
+    def stream_query_results(self, query_id: int, node_id: int, worker_id: int) -> Generator[str, None, None]:
+        raise NotImplementedError()
