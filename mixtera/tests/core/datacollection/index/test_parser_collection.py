@@ -1,11 +1,7 @@
 import json
 import unittest
 
-from mixtera.core.datacollection.index.parser_collection import (
-    MetadataParserFactory,
-    MetadataParserRegistry,
-    RedPajamaMetadataParser,
-)
+from mixtera.core.datacollection.index.parser_collection import MetadataParserFactory, RedPajamaMetadataParser
 from mixtera.utils import defaultdict_to_dict
 
 
@@ -167,7 +163,9 @@ class TestMetadataParserFactory(unittest.TestCase):
     def test_create_metadata_parser(self):
         dataset_id: int = 0
         file_id: int = 0
-        tests_and_targets = [(MetadataParserRegistry.RED_PAJAMA, RedPajamaMetadataParser)]
+        metadata_parser = MetadataParserFactory()
+
+        tests_and_targets = [("RED_PAJAMA", RedPajamaMetadataParser)]
 
         for dtype, ctype in tests_and_targets:
-            self.assertIsInstance(MetadataParserFactory.create_metadata_parser(dtype, dataset_id, file_id), ctype)
+            self.assertIsInstance(metadata_parser.create_metadata_parser(dtype, dataset_id, file_id), ctype)

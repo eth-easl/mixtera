@@ -32,7 +32,7 @@ class JSONLDataset(Dataset):
         yield from path.glob("*.jsonl")
 
     @staticmethod
-    def build_file_index(loc: Path, dataset_id: int, file_id: int, metadata_parser: MetadataParser) -> IndexType:
+    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> IndexType:
         with open(loc, encoding="utf-8") as fd:
             for line_id, line in enumerate(fd):
                 json_obj = json.loads(line)

@@ -34,14 +34,12 @@ class Dataset(ABC):
 
     @staticmethod
     @abstractmethod
-    def build_file_index(loc: Path, dataset_id: int, file_id: int, metadata_parser: MetadataParser) -> IndexType:
+    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> IndexType:
         """
         Build up the file index for the file stored at loc.
 
         Args:
             loc (Path): Path to the file we are building the index for
-            dataset_id (int): Database key of the dataset. Used as a key within the constructed index.
-            file_id (int): Database key of the file. Used as a key within the constructed index.
             metadata_parser (MetadataParser): Parser class responsible with extracting the metadata
 
         Returns:

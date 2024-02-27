@@ -24,7 +24,6 @@ class MetadataParser(ABC):
         """
         self.dataset_id: int = dataset_id
         self.file_id: int = file_id
-        # self._index = UncompressedIndexType()
         self._index: UncompressedIndexType = defaultdict(
             lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         )
