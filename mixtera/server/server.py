@@ -71,9 +71,13 @@ class MixteraServer:
 
     async def _get_query_id(self, reader: asyncio.StreamReader) -> int:
         training_id = await read_utf8_string(SAMPLE_SIZE_BYTES, reader)
+        logger.debug(f"Looking up query ID for training {training_id}")
         if await wait_for_key_in_dict(self._training_query_map, training_id, 15.0):
-            return self._training_query_map[training_id]
+            query_id = self._training_query_map[training_id]
+            logger.debug(f"Query ID for training {training_id} is {query_id}")
+            return query_id
 
+        logger.warning(f"Did not find query ID for training {training_id} after 15 seconds.")
         return -1
 
     async def _serve_worker(self, node_id: int, worker_id: int, query_id: int, writer: asyncio.StreamWriter):

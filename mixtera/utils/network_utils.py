@@ -52,10 +52,10 @@ async def read_bytes(num_bytes: int, reader: asyncio.StreamReader, timeout: floa
     return buffer
 
 
-async def read_int(num_bytes: int, reader: asyncio.StreamReader) -> Optional[int]:
+async def read_int(num_bytes: int, reader: asyncio.StreamReader, timeout: float = 10.0) -> Optional[int]:
     return (
         int.from_bytes(bytes_data, byteorder="big", signed=True)
-        if (bytes_data := await read_bytes(num_bytes, reader)) is not None
+        if (bytes_data := await read_bytes(num_bytes, reader, timeout=timeout)) is not None
         else None
     )
 

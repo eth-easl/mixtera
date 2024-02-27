@@ -11,6 +11,7 @@ num_nodes = 1
 num_workers_per_node = 1
 
 rdc = MixteraDataCollection.from_remote("127.0.0.1", 8888, prefetch_buffer_size)
+
 query = { 2: { 2: [(0,2)]}} # replace this with an actual query
 query_id = rdc.register_query(query, TRAINING_ID, num_nodes, num_workers_per_node) # When do we execute the query at the server - already here or when first client starts streaming? What is our execution model?
 # This also means that the query is not created `from_mdc` but instead a mdc registers a query

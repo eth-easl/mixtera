@@ -174,12 +174,14 @@ class RemoteDataCollection(MixteraDataCollection):
 
         # Announce training ID
         await write_utf8_string(training_id, SAMPLE_SIZE_BYTES, writer)
-
-        query_id = await read_int(ID_BYTES, reader)
+        query_id = await read_int(ID_BYTES, reader, timeout=30)
         logger.debug(f"Got query id {query_id} from server.")
         return query_id
 
     def get_query_id(self, training_id: str) -> int:
+        logger.info(
+            "Obtaining query id from server. This may take some time if primary node has not registered the query yet."
+        )
         if (query_id := run_in_async_loop_and_return(self._get_query_id(training_id))) < 0:
             raise RuntimeError("Could not register query, got back invalid ID from server!")
 
