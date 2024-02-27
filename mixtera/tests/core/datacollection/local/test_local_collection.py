@@ -157,9 +157,9 @@ class TestLocalDataCollection(unittest.TestCase):
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
     def test_register_dataset_updates_index(self, mock_insert_file_into_table, mock_insert_dataset_into_table):
-
         dataset_id = 42
-        mock_insert_file_into_table.side_effect = [0, 1]
+        file_ids = [0, 1]
+        mock_insert_file_into_table.side_effect = file_ids
         mock_insert_dataset_into_table.return_value = dataset_id
 
         directory = Path(self.temp_dir.name)
@@ -173,7 +173,8 @@ class TestLocalDataCollection(unittest.TestCase):
             del file
             del metadata_parser
             res = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
-            res["language"]["English"][dataset_id][file_id] = [(0, 42)]
+            for file_id in file_ids:
+                res["language"]["English"][dataset_id][file_id] = [(0, 42)]
             return res
 
         mocked_dtype.build_file_index = MagicMock()

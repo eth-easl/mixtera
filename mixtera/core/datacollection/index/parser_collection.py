@@ -51,11 +51,11 @@ class MetadataParserRegistry(Enum):
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Stores the name of the parser, and its associated class
         self._registry = {"RED_PAJAMA": RedPajamaMetadataParser}
 
-    def add_parser(self, parser_name, parser: type[MetadataParser], overwrite=False) -> None:
+    def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> None:
         """
         Add a new metadata parser to the factory. If parser already exists
         at name `parser_name`, but `overwrite` is `True`, then overwrite it.
