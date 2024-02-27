@@ -85,8 +85,7 @@ class LocalDataCollection(MixteraDataCollection):
             if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
                 logger.error(f"Error while inserting file {file}")
                 return False
-            metadata_parser = self._metadata_factory.create_metadata_parser(
-                metadata_parser_type, dataset_id, file_id)
+            metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
             pre_index = dtype.build_file_index(file, metadata_parser)
             for property_name in pre_index:
                 self._insert_index_into_table(property_name, pre_index[property_name])
