@@ -35,9 +35,7 @@ class JSONLDataset(Dataset):
     def build_file_index(loc: Path, metadata_parser: MetadataParser) -> IndexType:
         with open(loc, encoding="utf-8") as fd:
             for line_id, line in enumerate(fd):
-                json_obj = json.loads(line)
-                if "meta" in json_obj:
-                    metadata_parser.parse(line_id, json_obj["meta"])
+                metadata_parser.parse(line_id, json.loads(line))
         return metadata_parser.get_index()
 
     @staticmethod

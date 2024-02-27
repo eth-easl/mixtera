@@ -14,7 +14,11 @@ class RedPajamaMetadataParser(MetadataParser):
 
     target_index_fields = ["language", "publication_date"]
 
-    def parse(self, line_number: int, metadata: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        if "meta" not in payload:
+            return
+
+        metadata = payload["meta"]
         for index_field in RedPajamaMetadataParser.target_index_fields:
             if index_field not in metadata:
                 continue

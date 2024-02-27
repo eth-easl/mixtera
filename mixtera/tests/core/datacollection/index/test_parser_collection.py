@@ -95,7 +95,13 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
     }"""
         )
 
-        lines = [elem1, elem2, elem3]
+        elem4 = json.loads(
+            """{
+       "text":"..."
+    }"""
+        )
+
+        lines = [elem1, elem2, elem3, elem4]
         expected = {
             "language": {
                 "C": {0: {0: [0, 1]}},  # value with document and list of lines
@@ -107,7 +113,7 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         }
 
         for line_number, metadata in enumerate(lines):
-            red_pajama_metadata_parser.parse(line_number, metadata["meta"])
+            red_pajama_metadata_parser.parse(line_number, metadata)
 
         self.assertEqual(expected, defaultdict_to_dict(red_pajama_metadata_parser._index))
 

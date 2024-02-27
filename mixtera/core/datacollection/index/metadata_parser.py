@@ -29,13 +29,13 @@ class MetadataParser(ABC):
         )
 
     @abstractmethod
-    def parse(self, line_number: int, metadata: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         """
         Parses the given medata object and extends the given index in place.
 
         Args:
           line_number: the line number of the current instance
-          metadata: the metadata object to parse
+          payload: the metadata object to parse
           **kwargs: any other arbitrary keyword arguments required to parse metadata
         """
         raise NotImplementedError()
