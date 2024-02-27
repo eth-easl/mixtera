@@ -23,6 +23,6 @@ class Union(Operator):
             final_results.extend(result)
         self.results = final_results
         print(self.results)
-        
+
     def __repr__(self) -> str:
         return "union<>()"

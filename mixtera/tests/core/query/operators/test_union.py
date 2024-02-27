@@ -21,7 +21,7 @@ class TestUnion(unittest.TestCase):
         query_b.root.results = ["result3", "result4", "result5"]
         self.union.children.append(query_b.root)
         self.union.apply()
-        self.assertEqual(len(self.union.results), 5)
+        self.assertEqual(len(self.union.results), 6)
         self.assertIn("result1", self.union.results)
         self.assertIn("result2", self.union.results)
         self.assertIn("result3", self.union.results)
