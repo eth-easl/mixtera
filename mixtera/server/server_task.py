@@ -2,6 +2,6 @@ from enum import IntEnum
 
 
 class ServerTask(IntEnum):
-    RegisterQuery = 0
-    StreamData = 1
-    GetQueryId = 2
+    REGISTER_QUERY = 0
+    STREAM_DATA = 1
+    GET_QUERY_ID = 2

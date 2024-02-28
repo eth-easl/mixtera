@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterable, List, Optional, Type
@@ -9,7 +10,10 @@ from mixtera.core.datacollection import IndexType, MixteraDataCollection, Proper
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type
+from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type, wait_for_key_in_dict
+
+# TODO(#): Use actual query instead of dict of ranges
+QueryType = dict[int, dict[int, list[tuple[int, int]]]]
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -30,6 +34,10 @@ class LocalDataCollection(MixteraDataCollection):
             self._connection = self._init_database()
         else:
             self._connection = sqlite3.connect(self._database_path)
+
+        self._queries_lock = threading.Lock()
+        self._queries: list[tuple[QueryType, int, int]] = []  # (query, num nodes, num workers per node)
+        self._training_query_map: dict[str, int] = {}
 
     def _init_database(self) -> sqlite3.Connection:
         assert hasattr(self, "_database_path")
@@ -348,16 +356,6 @@ class LocalDataCollection(MixteraDataCollection):
         new_index = executor.run()
         self._insert_index_into_table(property_name, new_index)
 
-    # TODO(MaxiBoether): Change Query type accordingly
-    def register_query(self, query: Any, training_id: str, num_nodes: int, num_workers_per_node: int) -> int:
-        raise NotImplementedError()
-
-    def get_query_id(self, training_id: str) -> int:
-        raise NotImplementedError()
-
-    def stream_query_results(self, query_id: int, node_id: int, worker_id: int) -> Generator[str, None, None]:
-        raise NotImplementedError()
-
     def get_index(self, property_name: Optional[str] = None) -> Optional[IndexType]:
         if property_name is None:
             logger.warning(
@@ -374,3 +372,49 @@ class LocalDataCollection(MixteraDataCollection):
             logger.warning(f"Property {property_name} not found in index, returning None.")
             return None
         return self._index[property_name]
+
+    # TODO(MaxiBoether): Change Query type accordingly
+    def register_query(self, query: Any, training_id: str, num_workers_per_node: int, num_nodes: int = 1) -> int:
+        if training_id in self._training_query_map:
+            logger.warning("We already have a query for that training!")
+            return -1
+
+        with self._queries_lock:
+            self._queries.append((query, num_nodes, num_workers_per_node))
+            index = len(self._queries) - 1
+            self._training_query_map[training_id] = index
+
+        # TODO(#): We might want to start executing the query here already and even prefetch some data
+
+        logger.info(
+            f"Registered query {index} with {num_nodes} nodes and "
+            + f"{num_workers_per_node} workers per node for training {training_id}."
+        )
+        return index
+
+    def get_query_id(self, training_id: str) -> int:
+        if wait_for_key_in_dict(self._training_query_map, training_id, 15.0):
+            query_id = self._training_query_map[training_id]
+            logger.debug(f"Query ID for training {training_id} is {query_id}")
+            return query_id
+
+        logger.warning(f"Did not find query ID for training {training_id} after 15 seconds.")
+        return -1
+
+    def stream_query_results(self, query_id: int, worker_id: int, node_id: int = 0) -> Generator[str, None, None]:
+        if query_id < 0 or query_id >= len(self._queries):
+            logger.error(f"Invalid query_id {query_id}")
+            return
+
+        query, num_nodes, num_workers_per_node = self._queries[query_id]
+
+        if node_id < 0 or node_id >= num_nodes:
+            logger.error(f"Invalid node {node_id} for query {query_id} (total nodes = {num_nodes})")
+            return
+
+        if worker_id < 0 or worker_id >= num_workers_per_node:
+            logger.error(f"Invalid worker {worker_id} for query {query_id} (workers per node = {num_workers_per_node})")
+            return
+
+        # TODO(#): Actually take node_id/worker_id into consideration. We might also want to have internal prefetching.
+        yield from self.get_samples_from_ranges(query)

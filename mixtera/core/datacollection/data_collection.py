@@ -132,7 +132,7 @@ class MixteraDataCollection(ABC):
 
     # TODO(MaxiBoether): Change Query type accordingly
     @abstractmethod
-    def register_query(self, query: Any, training_id: str, num_nodes: int, num_workers_per_node: int) -> int:
+    def register_query(self, query: Any, training_id: str, num_workers_per_node: int, num_nodes: int = 1) -> int:
         """
         TODO
 
@@ -160,7 +160,7 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def stream_query_results(self, query_id: int, node_id: int, worker_id: int) -> Generator[str, None, None]:
+    def stream_query_results(self, query_id: int, worker_id: int, node_id: int = 0) -> Generator[str, None, None]:
         """
         TODO
 

@@ -25,29 +25,25 @@ async def read_bytes(num_bytes: int, reader: asyncio.StreamReader, timeout: floa
     end_time = asyncio.get_event_loop().time() + timeout
 
     while len(buffer) < num_bytes:
-        try:
-            # Calculate remaining time before the timeout occurs.
-            remaining_time = end_time - asyncio.get_event_loop().time()
-            if remaining_time <= 0:
-                raise asyncio.TimeoutError("Reading bytes timed out")
+        # Calculate remaining time before the timeout occurs.
+        remaining_time = end_time - asyncio.get_event_loop().time()
+        if remaining_time <= 0:
+            raise asyncio.TimeoutError("Reading bytes timed out")
 
-            # Read up to the remaining number of bytes or whatever is available.
-            chunk = await asyncio.wait_for(reader.read(num_bytes - len(buffer)), timeout=remaining_time)
-            buffer.extend(chunk)
+        # Read up to the remaining number of bytes or whatever is available.
+        chunk = await asyncio.wait_for(reader.read(num_bytes - len(buffer)), timeout=remaining_time)
+        buffer.extend(chunk)
 
-            if not chunk:
-                # If an empty chunk is returned, it means the stream has closed.
-                # This should only happen if no data has been read yet (invariant)
-                if len(buffer) == 0:
-                    # all good, inform caller
-                    return None
-                else:
-                    raise ConnectionError(
-                        "Connection closed while we still have " + f"{num_bytes - len(buffer)} bytes to read."
-                    )
+        if not chunk:
+            # If an empty chunk is returned, it means the stream has closed.
+            # This should only happen if no data has been read yet (invariant)
+            if len(buffer) == 0:
+                # all good, inform caller
+                return None
 
-        except asyncio.TimeoutError:
-            raise
+            raise ConnectionError(
+                "Connection closed while we still have " + f"{num_bytes - len(buffer)} bytes to read."
+            )
 
     return buffer
 
@@ -60,7 +56,7 @@ async def read_int(num_bytes: int, reader: asyncio.StreamReader, timeout: float 
     )
 
 
-async def write_int(data: int, num_bytes: int, writer: asyncio.StreamWriter, drain: bool = True) -> str:
+async def write_int(data: int, num_bytes: int, writer: asyncio.StreamWriter, drain: bool = True) -> None:
     writer.write(data.to_bytes(num_bytes, "big", signed=True))
     if drain:
         await writer.drain()
@@ -73,7 +69,7 @@ async def read_utf8_string(size_bytes: int, reader: asyncio.StreamReader) -> Opt
     return None
 
 
-async def write_utf8_string(string: str, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True) -> str:
+async def write_utf8_string(string: str, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True) -> None:
     training_id_bytes = string.encode(encoding="utf-8")
     writer.write(len(training_id_bytes).to_bytes(size_bytes, "big"))
     writer.write(training_id_bytes)
@@ -82,7 +78,7 @@ async def write_utf8_string(string: str, size_bytes: int, writer: asyncio.Stream
         await writer.drain()
 
 
-async def write_pickeled_object(obj: Any, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True) -> str:
+async def write_pickeled_object(obj: Any, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True) -> None:
     obj_bytes = dill.dumps(obj)
     writer.write(len(obj_bytes).to_bytes(size_bytes, "big"))
     writer.write(obj_bytes)

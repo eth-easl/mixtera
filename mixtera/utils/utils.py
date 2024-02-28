@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections import defaultdict
 from typing import Any, List, Tuple, Union
 
@@ -49,14 +50,22 @@ def run_in_async_loop_and_return(call: Any) -> Any:
     return result
 
 
-async def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
-    end_time = asyncio.get_event_loop().time() + timeout
-    while True:
-        if key in dictionary:
-            return True
-        if asyncio.get_event_loop().time() >= end_time:
-            return False
-        await asyncio.sleep(0.1)
+def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
+    # TODO(MaxiBoether): rewrite this better
+    timeout_at = time.time() + timeout
+
+    while key not in dictionary and time.time() <= timeout_at:
+        time.sleep(0.1)
+
+    return key in dictionary
+
+    # end_time = asyncio.get_event_loop().time() + timeout
+    # while True:
+    #    if key in dictionary:
+    #        return True
+    #    if asyncio.get_event_loop().time() >= end_time:
+    #        return False
+    #    await asyncio.sleep(0.1)
 
 
 def numpy_to_native_type(obj: Any) -> Any:
