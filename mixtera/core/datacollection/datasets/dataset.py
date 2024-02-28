@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Type
 
 from mixtera.core.datacollection import IndexType
+from mixtera.core.datacollection.index import MetadataParser
 
 
 class Dataset(ABC):
@@ -33,14 +34,13 @@ class Dataset(ABC):
 
     @staticmethod
     @abstractmethod
-    def build_file_index(loc: Path, dataset_id: int, file_id: int) -> IndexType:
+    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> IndexType:
         """
         Build up the file index for the file stored at loc.
 
         Args:
             loc (Path): Path to the file we are building the index for
-            dataset_id (int): Database key of the dataset. Used as a key within the constructed index.
-            file_id (int): Database key of the file. Used as a key within the constructed index.
+            metadata_parser (MetadataParser): Parser class responsible with extracting the metadata
 
         Returns:
             The index for the given file.
