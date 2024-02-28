@@ -14,7 +14,7 @@ rdc = MixteraDataCollection.from_remote("127.0.0.1", 8888, prefetch_buffer_size)
 
 # On primary node, do this
 query = { 2: { 2: [(0,2)]}} # TODO(#): Use actual query instead of dict of ranges
-query_id = rdc.register_query(query, TRAINING_ID, num_workers_per_node, num_nodes=num_nodes) # When do we execute the query at the server - already here or when first client starts streaming? What is our execution model?
+query_id = rdc.register_query(query, TRAINING_ID, num_workers_per_node, num_nodes=num_nodes)
 # This also means that the query is not created `from_mdc` but instead a mdc registers a query
 # The main reason is that we somehow have to handle multi-node/multi-worker data loading
 
@@ -47,3 +47,12 @@ if local_results == server_results:
     print("Success!")
 else:
     raise AssertionError("Non equal results.")
+
+### Torch Test
+
+def processing_func(sample: str) -> str:
+    return "processed_" + sample # actually used for tokenization or sth
+
+torch_ds = MixteraTorchDataset(ldc/mdc, processing_func)
+
+# test torch ds
