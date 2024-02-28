@@ -28,7 +28,6 @@ class QueryResult:
         mdc (MixteraDataCollection): The MixteraDataCollection object.
         results (list): The list of results of the query.
         chunk_size (int): The chunk size of the results.
-
     """
 
     def __init__(self, mdc: MixteraDataCollection, results: List, chunk_size: int = 1) -> None:
@@ -76,7 +75,7 @@ class Query:
     @classmethod
     def register(cls, operator: Operator) -> None:
         """
-        register is a classmethod that registers operators for the query.
+        This method registers operators for the query.
         By default, all built-in operators (under ./operators) are registered.
 
         Args:
@@ -104,6 +103,19 @@ class Query:
         self.query_plan.display()
 
     def execute(self, chunk_size: int = 1) -> QueryResult:
+        """
+        This method executes the query and returns the resulting indices, in the form of a QueryResult object.
+
+        Args:
+            chunk_size (int): chunk_size is used to
+            set the size of `subresults` in the
+            QueryResult object. Defaults to 1.
+            When iterating over a QueryResult object,
+            the results are yielded in chunks of size `chunk_size`.
+
+        Returns:
+            QueryResult: _description_
+        """
         self.root.post_order_traverse()
         self.results = QueryResult(self.mdc, self.root.results, chunk_size=chunk_size)
         return self.results

@@ -3,9 +3,9 @@ from mixtera.core.query.operators.select import Select
 from mixtera.core.query.operators.union import Union
 
 from .operators._base import Operator
-from .query import Query, QueryPlan
+from .query import Query, QueryPlan, QueryResult
 
 Query.register(Select)
 Query.register(Union)
 
-__all__ = ["Query", "Operator", "QueryPlan", "Select", "Union", "Materialize"]
+__all__ = ["Query", "Operator", "QueryPlan", "Select", "Union", "Materialize", "QueryResult"]
