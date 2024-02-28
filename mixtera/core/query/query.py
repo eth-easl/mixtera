@@ -1,8 +1,8 @@
-from typing import Any
+from collections.abc import Generator
+from typing import Any, Dict, List
 
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.query.operators._base import Operator
-from mixtera.core.query.operators.materialize import Materialize
 
 
 class QueryPlan:
@@ -21,11 +21,57 @@ class QueryPlan:
             self.root.display(0)
 
 
+class QueryResult:
+    """QueryResult is a class that represents the results of a query.
+
+    Args:
+        mdc (MixteraDataCollection): The MixteraDataCollection object.
+        results (list): The list of results of the query.
+        chunk_size (int): The chunk size of the results.
+
+    """
+
+    def __init__(self, mdc: MixteraDataCollection, results: List, chunk_size: int = 1) -> None:
+        self.mdc = mdc
+        self.chunk_size = chunk_size
+        self._meta = self._parse_meta(results)
+        self.results = results
+
+    def _parse_meta(self, indices: List) -> Dict:
+        dataset_ids = set()
+        file_ids = set()
+        for idx in indices:
+            dataset_ids.update(idx.keys())
+            for val in idx.values():
+                file_ids.update(val)
+        return {
+            "dataset_type": {did: self.mdc._get_dataset_type_by_id(did) for did in dataset_ids},
+            "file_path": {fid: self.mdc._get_file_path_by_id(fid) for fid in file_ids},
+        }
+
+    @property
+    def dataset_type(self) -> Dict:
+        return self._meta["dataset_type"]
+
+    @property
+    def file_path(self) -> Dict:
+        return self._meta["file_path"]
+
+    def __iter__(self) -> Generator[List, None, None]:
+        """Iterate over the results of the query with a chunk size.
+
+        This method is very dummy right now without ensuring the correct mixture.
+        """
+        for i in range(0, len(self.results), self.chunk_size):
+            yield self.results[i : i + self.chunk_size]
+
+
 class Query:
 
     def __init__(self, mdc: MixteraDataCollection) -> None:
         self.mdc = mdc
         self.query_plan = QueryPlan()
+        self.results: QueryResult
 
     @classmethod
     def register(cls, operator: Operator) -> None:
@@ -57,10 +103,7 @@ class Query:
     def display(self) -> None:
         self.query_plan.display()
 
-    def execute(self, materialize: bool = False, streaming: bool = False) -> list:
-        if materialize:
-            mat_op = Materialize(streaming)
-            mat_op.set_datacollection(self.mdc)
-            self.query_plan.add(mat_op)
+    def execute(self, chunk_size: int = 1) -> QueryResult:
         self.root.post_order_traverse()
-        return self.root.results
+        self.results = QueryResult(self.mdc, self.root.results, chunk_size=chunk_size)
+        return self.results

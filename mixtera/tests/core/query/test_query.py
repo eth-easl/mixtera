@@ -68,14 +68,3 @@ class TestQuery(unittest.TestCase):
         with unittest.mock.patch("builtins.print") as mock_print:
             self.query.display()
             mock_print.assert_called_once_with("test_operator")
-
-    def test_execute(self):
-        class TestOperator(Operator):
-            def apply(self) -> None:
-                self.results = ["test"]
-
-        Query.register(TestOperator)
-        query = Query.from_datacollection(self.mdc)
-        query.testoperator()
-        results = query.execute()
-        self.assertEqual(results, ["test"])
