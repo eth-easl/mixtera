@@ -100,6 +100,14 @@ class Query:
         return self.query_plan.root
 
     def display(self) -> None:
+        """
+        This method displays the query plan in a tree
+        format. For example:
+        union<>()
+            -> select<>(language == Go)
+            -> select<>(language == CSS)
+
+        """
         self.query_plan.display()
 
     def execute(self, chunk_size: int = 1) -> QueryResult:
