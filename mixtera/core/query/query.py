@@ -45,6 +45,7 @@ class QueryResult:
                 file_ids.update(val)
         return {
             "dataset_type": {did: self.mdc._get_dataset_type_by_id(did) for did in dataset_ids},
+            "parsing_func": {did: self.mdc._get_dataset_func_by_id(did) for did in dataset_ids},
             "file_path": {fid: self.mdc._get_file_path_by_id(fid) for fid in file_ids},
         }
 
@@ -55,6 +56,10 @@ class QueryResult:
     @property
     def file_path(self) -> Dict:
         return self._meta["file_path"]
+
+    @property
+    def parsing_func(self) -> Dict:
+        return self._meta["parsing_func"]
 
     def __iter__(self) -> Generator[List, None, None]:
         """Iterate over the results of the query with a chunk size.

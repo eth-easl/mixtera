@@ -1,3 +1,4 @@
+import inspect
 import json
 import tempfile
 import unittest
@@ -51,10 +52,15 @@ class TestQueryE2E(unittest.TestCase):
                 f,
             )
 
-        ldc.register_dataset(
-            "test_dataset", str(self.directory), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
-        )
+        def parsing_func(data):
+            return f"prefix_{data}"
+
+        self.parsing_func_source = inspect.getsource(parsing_func)
+        ldc.register_dataset("test_dataset", str(self.directory), JSONLDataset, parsing_func, "RED_PAJAMA")
         self.mdc = ldc
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
 
     def test_query_select(self):
         query = Query.from_datacollection(self.mdc)
@@ -75,6 +81,13 @@ class TestQueryE2E(unittest.TestCase):
         self.assertEqual(query_result.dataset_type, {1: JSONLDataset})
         self.assertEqual(
             query_result.file_path, {1: f"{self.directory}/temp1.jsonl", 2: f"{self.directory}/temp2.jsonl"}
+        )
+        parsing_func = {k: inspect.getsource(v) for k, v in query_result.parsing_func.items()}
+        print(parsing_func)
+        print({1: self.parsing_func_source})
+        self.assertEqual(
+            parsing_func,
+            {1: self.parsing_func_source},
         )
 
 
