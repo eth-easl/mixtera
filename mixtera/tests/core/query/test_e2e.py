@@ -85,7 +85,7 @@ class TestQueryE2E(unittest.TestCase):
         # check metadata
         self.assertEqual(query_result.dataset_type, {1: JSONLDataset})
         self.assertEqual(
-            query_result.file_path, {1: f"{self.directory}/temp1.jsonl", 2: f"{self.directory}/temp2.jsonl"}
+            query_result.file_path, {self.file1_id: f"{self.directory}/temp1.jsonl", self.file2_id: f"{self.directory}/temp2.jsonl"}
         )
         parsing_func = {k: inspect.getsource(v) for k, v in query_result.parsing_func.items()}
         self.assertEqual(
