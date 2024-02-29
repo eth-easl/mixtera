@@ -1,3 +1,4 @@
+from mixtera.core.query.operators.intersect import Intersection
 from mixtera.core.query.operators.materialize import Materialize
 from mixtera.core.query.operators.select import Select
 from mixtera.core.query.operators.union import Union
@@ -7,5 +8,6 @@ from .query import Query, QueryPlan, QueryResult
 
 Query.register(Select)
 Query.register(Union)
+Query.register(Intersection)
 
-__all__ = ["Query", "Operator", "QueryPlan", "Select", "Union", "Materialize", "QueryResult"]
+__all__ = ["Query", "Operator", "QueryPlan", "Select", "Union", "Materialize", "QueryResult", "Intersection"]

@@ -8,7 +8,7 @@ class Union(Operator):
     Union operator has bag semantics, meaning that it will not remove duplicates.
 
     Args:
-        Operator (_type_): a query to combine with the current query.
+        Operator (Query): a query to combine with the current query.
     """
 
     def __init__(self, query_a: Query) -> None:

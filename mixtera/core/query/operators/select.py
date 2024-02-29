@@ -1,7 +1,8 @@
 from typing import Any, Tuple, Union
 
+from mixtera.core.query.query import QueryPlan
 from mixtera.utils import defaultdict_to_dict
-
+from .intersect import Intersection
 from ._base import Operator
 
 valid_operators = ["==", ">", "<", ">=", "<=", "!="]
@@ -51,17 +52,29 @@ class Select(Operator):
             raise RuntimeError(f"Invalid condition: {condition}, must be a Condition or a tuple of length 3")
 
     def apply(self) -> None:
-        assert len(self.children) <= 1, f"Select operator must have at most 1 child, got {len(self.children)}"
-        if len(self.children) == 0:
-            index = self.mdc.get_index(self.condition.field)
-            index = defaultdict_to_dict(index)
-            self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
-        else:
-            child_results = self.children[0].results
-            index = self.mdc.get_index(self.condition.field)
-            index = defaultdict_to_dict(index)
-            self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
-            self.results = [i for i in self.results if i in child_results]
+        assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
+
+        index = self.mdc.get_index(self.condition.field)
+        index = defaultdict_to_dict(index)
+        self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
 
     def __repr__(self) -> str:
         return f"select<{self.mdc}>({self.condition})"
+
+    def insert(self, query: "QueryPlan") -> Operator:
+        """
+        The insertion of select operator is slightly different.
+        When we insert a select operator into the query plan, we
+        ensure the select operator is the leaf node.
+        Args:
+            root (Operator): _description_
+
+        Returns:
+            Operator: _description_
+        """
+        if query.is_empty():
+            return self
+        else:
+            intersection_op = Intersection(query)
+            intersection_op.children.append(self)
+            return intersection_op

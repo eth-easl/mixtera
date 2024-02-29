@@ -2,7 +2,7 @@ from itertools import chain
 from typing import List, Union
 
 from mixtera.core.datacollection import MixteraDataCollection
-
+import mixtera.core.query.query as query
 
 class Operator:
     """
@@ -27,15 +27,23 @@ class Operator:
     def set_datacollection(self, data_collection: MixteraDataCollection) -> None:
         self.mdc = data_collection
 
-    def insert(self, root: "Operator") -> "Operator":
+    def insert(self, query: "query.QueryPlan") -> "Operator":
         """
-        For most operators, the insert function (insert this node into the query plan)
-        adds the current root node as a child of this operator.
-        For example: with "select().union()", when execute .union(),
-        it inserts the "select" operator as a child of the "union" operator.
+        For most operators, the insert function (insert this node into the query)
+            adds the current root node as a child of this operator.
+            For example: with "select().union()", when execute .union(),
+            it inserts the "select" operator as a child of the "union" operator.
+
+        Args:
+            query (Query): The query to insert into the current operator.
+
+        Returns:
+            root (Operator): The new root of the query plan.
+
         """
-        if root:
-            self.children.append(root)
+        if query.is_empty():
+            return self
+        self.children.append(query.root)
         return self
 
     def display(self, level: int) -> None:
