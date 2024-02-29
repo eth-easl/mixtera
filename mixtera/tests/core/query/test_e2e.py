@@ -12,10 +12,10 @@ from mixtera.core.query import Query
 class TestQueryE2E(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
-        directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        self.directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(self.directory)
 
-        jsonl_file_path1 = directory / "temp1.jsonl"
+        jsonl_file_path1 = self.directory / "temp1.jsonl"
         with open(jsonl_file_path1, "w", encoding="utf-8") as f:
             json.dump(
                 {
@@ -39,7 +39,7 @@ class TestQueryE2E(unittest.TestCase):
                 f,
             )
 
-        jsonl_file_path2 = directory / "temp2.jsonl"
+        jsonl_file_path2 = self.directory / "temp2.jsonl"
         with open(jsonl_file_path2, "w", encoding="utf-8") as f:
             json.dump(
                 {
@@ -56,8 +56,10 @@ class TestQueryE2E(unittest.TestCase):
             return f"prefix_{data}"
 
         self.parsing_func_source = inspect.getsource(parsing_func)
-        ldc.register_dataset("test_dataset", str(directory), JSONLDataset, parsing_func, "RED_PAJAMA")
-        self.datapath = directory
+        ldc.register_dataset("test_dataset", str(self.directory), JSONLDataset, parsing_func, "RED_PAJAMA")
+        files = ldc._get_all_files()
+        self.file1_id = [file_id for file_id, _, _, path in files if "temp1.jsonl" in path][0]
+        self.file2_id = [file_id for file_id, _, _, path in files if "temp2.jsonl" in path][0]
         self.mdc = ldc
 
     def tearDown(self):
@@ -68,7 +70,7 @@ class TestQueryE2E(unittest.TestCase):
         query.select(("language", "==", "Go"))
         res = query.execute(chunk_size=1)
         for x in res:
-            self.assertEqual(x, [{1: {1: [(0, 2)]}}])
+            self.assertEqual(x, [{1: {self.file1_id: [(0, 2)]}}])
 
     def test_union(self):
         query_1 = Query.from_datacollection(self.mdc).select(("language", "==", "Go"))
@@ -77,10 +79,14 @@ class TestQueryE2E(unittest.TestCase):
         query_2 = query_2.union(query_1)
         query_result = query_2.execute(chunk_size=1)
         res = list(query_result)
-        self.assertEqual(res, [[{1: {1: [(0, 2)]}}], [{1: {1: [(1, 2)], 2: [(0, 1)]}}]])
+        self.assertEqual(
+            res, [[{1: {self.file1_id: [(0, 2)]}}], [{1: {self.file1_id: [(1, 2)], self.file2_id: [(0, 1)]}}]]
+        )
         # check metadata
         self.assertEqual(query_result.dataset_type, {1: JSONLDataset})
-        self.assertEqual(query_result.file_path, {1: f"{self.datapath}/temp1.jsonl", 2: f"{self.datapath}/temp2.jsonl"})
+        self.assertEqual(
+            query_result.file_path, {1: f"{self.directory}/temp1.jsonl", 2: f"{self.directory}/temp2.jsonl"}
+        )
         parsing_func = {k: inspect.getsource(v) for k, v in query_result.parsing_func.items()}
         self.assertEqual(
             parsing_func,
