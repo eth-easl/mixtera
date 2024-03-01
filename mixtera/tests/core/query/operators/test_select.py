@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
+from mixtera.core.query import Intersection, QueryPlan
 from mixtera.core.query.operators.select import Condition, Select
 
 
@@ -41,6 +42,17 @@ class TestSelect(unittest.TestCase):
         self.select.condition.meet = MagicMock(return_value=True)
         self.select.children = [MagicMock()]
         self.assertEqual(self.select.results, [])
+
+    def test_chaining_select(self):
+        query_plan = QueryPlan()
+        select_1 = Select(("field_1", "==", "value_1"))
+        select_2 = Select(("field_2", "==", "value_2"))
+        query_plan.add(select_1)
+        query_plan.add(select_2)
+        self.assertIsInstance(query_plan.root, Intersection)
+        self.assertEqual(len(query_plan.root.children), 2)
+        self.assertEqual(query_plan.root.children[0], select_1)
+        self.assertEqual(query_plan.root.children[1], select_2)
 
     def test_repr(self):
         self.select.mdc = "mdc"

@@ -66,14 +66,13 @@ class Select(Operator):
         When we insert a select operator into the query plan, we
         ensure the select operator is the leaf node.
         Args:
-            root (Operator): _description_
+            query_plan (QueryPlan): The query to insert into the current operator.
 
         Returns:
-            Operator: _description_
+            Operator: The new root of the query plan.
         """
         if query_plan.is_empty():
             return self
-
         intersection_op = Intersection(query_plan)
         intersection_op.children.append(self)
         return intersection_op

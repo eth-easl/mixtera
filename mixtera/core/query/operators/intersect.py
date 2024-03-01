@@ -17,7 +17,7 @@ class Intersection(Operator):
     def apply(self) -> None:
         assert len(self.children) == 2, f"Intersection operator must have 2 children, got {len(self.children)}"
         # (todo: Xiaozhe): This is a dummy implementation, we need to implement the real intersection logic.
-        # Will do it in the next PR.
+        # Will do it in a following PR.
         self.results = [x for x in self.children[0].results if x in self.children[1].results]
 
     def __repr__(self) -> str:

@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from typing import Any, Type
+from typing import Any, Callable, Type
 
 from mixtera.core.datacollection import IndexType, MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
@@ -29,14 +29,23 @@ class QueryPlan:
 
 
 class QueryResult:
-    """QueryResult is a class that represents the results of a query."""
+    """QueryResult is a class that represents the results of a query.
+    When constructing, it takes a list of indices (from the root of
+    the query plan), a chunk size and a MixteraDataCollection object.
+
+    The QueryResult object is iterable and yields the results in chunks of size `chunk_size`.
+
+    The QueryResult object also has three meta properties: `dataset_type`,
+    `file_path` and `parsing_func`, each of which is a dictionary that maps
+    dataset/file ids to their respective types, paths and parsing functions.
+    """
 
     def __init__(self, mdc: MixteraDataCollection, results: list[IndexType], chunk_size: int = 1) -> None:
         """
         Args:
-        mdc (MixteraDataCollection): The MixteraDataCollection object.
-        results (list): The list of results of the query.
-        chunk_size (int): The chunk size of the results.
+            mdc (MixteraDataCollection): The MixteraDataCollection object.
+            results (list): The list of results of the query.
+            chunk_size (int): The chunk size of the results.
         """
         self.mdc = mdc
         self.chunk_size = chunk_size
@@ -61,11 +70,11 @@ class QueryResult:
         return self._meta["dataset_type"]
 
     @property
-    def file_path(self) -> dict:
+    def file_path(self) -> dict[str, str]:
         return self._meta["file_path"]
 
     @property
-    def parsing_func(self) -> dict:
+    def parsing_func(self) -> dict[str, Callable[[str], str]]:
         return self._meta["parsing_func"]
 
     def __iter__(self) -> Generator[list[IndexType], None, None]:
