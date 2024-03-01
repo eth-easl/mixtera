@@ -1,7 +1,6 @@
 from typing import Any, Union
 
 from mixtera.core.query.query import QueryPlan
-from mixtera.utils import defaultdict_to_dict
 
 from ._base import Operator
 from .intersect import Intersection
@@ -56,7 +55,6 @@ class Select(Operator):
         assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
         assert self.mdc is not None, "Select operator must have a MixteraDataCollection"
         index = self.mdc.get_index(self.condition.field)
-        index = defaultdict_to_dict(index)
         self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
 
     def __repr__(self) -> str:

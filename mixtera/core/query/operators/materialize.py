@@ -3,7 +3,9 @@ from ._base import Operator
 
 class Materialize(Operator):
     """Materialize operator is used to materialize the results of a query.
-
+    This operator should not be used for now. We keep it here as it might
+    be useful in the future for queries that need materialization in the
+    middle (e.g., deduplication, filter by text length).
     Args:
         streaming (bool): If True, the results will be streamed. Defaults to False.
     """

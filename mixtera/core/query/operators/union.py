@@ -1,4 +1,5 @@
 from mixtera.core.query.query import Query
+from mixtera.utils import flatten
 
 from ._base import Operator
 
@@ -17,11 +18,7 @@ class Union(Operator):
 
     def apply(self) -> None:
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
-        final_results = []
-        self.results = [x.results for x in self.children]
-        for result in self.results:
-            final_results.extend(result)
-        self.results = final_results
+        self.results = flatten([x.results for x in self.children])
 
     def __repr__(self) -> str:
         return "union<>()"

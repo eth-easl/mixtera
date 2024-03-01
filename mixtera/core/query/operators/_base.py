@@ -56,8 +56,7 @@ class Operator:
     def display(self, level: int) -> None:
         print(f"{'-'*level}{'> ' if level > 0 else ''}{str(self)}")
         for child in self.children:
-            if child:
-                child.display(level + 1)
+            child.display(level + 1)
 
     def post_order_traverse(self) -> None:
         for child in self.children:
