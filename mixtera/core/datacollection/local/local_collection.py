@@ -43,7 +43,8 @@ class LocalDataCollection(MixteraDataCollection):
         cur.execute(
             "CREATE TABLE IF NOT EXISTS datasets"
             " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE,"
-            " location TEXT NOT NULL, type INTEGER NOT NULL, parsing_func BLOB NOT NULL);"
+            " location TEXT NOT NULL, type INTEGER NOT NULL, filesystem_type INTEGER NOT NULL,"
+            " parsing_func BLOB NOT NULL);"
         )
 
         cur.execute(

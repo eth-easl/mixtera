@@ -1,12 +1,14 @@
 import itertools
 import json
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 
 from loguru import logger
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import MetadataParser
+from mixtera.core.filesystem import LocalFilesystem, AbstractFilesystem
+from mixtera.server import ServerConnection
 
 
 class JSONLDataset(Dataset):
@@ -33,23 +35,25 @@ class JSONLDataset(Dataset):
 
     @staticmethod
     def build_file_index(loc: Path, metadata_parser: MetadataParser) -> IndexType:
-        with open(loc, encoding="utf-8") as fd:
+        with LocalFilesystem.open_file(loc) as fd:
             for line_id, line in enumerate(fd):
                 metadata_parser.parse(line_id, json.loads(line))
         return metadata_parser.get_index()
 
     @staticmethod
     def read_ranges_from_files(
-        ranges_per_file: dict[str, list[tuple[int, int]]], parsing_func: Callable[[str], str]
+        ranges_per_file: dict[str, list[tuple[int, int]]], parsing_func: Callable[[str], str], server_connection: Optional[ServerConnection]
     ) -> Iterable[str]:
         for file, range_list in ranges_per_file.items():
-            yield from JSONLDataset.read_ranges_from_file(file, range_list, parsing_func)
+            filesys_id = 1 # TODO(MaxiBoether): get this
+            yield from JSONLDataset.read_ranges_from_file(file, filesys_id, range_list, parsing_func, server_connection)
 
     @staticmethod
     def read_ranges_from_file(
-        file: str, range_list: list[tuple[int, int]], parsing_func: Callable[[str], str]
+        file: str, filesys_id: int, range_list: list[tuple[int, int]], parsing_func: Callable[[str], str], server_connection: Optional[ServerConnection]
     ) -> Iterable[str]:
-        with open(file, "r", encoding="utf-8") as text_file:
+        # TODO(#35): Instead of hardcoding the local filesystem, we will change this flow.
+        with AbstractFilesystem.from_id(filesys_id).open_file(file, server_connection=server_connection) as text_file:
             last_line_read = 0
             last_r_start = -1
             for r_start, r_end in range_list:
@@ -64,7 +68,7 @@ class JSONLDataset(Dataset):
                 # Skip lines to reach the start of the new range if necessary
                 if r_start > last_line_read:
                     for _ in range(r_start - last_line_read):
-                        text_file.readline()
+                        next(text_file)
                     last_line_read = r_start
 
                 # Yield the lines in the current range
@@ -74,7 +78,7 @@ class JSONLDataset(Dataset):
     @staticmethod
     def _is_valid_jsonl(path: Path) -> bool:
         try:
-            with open(path, "r", encoding="utf-8") as file:
+            with LocalFilesystem.open_file(path) as file:
                 for line_number, line in enumerate(file, start=1):
                     try:
                         json.loads(line)
