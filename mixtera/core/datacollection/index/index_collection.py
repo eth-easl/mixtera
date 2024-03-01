@@ -1,88 +1,82 @@
-from abc import ABC, abstractmethod
+from collections import defaultdict
+from copy import deepcopy
 from typing import Union
 
-from mixtera.core.datacollection.index import IndexFeatureValueType, \
-  IndexDatasetEntryType
+from loguru import logger
+from mixtera.core.datacollection.index import Index, IndexDatasetEntryType, IndexFeatureValueType, IndexType
+from mixtera.utils import merge_dicts, ranges
 
 
-class IndexBase(ABC):
-  """
-  Abstract class that represents the interface of a Mixtera index.
-
-  For now, it is assumed that there are 4 levels to an index:
-  {
-    "feature_name": {
-      "feature_value": {
-        dataset_id: {
-          file_id: [
-            line number | line range tuple
-          ]
-        }
-      }
-    }
-  }
-  """
-
-  @abstractmethod
-  def append_index_entry(self, feature_name: str, feature_value: Union[int, float, str],
-                         dataset_id: int, file_id: int, row_number: int) -> None:
+def _return_with_copy_or_noop(to_return: Union[list, dict], copy: bool) -> Union[list, dict]:
     """
-    Appends a new row number entry to the index.
+    This method either returns the passed object as is, or makes a deep copy
+    of it, and returns that.
 
     Args:
-      feature_name: the name of feature (e.g. 'language')
-      feature_value: the value of the feature (e.g. 'Italian')
-      dataset_id: the id of the dataset
-      file_id: the id of the file within the dataset
-      row_number: the row number of the valid instance
-    """
-    raise NotImplementedError("Method must be implemented in subclass!")
-
-  @abstractmethod
-  def get_by_feature(self, feature_name: str, copy=False) -> IndexFeatureValueType:
-    """
-    Returns the entries under the name of this feature
-
-    Args:
-      feature_name: the name of the feature
-      copy: if True, the returned dictionary is a copy of the internal data,
-        meaning no side-effects can arise by changing the returned data
-        structure. This is more expensive, and deactivated by default.
+      to_return: the object to be returned
+      copy: whether to copy it or not
 
     Returns:
-      An instance of IndexFeatureValueType; if no such feature is found an
-      empty dictionary is returned
+      The `to_return` object or a copy of it if `copy` is `True`
     """
-    raise NotImplementedError("Method must be implemented in subclass!")
+    return to_return if not copy else deepcopy(to_return)
 
-  @abstractmethod
-  def get_by_feature_value(self, feature_name: str, feature_value: Union[str, int, float],
-                           copy=False) -> IndexDatasetEntryType:
+
+class InMemoryDictionaryIndex(Index):
     """
-    Returns the entries in the index for this feature and its value.
-
-    Args:
-      feature_name: the name of the feature
-      feature_value: the value of the feature
-      copy: if True, the returned dictionary is a copy of the internal data,
-        meaning no side-effects can arise by changing the returned data
-        structure. This is more expensive, and deactivated by default.
-
-    Returns:
-      An instance of IndexDatasetEntryType; if no such feature is found, or no
-      such value exists, an empty dictionary is returned
+    Represents an in memory dictionary class. This index exploits defaultdicts.
     """
-    raise NotImplementedError("Method must be implemented in subclass!")
 
-  @abstractmethod
-  def merge(self, other: "IndexBase") -> None:
-    """
-    Merges another index into this one.
+    def __init__(self) -> None:
+        self._is_compressed = False
+        self._index: defaultdict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
 
-    Args:
-      other: The other index
+    def compress(self) -> None:
+        if not self._is_compressed:
+            self._is_compressed = True
+            for _0, feature_values in self._index.items():
+                for _1, dataset_ids in feature_values.items():
+                    for _2, file_ids in dataset_ids.items():
+                        for file_key in file_ids.keys():
+                            file_ids[file_key] = ranges(file_ids[file_key])
 
-    Returns:
-      Does not return anything, but extends the internal index with the `other`.
-    """
-    raise NotImplementedError("Method must be implemented in subclass!")
+    def is_compressed(self) -> bool:
+        return self._is_compressed
+
+    def _optionally_compress(self) -> None:
+        """
+        Compresses the index if it is not already compressed, else NOOP.
+        """
+        if not self._is_compressed:
+            self.compress()
+
+    def get_full_index(self, copy: bool = False) -> IndexType:
+        assert self._is_compressed, "You cannot access an uncompressed index!"
+        return _return_with_copy_or_noop(self._index, copy)
+
+    def get_by_feature(self, feature_name: str, copy: bool = False) -> IndexFeatureValueType:
+        assert self._is_compressed, "You cannot access an uncompressed index!"
+        return _return_with_copy_or_noop(self._index[feature_name], copy)
+
+    def get_by_feature_value(
+        self, feature_name: str, feature_value: Union[str, int, float], copy: bool = False
+    ) -> IndexDatasetEntryType:
+        assert self._is_compressed, "You cannot access an uncompressed index!"
+        return _return_with_copy_or_noop(self._index[feature_name][feature_value], copy)
+
+    def merge(self, other: Index, copy_other: bool = False) -> None:
+        assert self._is_compressed, "You cannot access an uncompressed index!"
+        other_raw_dict = other.get_full_index(copy=copy_other)
+        self._index = merge_dicts(self._index, other_raw_dict)
+
+    def append_index_entry(
+        self, feature_name: str, feature_value: Union[int, float, str], dataset_id: int, file_id: int, row_number: int
+    ) -> None:
+        if self._is_compressed:
+            logger.warning(
+                "Attempted addition to a closed and compressed index: "
+                f"<{feature_name},{feature_value},{dataset_id},{file_id}> "
+                "was not added!"
+            )
+            return
+        self._index[feature_name][feature_value][dataset_id][file_id].append(row_number)

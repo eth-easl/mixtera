@@ -27,15 +27,15 @@ def ranges(nums: List[int]) -> List[Tuple[int, int]]:
     return [(s, e + 1) for s, e in zip(edges, edges)]
 
 
-def merge_defaultdicts(d1: defaultdict, d2: defaultdict) -> defaultdict:
+def merge_dicts(d1: dict, d2: dict) -> dict:
     """
-    Recursively merges two defaultdict structures. Assumes that the innermost
+    Recursively merges two dict structures. Assumes that the innermost
     dictionaries have unique keys and thus can be merged without concern for collisions.
     """
     for key, value in d2.items():
         if isinstance(value, defaultdict):
-            node = d1[key]
-            d1[key] = merge_defaultdicts(node, value)
+            node = d1[key] if key in d1 else {}
+            d1[key] = merge_dicts(node, value)
         else:
             # We're at the innermost level, which has unique keys, so just add them
             d1[key] = value

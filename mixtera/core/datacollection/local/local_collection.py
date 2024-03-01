@@ -10,7 +10,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type
+from mixtera.utils.utils import defaultdict_to_dict, merge_dicts, numpy_to_native_type
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -368,7 +368,7 @@ class LocalDataCollection(MixteraDataCollection):
         if property_name not in self._index:
             # If the property is not in the index, it may be in the database, so we check it there
             # TODO(xiaozhe): user may also interested to force refresh the index from database.
-            self._index = merge_defaultdicts(self._index, self._read_index_from_database(property_name))
+            self._index = merge_dicts(self._index, self._read_index_from_database(property_name))
         if property_name not in self._index:
             logger.warning(f"Property {property_name} not found in index, returning None.")
             return None

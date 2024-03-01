@@ -36,8 +36,8 @@ class RedPajamaMetadataParser(MetadataParser):
         on the index. Note that the lower bound of each range is inclusive, but
         the upper bound is exclusive.
         """
-        for _, buckets in self._index.items():
-            for __, bucket_vals in buckets.items():
+        for _0, buckets in self._index.items():
+            for _1, bucket_vals in buckets.items():
                 bucket_vals[self.dataset_id][self.file_id] = ranges(bucket_vals[self.dataset_id][self.file_id])
 
     def get_index(self) -> IndexType:
