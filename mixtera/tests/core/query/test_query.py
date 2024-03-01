@@ -11,9 +11,6 @@ class MockOperator(Operator):
         self.name = name
         self.len_results = len_results
 
-    def insert(self, root):
-        return self if root is None else root
-
     def display(self, level):
         print(" " * level + self.name)
 

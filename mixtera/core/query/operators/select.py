@@ -1,15 +1,16 @@
-from typing import Any, Tuple, Union
+from typing import Any, Union
 
 from mixtera.core.query.query import QueryPlan
 from mixtera.utils import defaultdict_to_dict
-from .intersect import Intersection
+
 from ._base import Operator
+from .intersect import Intersection
 
 valid_operators = ["==", ">", "<", ">=", "<=", "!="]
 
 
 class Condition:
-    def __init__(self, condition_tuple: Tuple):
+    def __init__(self, condition_tuple: tuple[str, str, str]):
         self.field = condition_tuple[0]
         self.operator = condition_tuple[1]
         self.value = condition_tuple[2]
@@ -40,7 +41,7 @@ class Select(Operator):
         condition (Union[Condition, Tuple]): The condition to filter the data.
     """
 
-    def __init__(self, condition: Union[Condition, Tuple]) -> None:
+    def __init__(self, condition: Union[Condition, tuple[str, str, str]]) -> None:
         super().__init__()
         if isinstance(condition, Condition):
             self.condition = condition
@@ -53,7 +54,7 @@ class Select(Operator):
 
     def apply(self) -> None:
         assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
-
+        assert self.mdc is not None, "Select operator must have a MixteraDataCollection"
         index = self.mdc.get_index(self.condition.field)
         index = defaultdict_to_dict(index)
         self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
@@ -61,7 +62,7 @@ class Select(Operator):
     def __repr__(self) -> str:
         return f"select<{self.mdc}>({self.condition})"
 
-    def insert(self, query: "QueryPlan") -> Operator:
+    def insert(self, query_plan: "QueryPlan") -> Operator:
         """
         The insertion of select operator is slightly different.
         When we insert a select operator into the query plan, we
@@ -72,9 +73,9 @@ class Select(Operator):
         Returns:
             Operator: _description_
         """
-        if query.is_empty():
+        if query_plan.is_empty():
             return self
-        else:
-            intersection_op = Intersection(query)
-            intersection_op.children.append(self)
-            return intersection_op
+
+        intersection_op = Intersection(query_plan)
+        intersection_op.children.append(self)
+        return intersection_op

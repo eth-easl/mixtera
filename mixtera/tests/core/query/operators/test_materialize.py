@@ -1,5 +1,4 @@
 import unittest
-from itertools import chain
 from unittest.mock import MagicMock
 
 from mixtera.core.query.operators.materialize import Materialize
@@ -16,36 +15,26 @@ class TestMaterialize(unittest.TestCase):
         child = MagicMock()
         child.results = [[(1, 2), (3, 4)]]
         self.materialize.children.append(child)
-
         mdc_mock = MagicMock()
         mdc_mock.get_samples_from_ranges.return_value = [(1, 2), (3, 4)]
         self.materialize.mdc = mdc_mock
-
         self.materialize.apply()
+        self.assertEqual(self.materialize.results, [[(1, 2), (3, 4)]])
 
-        self.assertEqual(list(self.materialize.results), [(1, 2), (3, 4)])
+        self.materialize = Materialize()
+        child.results = [[(1, 2)], [(3, 4)]]
+        self.materialize.children.append(child)
+        mdc_mock = MagicMock()
+        mdc_mock.get_samples_from_ranges.return_value = [(1, 2), (3, 4)]
+        self.materialize.mdc = mdc_mock
+        self.materialize.apply()
+        self.assertEqual(self.materialize.results, [[(1, 2), (3, 4)], [(1, 2), (3, 4)]])
 
     def test_apply_with_more_than_one_child(self):
         self.materialize.children.append(MagicMock())
         self.materialize.children.append(MagicMock())
-
         with self.assertRaises(AssertionError):
             self.materialize.apply()
-
-    def test_apply_with_streaming(self):
-        child = MagicMock()
-        child.results = [[(1, 2), (3, 4)]]
-        self.materialize.children.append(child)
-
-        mdc_mock = MagicMock()
-        mdc_mock.get_samples_from_ranges.return_value = [(1, 2), (3, 4)]
-        self.materialize.mdc = mdc_mock
-
-        self.materialize.streaming = True
-        self.materialize.apply()
-        res1 = list(self.materialize.results)
-        gt = list(chain([(1, 2), (3, 4)]))
-        self.assertEqual(res1, gt)
 
     def test_repr(self):
         mdc_mock = MagicMock()

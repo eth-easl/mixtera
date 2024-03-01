@@ -76,6 +76,7 @@ class QueryResult:
         for i in range(0, len(self.results), self.chunk_size):
             yield self.results[i : i + self.chunk_size]
 
+
 class Query:
 
     def __init__(self, mdc: MixteraDataCollection) -> None:
@@ -99,7 +100,8 @@ class Query:
 
         def process_op(self, *args: Any, **kwargs: Any) -> "Query":  # type: ignore[no-untyped-def]
             op: Operator = operator(*args, **kwargs)
-            op.set_datacollection(self.mdc)
+            # (todo: Xiaozhe) optimally we only set this if it is a leaf.
+            op.datacollection = self.mdc
             self.query_plan.add(op)
             return self
 
@@ -117,10 +119,12 @@ class Query:
         """
         This method displays the query plan in a tree
         format. For example:
-        union<>()
+
+        .. code-block:: python
+
+            union<>()
             -> select<>(language == Go)
             -> select<>(language == CSS)
-
         """
         self.query_plan.display()
 

@@ -1,8 +1,8 @@
-from itertools import chain
-from typing import List, Union
+from typing import List, Optional
 
-from mixtera.core.datacollection import MixteraDataCollection
-import mixtera.core.query.query as query
+from mixtera.core.datacollection import IndexType, MixteraDataCollection
+from mixtera.core.query import query
+
 
 class Operator:
     """
@@ -17,17 +17,24 @@ class Operator:
 
     def __init__(self) -> None:
         self.children: List[Operator] = []
-        self.results: Union[List, chain] = []
-        self._materialized = False
-        self.mdc: MixteraDataCollection = None
+        self.results: List[IndexType] = []
+        # for leaf nodes, the data collection needs to be set
+        # for other nodes, we don't set the data collection as
+        # they will not touch the underlying data collection.
+        self.mdc: Optional[MixteraDataCollection] = None
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}"
 
-    def set_datacollection(self, data_collection: MixteraDataCollection) -> None:
-        self.mdc = data_collection
+    @property
+    def datacollection(self) -> Optional[MixteraDataCollection]:
+        return self.mdc
 
-    def insert(self, query: "query.QueryPlan") -> "Operator":
+    @datacollection.setter
+    def datacollection(self, value: MixteraDataCollection) -> None:
+        self.mdc = value
+
+    def insert(self, query_plan: "query.QueryPlan") -> "Operator":
         """
         For most operators, the insert function (insert this node into the query)
             adds the current root node as a child of this operator.
@@ -41,9 +48,9 @@ class Operator:
             root (Operator): The new root of the query plan.
 
         """
-        if query.is_empty():
+        if query_plan.is_empty():
             return self
-        self.children.append(query.root)
+        self.children.append(query_plan.root)
         return self
 
     def display(self, level: int) -> None:
@@ -54,8 +61,7 @@ class Operator:
 
     def post_order_traverse(self) -> None:
         for child in self.children:
-            if child:
-                child.post_order_traverse()
+            child.post_order_traverse()
         self.apply()
 
     def apply(self) -> None:
