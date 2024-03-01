@@ -6,7 +6,7 @@ from typing import Callable, Iterable
 from loguru import logger
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import MetadataParser
+from mixtera.core.datacollection.index.parser import MetadataParser
 
 
 class JSONLDataset(Dataset):

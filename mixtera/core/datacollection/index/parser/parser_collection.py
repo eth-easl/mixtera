@@ -1,9 +1,8 @@
-from enum import Enum
 from typing import Any, Optional
 
 from loguru import logger
 from mixtera.core.datacollection import IndexType
-from mixtera.core.datacollection.index import MetadataParser
+from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.utils import ranges
 
 
@@ -44,12 +43,6 @@ class RedPajamaMetadataParser(MetadataParser):
     def get_index(self) -> IndexType:
         self._compress_index()
         return self._index
-
-
-class MetadataParserRegistry(Enum):
-    """Each metadata parser is registered with this enum."""
-
-    RED_PAJAMA = RedPajamaMetadataParser
 
 
 class MetadataParserFactory:

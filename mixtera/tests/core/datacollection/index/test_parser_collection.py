@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from mixtera.core.datacollection.index.parser_collection import MetadataParserFactory, RedPajamaMetadataParser
+from mixtera.core.datacollection.index.parser.parser_collection import MetadataParserFactory, RedPajamaMetadataParser
 from mixtera.utils import defaultdict_to_dict
 
 
