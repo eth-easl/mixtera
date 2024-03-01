@@ -55,6 +55,9 @@ class Select(Operator):
         assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
         assert self.mdc is not None, "Select operator must have a MixteraDataCollection"
         index = self.mdc.get_index(self.condition.field)
+        if index is None:
+            self.results = []
+            return
         self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
 
     def __repr__(self) -> str:

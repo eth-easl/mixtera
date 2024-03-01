@@ -103,7 +103,7 @@ class Query:
         By default, all built-in operators (under ./operators) are registered.
 
         Args:
-            operator (_type_): _description_
+            operator (Operator): The operator to register.
         """
         op_name = operator.__name__.lower()
 
