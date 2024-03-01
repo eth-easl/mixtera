@@ -43,7 +43,7 @@ def merge_defaultdicts(d1: defaultdict, d2: defaultdict) -> defaultdict:
 
 
 def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
-    if isinstance(ddict, defaultdict):
+    if isinstance(ddict, (defaultdict, dict)):
         ddict = {k: defaultdict_to_dict(v) for k, v in ddict.items()}
     return ddict
 
