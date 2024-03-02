@@ -8,6 +8,7 @@ from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import MetadataParserFactory
+from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type
@@ -75,41 +76,60 @@ class LocalDataCollection(MixteraDataCollection):
         identifier: str,
         loc: str,
         dtype: Type[Dataset],
+        filesystem_t: Type[AbstractFilesystem],
         parsing_func: Callable[[str], str],
         metadata_parser_type: str,
     ) -> bool:
-        if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, parsing_func)) == -1:
+        if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, filesystem_t, parsing_func)) == -1:
             return False
 
         file: Path
-        for file in dtype.iterate_files(loc):
+        for file in dtype.iterate_files(loc, filesystem_t):
             if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
                 logger.error(f"Error while inserting file {file}")
                 return False
             metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
-            pre_index = dtype.build_file_index(file, metadata_parser)
+            pre_index = dtype.build_file_index(file, filesystem_t, metadata_parser)
             for property_name in pre_index:
                 self._insert_index_into_table(property_name, pre_index[property_name])
         return True
 
     def _insert_dataset_into_table(
-        self, identifier: str, loc: str, dtype: Type[Dataset], parsing_func: Callable[[str], str]
+        self,
+        identifier: str,
+        loc: str,
+        dtype: Type[Dataset],
+        filesystem_t: Type[AbstractFilesystem],
+        parsing_func: Callable[[str], str],
     ) -> int:
+        valid_types = True
         if not issubclass(dtype, Dataset):
             logger.error(f"Invalid dataset type: {dtype}")
-            return -1
+            valid_types = False
+
+        if not issubclass(filesystem_t, AbstractFilesystem):
+            logger.error(f"Invalid filesystem type: {filesystem_t}")
+            valid_types = False
 
         type_id = dtype.type_id
         if type_id == 0:
             logger.error("Cannot use generic Dataset class as dtype.")
+            valid_types = False
+
+        filesys_id = filesystem_t.type_id
+        if filesys_id == 0:
+            logger.error("Cannot use generic AbstractFilesystem class as dtype.")
+            valid_types = False
+
+        if not valid_types:
             return -1
 
         serialized_parsing_func = sqlite3.Binary(dill.dumps(parsing_func))
 
         try:
-            query = "INSERT INTO datasets (name, location, type, parsing_func) VALUES (?, ?, ?, ?);"
+            query = "INSERT INTO datasets (name, location, type, filesystem_type, parsing_func) VALUES (?, ?, ?, ?, ?);"
             cur = self._connection.cursor()
-            cur.execute(query, (identifier, loc, type_id, serialized_parsing_func))
+            cur.execute(query, (identifier, loc, type_id, filesys_id, serialized_parsing_func))
             self._connection.commit()
             inserted_id = cur.lastrowid
         except sqlite3.Error as err:
@@ -287,6 +307,26 @@ class LocalDataCollection(MixteraDataCollection):
 
         return Dataset.from_type_id(result)
 
+    def _get_dataset_filesys_by_id(self, did: int) -> Type[AbstractFilesystem]:
+        try:
+            query = "SELECT filesystem_type from datasets WHERE id = ?;"
+            cur = self._connection.cursor()
+            cur.execute(query, (did,))
+            result = cur.fetchone()
+        except sqlite3.Error as err:
+            logger.error(f"Error while selecting parsing_func for did {did}")
+            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+
+        if result is None:
+            raise RuntimeError(f"Could not get dataset type by id for did {did}")
+
+        result = result[0]
+
+        if not isinstance(result, int):
+            raise RuntimeError(f"Filesystem type {result} for dataset {did} is not an int")
+
+        return AbstractFilesystem.from_type_id(result)
+
     def _get_file_path_by_id(self, fid: int) -> str:
         try:
             query = "SELECT location from files WHERE id = ?;"
@@ -307,11 +347,13 @@ class LocalDataCollection(MixteraDataCollection):
     ) -> Iterable[str]:
         for dataset_id, file_dict in ranges_per_dataset_and_file.items():
             dataset_parsing_func = self._get_dataset_func_by_id(dataset_id)
+            dataset_filesystem_type = self._get_dataset_filesys_by_id(dataset_id)
             filename_dict = {
                 self._get_file_path_by_id(file_id): file_ranges for file_id, file_ranges in file_dict.items()
             }
+            # Since we are in the LocalCollection, server_connection is always None.
             yield from self._get_dataset_type_by_id(dataset_id).read_ranges_from_files(
-                filename_dict, dataset_parsing_func
+                filename_dict, dataset_filesystem_type, dataset_parsing_func, None
             )
 
     def add_property(
