@@ -79,6 +79,8 @@ class Select(Operator):
         """
         if query_plan.is_empty():
             return self
+        # If the query plan is not empty, there is another select.
+        # We need to merge the results of those two selects.
         intersection_op = Intersection(query_plan)
         intersection_op.children.append(self)
         return intersection_op
