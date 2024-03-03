@@ -57,8 +57,7 @@ class Select(Operator):
         # (todo: xiaozhe): In a future PR, we may want to only load the
         # index that meets the condition, instead of loading the entire index
         # and then filter the results.
-        index = self.mdc.get_index(self.condition.field)
-        if index is None:
+        if (index := self.mdc.get_index(self.condition.field)) is None:
             self.results = []
             return
         self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
