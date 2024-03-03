@@ -35,7 +35,9 @@ class Index(ABC):
 
     Once the index is fully built, `compress()` should be called. This switches
     the representation internal representation from `IndexUncompressedType` to
-    `IndexType`.
+    `IndexType`. No additions should be made to an index that has been
+    finalized. The only changes that can be made refer to merging additional
+    indexes into this one.
     """
 
     @abstractmethod
@@ -68,6 +70,7 @@ class Index(ABC):
         Returns:
           An `IndexType` object.
         """
+        raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
     def get_by_feature(self, feature_name: str, copy: bool = False) -> "IndexFeatureValueType":
@@ -139,5 +142,16 @@ class Index(ABC):
     def is_compressed(self) -> bool:
         """
         Returns True if the index is compressed and safe to read, otherwise False.
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
+    @abstractmethod
+    def get_all_features(self) -> list[str]:
+        """
+        Returns all top level keys (i.e. feature names).
+
+        Returns:
+            A list of keys to access the first level of the index via the
+            `get_by_feature` method
         """
         raise NotImplementedError("Method must be implemented in subclass!")

@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from loguru import logger
-from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 
@@ -32,11 +31,10 @@ class JSONLDataset(Dataset):
         yield from path.glob("*.jsonl")
 
     @staticmethod
-    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> IndexType:
+    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> None:
         with open(loc, encoding="utf-8") as fd:
             for line_id, line in enumerate(fd):
                 metadata_parser.parse(line_id, json.loads(line))
-        return metadata_parser.get_index()
 
     @staticmethod
     def read_ranges_from_files(

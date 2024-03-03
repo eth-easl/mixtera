@@ -104,49 +104,27 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         lines = [elem1, elem2, elem3, elem4]
         expected = {
             "language": {
-                "C": {0: {0: [0, 1]}},  # value with document and list of lines
-                "C++": {0: {0: [0, 1]}},
-                "CoffeeScript": {0: {0: [0]}},
-                "PHP": {0: {0: [1]}},
+                "C": {0: {0: [(0, 2)]}},  # value with document and list of lines
+                "C++": {0: {0: [(0, 2)]}},
+                "CoffeeScript": {0: {0: [(0, 1)]}},
+                "PHP": {0: {0: [(1, 2)]}},
             },
-            "publication_date": {"asd123": {0: {0: [0]}}},
+            "publication_date": {"asd123": {0: {0: [(0, 1)]}}},
         }
 
         for line_number, metadata in enumerate(lines):
             red_pajama_metadata_parser.parse(line_number, metadata)
 
-        self.assertEqual(expected, defaultdict_to_dict(red_pajama_metadata_parser._index))
-
-    def test_compress_index(self):
-        dataset_id: int = 0
-        file_id: int = 0
-        red_pajama_metadata_parser = RedPajamaMetadataParser(dataset_id, file_id)
-
-        red_pajama_metadata_parser._index = {
-            "language": {
-                "C": {0: {0: [0, 2, 4, 9]}},
-                "PHP": {0: {0: [1]}},
-            },
-            "publication_date": {"asd123": {0: {0: [0, 2, 3, 4, 5, 9, 10]}}},
-        }
-
-        target_index = {
-            "language": {
-                "C": {0: {0: [(0, 1), (2, 3), (4, 5), (9, 10)]}},
-                "PHP": {0: {0: [(1, 2)]}},
-            },
-            "publication_date": {"asd123": {0: {0: [(0, 1), (2, 6), (9, 11)]}}},
-        }
-
-        red_pajama_metadata_parser._compress_index()
-        self.assertEqual(target_index, red_pajama_metadata_parser._index)
+        red_pajama_metadata_parser.mark_complete()
+        result_index = defaultdict_to_dict(red_pajama_metadata_parser.get_index().get_full_index())
+        self.assertEqual(expected, result_index)
 
     def test_get_index(self):
         dataset_id: int = 0
         file_id: int = 0
         red_pajama_metadata_parser = RedPajamaMetadataParser(dataset_id, file_id)
 
-        red_pajama_metadata_parser._index = {
+        red_pajama_metadata_parser._index._index = {
             "language": {
                 "C": {0: {0: [0, 2, 4, 9]}},
                 "PHP": {0: {0: [1]}},
@@ -162,7 +140,8 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
             "publication_date": {"asd123": {0: {0: [(0, 1), (2, 6), (9, 11)]}}},
         }
 
-        self.assertEqual(target_index, red_pajama_metadata_parser.get_index())
+        red_pajama_metadata_parser.mark_complete()
+        self.assertEqual(target_index, red_pajama_metadata_parser.get_index().get_full_index())
 
 
 class TestMetadataParserFactory(unittest.TestCase):

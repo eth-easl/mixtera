@@ -1,5 +1,6 @@
 from collections import defaultdict
 from copy import deepcopy
+from enum import Enum
 from typing import Union
 
 from loguru import logger
@@ -64,6 +65,10 @@ class InMemoryDictionaryIndex(Index):
         assert self._is_compressed, "You cannot access an uncompressed index!"
         return _return_with_copy_or_noop(self._index[feature_name][feature_value], copy)
 
+    def get_all_features(self) -> list[str]:
+        assert self._is_compressed, "You cannot access an uncompressed index!"
+        return list(self._index.keys())
+
     def merge(self, other: Index, copy_other: bool = False) -> None:
         assert self._is_compressed, "You cannot access an uncompressed index!"
         other_raw_dict = other.get_full_index(copy=copy_other)
@@ -80,3 +85,18 @@ class InMemoryDictionaryIndex(Index):
             )
             return
         self._index[feature_name][feature_value][dataset_id][file_id].append(row_number)
+
+
+class IndexTypes(Enum):
+    """Contains the type of indexes supported by Mixtera"""
+
+    IN_MEMORY_DICT_BASED = 1
+
+
+class IndexFactory:
+    @staticmethod
+    def create_index(index_type: IndexTypes) -> Index:
+        if index_type == IndexTypes.IN_MEMORY_DICT_BASED:
+            return InMemoryDictionaryIndex()
+        logger.error(f"Mixtera does not support index type {index_type}!")
+        raise NotImplementedError()

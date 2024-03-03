@@ -7,6 +7,8 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
+from mixtera.core.datacollection.index import Index, IndexFeatureValueType
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
@@ -25,8 +27,7 @@ class LocalDataCollection(MixteraDataCollection):
         self._properties: list[Property] = []
         self._datasets: list[Dataset] = []
         # 1st level: Variable 2nd Level: Buckets for that Variable 3rd level: datasets 4th: files -> ranges
-        self._index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
-
+        self._index: Index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_BASED)
         self._metadata_factory = MetadataParserFactory()
 
         if not self._database_path.exists():
@@ -86,9 +87,11 @@ class LocalDataCollection(MixteraDataCollection):
                 logger.error(f"Error while inserting file {file}")
                 return False
             metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
-            pre_index = dtype.build_file_index(file, metadata_parser)
-            for property_name in pre_index:
-                self._insert_index_into_table(property_name, pre_index[property_name])
+            dtype.build_file_index(file, metadata_parser)
+            metadata_parser.mark_complete()
+            pre_index: Index = metadata_parser.get_index()
+            for property_name in pre_index.get_all_features():
+                self._insert_index_into_table(property_name, pre_index.get_by_feature(feature_name=property_name))
         return True
 
     def _insert_dataset_into_table(
@@ -143,17 +146,17 @@ class LocalDataCollection(MixteraDataCollection):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _insert_index_into_table(self, property_name: str, index: IndexType) -> int:
+    def _insert_index_into_table(self, property_name: str, partial_index: IndexFeatureValueType) -> int:
         query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
             VALUES (?, ?, ?, ?, ?, ?);"
         cur = self._connection.cursor()
-        index = defaultdict_to_dict(index)
-        index = numpy_to_native_type(index)
+        partial_index = defaultdict_to_dict(partial_index)
+        partial_index = numpy_to_native_type(partial_index)
         try:
-            for prediction in index:
-                for dataset_id in index[prediction]:
-                    for file_id in index[prediction][dataset_id]:
-                        for line_id in index[prediction][dataset_id][file_id]:
+            for prediction in partial_index:
+                for dataset_id in partial_index[prediction]:
+                    for file_id in partial_index[prediction][dataset_id]:
+                        for line_id in partial_index[prediction][dataset_id][file_id]:
                             cur.execute(
                                 query,
                                 (

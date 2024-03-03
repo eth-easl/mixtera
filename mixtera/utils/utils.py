@@ -33,7 +33,7 @@ def merge_dicts(d1: dict, d2: dict) -> dict:
     dictionaries have unique keys and thus can be merged without concern for collisions.
     """
     for key, value in d2.items():
-        if isinstance(value, defaultdict):
+        if isinstance(value, dict):
             node = d1[key] if key in d1 else {}
             d1[key] = merge_dicts(node, value)
         else:
