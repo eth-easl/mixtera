@@ -14,7 +14,7 @@ class Materialize(Operator):
         super().__init__()
         self.streaming = streaming
 
-    def apply(self) -> None:
+    def execute(self) -> None:
         assert len(self.children) == 1, f"Materialize operator must have 1 child, got {len(self.children)}"
         assert self.mdc is not None, "Materialize operator must have a MixteraDataCollection"
         self.results = self.children[0].results

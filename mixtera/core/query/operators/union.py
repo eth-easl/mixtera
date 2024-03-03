@@ -16,7 +16,7 @@ class Union(Operator):
         super().__init__()
         self.children.append(query_a.root)
 
-    def apply(self) -> None:
+    def execute(self) -> None:
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
         self.results = flatten([x.results for x in self.children])
 

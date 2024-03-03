@@ -14,7 +14,7 @@ class MockOperator(Operator):
     def display(self, level):
         print(" " * level + self.name)
 
-    def apply(self):
+    def execute(self):
         self.results = [{1: {1: [(1, 2)]}}] * self.len_results
 
 
@@ -52,7 +52,7 @@ class TestQuery(unittest.TestCase):
 
     def test_register(self):
         class TestOperator(Operator):
-            def apply(self) -> None:
+            def execute(self) -> None:
                 self.results = ["test"]
 
         Query.register(TestOperator)

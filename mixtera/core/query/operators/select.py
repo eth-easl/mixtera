@@ -51,7 +51,7 @@ class Select(Operator):
         else:
             raise RuntimeError(f"Invalid condition: {condition}, must be a Condition or a tuple of length 3")
 
-    def apply(self) -> None:
+    def execute(self) -> None:
         assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
         assert self.mdc is not None, "Select operator must have a MixteraDataCollection"
         # (todo: xiaozhe): In a future PR, we may want to only load the
@@ -64,6 +64,9 @@ class Select(Operator):
         self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
 
     def __repr__(self) -> str:
+        return f"select<{self.mdc}>({self.condition})"
+
+    def __str__(self) -> str:
         return f"select<{self.mdc}>({self.condition})"
 
     def insert(self, query_plan: "QueryPlan") -> Operator:

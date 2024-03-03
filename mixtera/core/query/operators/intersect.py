@@ -14,7 +14,7 @@ class Intersection(Operator):
         super().__init__()
         self.children.append(query_a.root)
 
-    def apply(self) -> None:
+    def execute(self) -> None:
         assert len(self.children) == 2, f"Intersection operator must have 2 children, got {len(self.children)}"
         # (todo: Xiaozhe): This is a dummy implementation, we need to implement the real intersection logic.
         # Will do it in a following PR.

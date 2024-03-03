@@ -39,11 +39,11 @@ class TestOperator(unittest.TestCase):
 
     def test_post_order_traverse(self):
         mock_operator = Operator()
-        # apply should be called only once
-        with patch.object(Operator, "apply") as mocked_apply:
+        # execute should be called only once
+        with patch.object(Operator, "execute") as mocked_execute:
             mock_operator.post_order_traverse()
-            mocked_apply.assert_called_once()
+            mocked_execute.assert_called_once()
 
-    def test_apply(self):
+    def test_execute_not_implemented(self):
         with self.assertRaises(NotImplementedError):
-            self.operator.apply()
+            self.operator.execute()

@@ -88,7 +88,7 @@ class Operator:
     def post_order_traverse(self) -> None:
         for child in self.children:
             child.post_order_traverse()
-        self.apply()
+        self.execute()
 
-    def apply(self) -> None:
-        raise NotImplementedError("apply method must be implemented in the child class")
+    def execute(self) -> None:
+        raise NotImplementedError("execute method must be implemented in the child class")

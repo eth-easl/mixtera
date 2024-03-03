@@ -29,14 +29,14 @@ class TestSelect(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             Select("invalid_condition")
 
-    def test_apply_with_no_children(self):
+    def test_execute_with_no_children(self):
         self.select.mdc = MagicMock()
         self.select.mdc.get_index.return_value = {"value": "index_value"}
         self.select.condition.meet = MagicMock(return_value=True)
-        self.select.apply()
+        self.select.execute()
         self.assertEqual(self.select.results, ["index_value"])
 
-    def test_apply_with_one_child(self):
+    def test_execute_with_one_child(self):
         self.select.mdc = MagicMock()
         self.select.mdc.get_index.return_value = {"value": "index_value"}
         self.select.condition.meet = MagicMock(return_value=True)
