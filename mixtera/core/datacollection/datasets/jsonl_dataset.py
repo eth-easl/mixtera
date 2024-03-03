@@ -51,7 +51,6 @@ class JSONLDataset(Dataset):
         parsing_func: Callable[[str], str],
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
-        # TODO(#35): Instead of hardcoding the local filesystem, we will change this flow.
         with filesys_t.open_file(file, server_connection=server_connection) as text_file:
             last_line_read = 0
             last_r_start = -1

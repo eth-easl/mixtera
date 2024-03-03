@@ -14,7 +14,7 @@ class LocalFilesystem(AbstractFilesystem):
     ) -> Iterable[str]:
         if server_connection is not None:
             yield from server_connection.get_file_iterable(
-                cls.filesys_id, file_path if isinstance(file_path, str) else str(file_path)
+                cls.type_id, file_path if isinstance(file_path, str) else str(file_path)
             )
         else:
             with open(file_path, "r", encoding="utf-8") as f:
