@@ -47,8 +47,8 @@ class InMemoryDictionaryIndex(Index):
             for _0, feature_values in self._index.items():
                 for _1, dataset_ids in feature_values.items():
                     for _2, file_ids in dataset_ids.items():
-                        for file_key in file_ids.keys():
-                            file_ids[file_key] = ranges(file_ids[file_key])
+                        for file_key, row_ids in file_ids.items():
+                            file_ids[file_key] = ranges(row_ids)
 
     def is_compressed(self) -> bool:
         return self._is_compressed
