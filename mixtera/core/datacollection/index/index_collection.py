@@ -113,7 +113,7 @@ class InMemoryDictionaryIndex(Index):
     def keep_only_feature(self, feature_names: Union[str, list[str]]) -> None:
         if isinstance(feature_names, str):
             feature_names = [feature_names]
-        feature_names = set(feature_names)
+        feature_names = set(feature_names)  # type: ignore[assignment]
         to_delete = [key for key in self._index.keys() if key not in feature_names]
         for key in to_delete:
             del self._index[key]

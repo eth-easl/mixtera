@@ -147,7 +147,7 @@ class LocalDataCollection(MixteraDataCollection):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _insert_index_into_table(self, property_name: str, partial_index: dict[str, list[tuple[int, int, int]]]) -> int:
+    def _insert_index_into_table(self, property_name: str, partial_index: Index) -> int:
         query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
             VALUES (?, ?, ?, ?, ?, ?);"
         cur = self._connection.cursor()
