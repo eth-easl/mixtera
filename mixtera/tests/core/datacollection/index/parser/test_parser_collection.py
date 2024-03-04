@@ -104,7 +104,7 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         lines = [elem1, elem2, elem3, elem4]
         expected = {
             "language": {
-                "C": {0: {0: [(0, 2)]}},  # value with document and list of lines
+                "C": {0: {0: [(0, 2)]}},
                 "C++": {0: {0: [(0, 2)]}},
                 "CoffeeScript": {0: {0: [(0, 1)]}},
                 "PHP": {0: {0: [(1, 2)]}},

@@ -1,18 +1,17 @@
 import sqlite3
-from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Type
 
 import dill
 from loguru import logger
-from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
+from mixtera.core.datacollection import MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import Index, IndexFeatureValueType
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import defaultdict_to_dict, merge_dicts, numpy_to_native_type
+from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -26,8 +25,10 @@ class LocalDataCollection(MixteraDataCollection):
 
         self._properties: list[Property] = []
         self._datasets: list[Dataset] = []
-        # 1st level: Variable 2nd Level: Buckets for that Variable 3rd level: datasets 4th: files -> ranges
-        self._index: Index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_BASED)
+
+        # Index instantiations and parameters
+        self._index_type = IndexTypes.IN_MEMORY_DICT_BASED
+        self._index: Index = IndexFactory.create_index(self._index_type)
         self._metadata_factory = MetadataParserFactory()
 
         if not self._database_path.exists():
@@ -181,15 +182,15 @@ class LocalDataCollection(MixteraDataCollection):
 
         return -1
 
-    def _reformat_index(self, raw_indices: List) -> IndexType:
+    def _reformat_index(self, raw_indices: List) -> Index:
         # received from database: [(property_name, property_value, dataset_id, file_id, line_ids), ...]
         # converts to: {property_name: {property_value: {dataset_id: {file_id: [line_ids]}}}}
-        index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        index: Index = IndexFactory.create_index(self._index_type, pre_compressed=True)
         for prop_name, prop_val, dataset_id, file_id, line_start, line_end in raw_indices:
-            index[prop_name][prop_val][dataset_id][file_id] = [(line_start, line_end)]
+            index.append_index_rage(prop_name, prop_val, dataset_id, file_id, line_start, line_end)
         return index
 
-    def _read_index_from_database(self, property_name: Optional[str] = None) -> IndexType:
+    def _read_index_from_database(self, property_name: Optional[str] = None) -> Index:
         cur = self._connection.cursor()
         try:
             query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices"
@@ -199,11 +200,10 @@ class LocalDataCollection(MixteraDataCollection):
             else:
                 query += ";"
                 cur.execute(query)
-            results = cur.fetchall()
+            results = self._reformat_index(cur.fetchall())
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during selection: {err}")
-            results = []
-        results = self._reformat_index(results)
+            results = IndexFactory.create_index(self._index_type, pre_compressed=True)
         return results
 
     def check_dataset_exists(self, identifier: str) -> bool:
@@ -360,7 +360,7 @@ class LocalDataCollection(MixteraDataCollection):
         new_index = executor.run()
         self._insert_index_into_table(property_name, new_index)
 
-    def get_index(self, property_name: Optional[str] = None) -> Optional[IndexType]:
+    def get_index(self, property_name: Optional[str] = None) -> Optional[Index]:
         if property_name is None:
             logger.warning(
                 "No property name provided, returning all indices from database. ",
@@ -368,11 +368,12 @@ class LocalDataCollection(MixteraDataCollection):
             )
             self._index = self._read_index_from_database()
             return self._index
-        if property_name not in self._index:
+        if self._index.has_feature(property_name):
             # If the property is not in the index, it may be in the database, so we check it there
             # TODO(xiaozhe): user may also interested to force refresh the index from database.
-            self._index = merge_dicts(self._index, self._read_index_from_database(property_name))
-        if property_name not in self._index:
+            self._index.merge(self._read_index_from_database(property_name))
+        else:
             logger.warning(f"Property {property_name} not found in index, returning None.")
             return None
-        return self._index[property_name]
+        self._index.keep_only_feature(property_name)
+        return self._index

@@ -59,6 +59,31 @@ class Index(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
+    def append_index_rage(
+        self,
+        feature_name: str,
+        feature_value: Union[int, float, str],
+        dataset_id: int,
+        file_id: int,
+        low_bound: int,
+        high_bound: int,
+    ) -> None:
+        """
+        Appends a new range entry to the index. For efficiency reasons, it
+        is assumed that row the added row ranges are perfectly increasing (i.e.
+        can always be appended)
+
+        Args:
+          feature_name: the name of feature (e.g. 'language')
+          feature_value: the value of the feature (e.g. 'Italian')
+          dataset_id: the id of the dataset
+          file_id: the id of the file within the dataset
+          low_bound: the lower bound of an interval (inclusive)
+          high_bound: the higher bound of an interval (exclusive)
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
+    @abstractmethod
     def get_full_index(self, copy: bool = False) -> IndexType:
         """
         Return the full index. The index should always be compressed into ranges.
@@ -153,5 +178,29 @@ class Index(ABC):
         Returns:
             A list of keys to access the first level of the index via the
             `get_by_feature` method
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
+    @abstractmethod
+    def has_feature(self, feature_name: str) -> bool:
+        """
+        Checks if `feature_name` exists in the first level of the index.
+
+        Args:
+            feature_name: the name of the feature
+
+        Returns:
+            True if the feature exists in the index, False otherwise.
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
+    @abstractmethod
+    def keep_only_feature(self, feature_names: Union[str, list[str]]) -> None:
+        """
+        Discards all features that are not present in the `feature_names` parameter.
+
+        Args:
+            feature_names: can either be a list or a string literal. Indicates
+            which features to keep and which to discard.
         """
         raise NotImplementedError("Method must be implemented in subclass!")

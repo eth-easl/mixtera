@@ -86,7 +86,7 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
 
         index1._index = {
             "language": {
-                "C": {0: {0: [(0, 2)]}},  # value with document and list of lines
+                "C": {0: {0: [(0, 2)]}},
                 "C++": {0: {0: [(0, 2)]}},
                 "CoffeeScript": {0: {0: [(0, 1)]}},
                 "PHP": {0: {0: [(1, 2)]}},
@@ -96,7 +96,7 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
 
         index2._index = {
             "language": {
-                "C": {0: {1: [(0, 2)]}},  # value with document and list of lines
+                "C": {0: {1: [(0, 2)]}},
                 "C++": {0: {2: [(3, 5)]}},
                 "CoffeeScript": {1: {0: [(0, 1)]}},
                 "Java": {0: {0: [(0, 1)]}},

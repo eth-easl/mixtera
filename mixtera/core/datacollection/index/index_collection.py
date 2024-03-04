@@ -28,8 +28,17 @@ class InMemoryDictionaryIndex(Index):
     Represents an in memory dictionary class. This index exploits defaultdicts.
     """
 
-    def __init__(self) -> None:
-        self._is_compressed = False
+    def __init__(self, pre_compressed: bool = False) -> None:
+        """
+        Initializes an `InMemoryDictionaryIndex` instance
+
+        Args:
+            pre_compressed: if False, this starts as a regular non-compressed index
+            where scalar row indicators are added. `compress` needs to be called later
+            to reduce the row indicators to compact row ranges. If True, this is
+            readily an index where only row-ranges are allowed to be added.
+        """
+        self._is_compressed = pre_compressed
         self._index: defaultdict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
 
     def compress(self) -> None:
@@ -86,6 +95,29 @@ class InMemoryDictionaryIndex(Index):
             return
         self._index[feature_name][feature_value][dataset_id][file_id].append(row_number)
 
+    def append_index_rage(
+        self,
+        feature_name: str,
+        feature_value: Union[int, float, str],
+        dataset_id: int,
+        file_id: int,
+        low_bound: int,
+        high_bound: int,
+    ) -> None:
+        assert self._is_compressed, "You can only add ranges to a compressed index!"
+        self._index[feature_name][feature_value][dataset_id][file_id].append((low_bound, high_bound))
+
+    def has_feature(self, feature_name: str) -> bool:
+        return feature_name in self._index
+
+    def keep_only_feature(self, feature_names: Union[str, list[str]]) -> None:
+        if isinstance(feature_names, str):
+            feature_names = [feature_names]
+        feature_names = set(feature_names)
+        to_delete = [key for key in self._index.keys() if key not in feature_names]
+        for key in to_delete:
+            del self._index[key]
+
 
 class IndexTypes(Enum):
     """Contains the type of indexes supported by Mixtera"""
@@ -95,8 +127,8 @@ class IndexTypes(Enum):
 
 class IndexFactory:
     @staticmethod
-    def create_index(index_type: IndexTypes) -> Index:
+    def create_index(index_type: IndexTypes, **kwargs) -> Index:
         if index_type == IndexTypes.IN_MEMORY_DICT_BASED:
-            return InMemoryDictionaryIndex()
+            return InMemoryDictionaryIndex(**kwargs)
         logger.error(f"Mixtera does not support index type {index_type}!")
         raise NotImplementedError()
