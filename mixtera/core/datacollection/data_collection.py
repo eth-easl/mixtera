@@ -49,7 +49,12 @@ class MixteraDataCollection(ABC):
 
     @abstractmethod
     def register_dataset(
-        self, identifier: str, loc: str, dtype: Type[Dataset], parsing_func: Callable[[str], str]
+        self,
+        identifier: str,
+        loc: str,
+        dtype: Type[Dataset],
+        parsing_func: Callable[[str], str],
+        metadata_parser_type: str,
     ) -> bool:
         """
         This method registers a dataset in the MixteraDataCollection.
@@ -64,6 +69,7 @@ class MixteraDataCollection(ABC):
                 on the dataset type at hand. For example, for the JSONLDataset, every line
                 is processed with this function and it can be used to extract the actual
                 payload out of the metadata.
+            metadata_parser_type: the name of the metadata parser to be used for indexing
 
         Returns:
             Boolean indicating success.

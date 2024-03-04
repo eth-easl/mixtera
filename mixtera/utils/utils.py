@@ -11,6 +11,17 @@ def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
 
 
 def ranges(nums: List[int]) -> List[Tuple[int, int]]:
+    """
+    This method compresses a list of integers into a list of ranges (lower bound
+    inclusve, upper bound exclusive). E.g. [1,2,3,5,6] --> [(1,4), (5,7)].
+
+    Args:
+        nums: The original list of ranges to compress. This is a list of ints.
+
+    Returns:
+        A list of compressed ranges with the lower bound being inclusive and
+        the upper bound being exclusive.
+    """
     # Assumes nums is sorted and unique
     # Taken from https://stackoverflow.com/a/48106843
     gaps = [[s, e] for s, e in zip(nums, nums[1:]) if s + 1 < e]
@@ -34,7 +45,7 @@ def merge_defaultdicts(d1: defaultdict, d2: defaultdict) -> defaultdict:
 
 
 def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
-    if isinstance(ddict, defaultdict):
+    if isinstance(ddict, (defaultdict, dict)):
         ddict = {k: defaultdict_to_dict(v) for k, v in ddict.items()}
     return ddict
 
