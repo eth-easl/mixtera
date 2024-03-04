@@ -9,12 +9,13 @@ hide-toc: true
 ```{toctree}
 :caption: Getting Started
 :hidden:
-
 ```
 
 ```{toctree}
-:caption: Development
+:caption: Design & Development
 :hidden:
+
+design/query_processing
 
 ```
 
@@ -23,4 +24,5 @@ hide-toc: true
 :hidden:
 
 references/data_collection
+references/query
 ```
