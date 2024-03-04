@@ -95,7 +95,7 @@ class InMemoryDictionaryIndex(Index):
             return
         self._index[feature_name][feature_value][dataset_id][file_id].append(row_number)
 
-    def append_index_rage(
+    def append_index_range(
         self,
         feature_name: str,
         feature_value: Union[int, float, str],

@@ -6,7 +6,7 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import Index, IndexFeatureValueType
+from mixtera.core.datacollection.index import Index
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
@@ -147,7 +147,7 @@ class LocalDataCollection(MixteraDataCollection):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _insert_index_into_table(self, property_name: str, partial_index: IndexFeatureValueType) -> int:
+    def _insert_index_into_table(self, property_name: str, partial_index: dict[str, list[tuple[int, int, int]]]) -> int:
         query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
             VALUES (?, ?, ?, ?, ?, ?);"
         cur = self._connection.cursor()
@@ -187,7 +187,7 @@ class LocalDataCollection(MixteraDataCollection):
         # converts to: {property_name: {property_value: {dataset_id: {file_id: [line_ids]}}}}
         index: Index = IndexFactory.create_index(self._index_type, pre_compressed=True)
         for prop_name, prop_val, dataset_id, file_id, line_start, line_end in raw_indices:
-            index.append_index_rage(prop_name, prop_val, dataset_id, file_id, line_start, line_end)
+            index.append_index_range(prop_name, prop_val, dataset_id, file_id, line_start, line_end)
         return index
 
     def _read_index_from_database(self, property_name: Optional[str] = None) -> Index:
@@ -368,11 +368,14 @@ class LocalDataCollection(MixteraDataCollection):
             )
             self._index = self._read_index_from_database()
             return self._index
-        if self._index.has_feature(property_name):
+        if not self._index.has_feature(property_name):
             # If the property is not in the index, it may be in the database, so we check it there
             # TODO(xiaozhe): user may also interested to force refresh the index from database.
+            if not self._index.is_compressed():
+                self._index.compress()
+                logger.warning("Have seen request to merge non-compressed master index with secondary compressed index")
             self._index.merge(self._read_index_from_database(property_name))
-        else:
+        if not self._index.has_feature(property_name):
             logger.warning(f"Property {property_name} not found in index, returning None.")
             return None
         self._index.keep_only_feature(property_name)

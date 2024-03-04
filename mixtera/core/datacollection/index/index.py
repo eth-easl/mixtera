@@ -59,7 +59,7 @@ class Index(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def append_index_rage(
+    def append_index_range(
         self,
         feature_name: str,
         feature_value: Union[int, float, str],
