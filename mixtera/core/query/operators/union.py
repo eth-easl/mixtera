@@ -20,5 +20,5 @@ class Union(Operator):
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
         self.results = flatten([x.results for x in self.children])
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return "union<>()"

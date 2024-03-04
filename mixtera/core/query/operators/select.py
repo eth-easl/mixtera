@@ -14,7 +14,7 @@ class Condition:
         self.operator = condition_tuple[1]
         self.value = condition_tuple[2]
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"{self.field} {self.operator} {self.value}"
 
     def meet(self, x: Any) -> bool:
@@ -61,9 +61,6 @@ class Select(Operator):
             self.results = []
             return
         self.results = [index[x] for i, x in enumerate(index) if self.condition.meet(x)]
-
-    def __repr__(self) -> str:
-        return f"select<{self.mdc}>({self.condition})"
 
     def __str__(self) -> str:
         return f"select<{self.mdc}>({self.condition})"

@@ -20,5 +20,5 @@ class Intersection(Operator):
         # Will do it in a following PR.
         self.results = [x for x in self.children[0].results if x in self.children[1].results]
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return "intersection<>()"

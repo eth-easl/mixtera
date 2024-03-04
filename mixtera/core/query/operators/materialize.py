@@ -22,5 +22,5 @@ class Materialize(Operator):
         # Leave also the streaming logic for future.
         self.results = list(self.mdc.get_samples_from_ranges(res) for res in self.results)
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"materialize<{self.mdc}>"

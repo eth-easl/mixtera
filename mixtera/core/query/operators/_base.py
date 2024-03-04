@@ -23,7 +23,7 @@ class Operator:
         # they will not touch the underlying data collection.
         self.mdc: Optional[MixteraDataCollection] = None
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"{self.__class__.__name__}"
 
     @property
