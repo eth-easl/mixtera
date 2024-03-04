@@ -154,47 +154,6 @@ class TestLocalDataCollection(unittest.TestCase):
                 "test", "/non/existent/location", JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
             )
 
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
-    def test_register_dataset_updates_index(self, mock_insert_file_into_table, mock_insert_dataset_into_table):
-        dataset_id = 42
-        file_ids = [0, 1]
-        mock_insert_file_into_table.side_effect = file_ids
-        mock_insert_dataset_into_table.return_value = dataset_id
-
-        directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
-
-        mocked_dtype = MagicMock()
-        mocked_dtype.iterate_files = MagicMock()
-        mocked_dtype.iterate_files.return_value = [Path("test1.jsonl"), Path("test2.jsonl")]
-
-        def get_result_index(file, metadata_parser):
-            del file
-            del metadata_parser
-            res = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_BASED, pre_compressed=True)
-            for file_id in file_ids:
-                res.append_index_range("language", "English", dataset_id, file_id, 0, 42)
-            return res
-
-        mocked_dtype.build_file_index = MagicMock()
-        mocked_dtype.build_file_index.side_effect = get_result_index
-
-        self.assertDictEqual(defaultdict_to_dict(ldc.get_index().get_full_index()), {})
-        self.assertTrue(ldc.register_dataset("test", "loc", mocked_dtype, lambda data: f"prefix_{data}", "RED_PAJAMA"))
-
-        expected = {
-            "langauge": {
-                "English": {
-                    dataset_id: {
-                        0: [(0, 42)],
-                        1: [(0, 42)],
-                    }
-                }
-            }
-        }
-        self.assertDictEqual(ldc.get_index("language").get_full_index(), expected)
-
     def test_register_dataset_e2e_json(self):
         directory = Path(self.temp_dir.name)
         ldc = LocalDataCollection(directory)

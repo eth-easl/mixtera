@@ -1,7 +1,7 @@
 from collections import defaultdict
 from copy import deepcopy
 from enum import Enum
-from typing import Union
+from typing import Any, Union
 
 from loguru import logger
 from mixtera.core.datacollection.index import Index, IndexDatasetEntryType, IndexFeatureValueType, IndexType
@@ -127,7 +127,7 @@ class IndexTypes(Enum):
 
 class IndexFactory:
     @staticmethod
-    def create_index(index_type: IndexTypes, **kwargs) -> Index:
+    def create_index(index_type: IndexTypes, **kwargs: Any) -> Index:
         if index_type == IndexTypes.IN_MEMORY_DICT_BASED:
             return InMemoryDictionaryIndex(**kwargs)
         logger.error(f"Mixtera does not support index type {index_type}!")
