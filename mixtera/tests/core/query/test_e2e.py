@@ -6,6 +6,7 @@ from pathlib import Path
 
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.datacollection.local import LocalDataCollection
+from mixtera.core.filesystem import LocalFilesystem
 from mixtera.core.query import Query
 
 
@@ -56,7 +57,9 @@ class TestQueryE2E(unittest.TestCase):
             return f"prefix_{data}"
 
         self.parsing_func_source = inspect.getsource(parsing_func)
-        ldc.register_dataset("test_dataset", str(self.directory), JSONLDataset, parsing_func, "RED_PAJAMA")
+        ldc.register_dataset(
+            "test_dataset", str(self.directory), JSONLDataset, LocalFilesystem, parsing_func, "RED_PAJAMA"
+        )
         files = ldc._get_all_files()
         self.file1_id = [file_id for file_id, _, _, path in files if "temp1.jsonl" in path][0]
         self.file2_id = [file_id for file_id, _, _, path in files if "temp2.jsonl" in path][0]

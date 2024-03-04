@@ -5,7 +5,7 @@ from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets.dataset import Dataset
 from mixtera.core.datacollection.index import MetadataParser
 from mixtera.core.filesystem import AbstractFilesystem
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class CrossaintDataset(Dataset):

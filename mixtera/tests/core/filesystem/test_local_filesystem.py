@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
 from mixtera.core.filesystem import LocalFilesystem
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class TestLocalFilesystem(unittest.TestCase):

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 from mixtera.core.datacollection.local import LocalDataCollection
-from mixtera.server.server_task import ServerTask
+from mixtera.network.server.server_task import ServerTask
 from mixtera.utils.network_utils import read_int, read_pickeled_object, read_utf8_string, write_int, write_utf8_string
 
 ID_BYTES = 8

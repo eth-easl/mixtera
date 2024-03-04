@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 from loguru import logger
-from mixtera.server import MixteraServer
+from mixtera.network.server import MixteraServer
 
 
 def setup_argparser() -> argparse.ArgumentParser:

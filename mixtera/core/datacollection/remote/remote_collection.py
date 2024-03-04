@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Optional, Type
 from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
+from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing.execution_mode import ExecutionMode
-from mixtera.server.server import ID_BYTES, SAMPLE_SIZE_BYTES
-from mixtera.server.server_task import ServerTask
+from mixtera.network.server.server import ID_BYTES, SAMPLE_SIZE_BYTES
+from mixtera.network.server.server_task import ServerTask
 from mixtera.utils import run_in_async_loop_and_return
 from mixtera.utils.network_utils import read_int, read_utf8_string, write_int, write_pickeled_object, write_utf8_string
 
@@ -202,7 +203,13 @@ class RemoteDataCollection(MixteraDataCollection):
         )
 
     def register_dataset(
-        self, identifier: str, loc: str, dtype: Type[Dataset], parsing_func: Callable[[str], str]
+        self,
+        identifier: str,
+        loc: str,
+        dtype: Type[Dataset],
+        filesystem_t: Type[AbstractFilesystem],
+        parsing_func: Callable[[str], str],
+        metadata_parser_type: str,
     ) -> bool:
         raise NotImplementedError()
 

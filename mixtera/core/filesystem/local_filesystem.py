@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Generator, Iterable, Optional
 
 from mixtera.core.filesystem import AbstractFilesystem
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class LocalFilesystem(AbstractFilesystem):
