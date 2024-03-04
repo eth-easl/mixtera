@@ -1,3 +1,4 @@
+from loguru import logger
 from mixtera.core.query.query import Query
 from mixtera.utils import flatten
 
@@ -18,6 +19,9 @@ class Union(Operator):
 
     def execute(self) -> None:
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
+        logger.warning(
+            "Union operator only supports bag semantics for now, meaning that it will not remove duplicates."
+        )
         self.results = flatten([x.results for x in self.children])
 
     def __str__(self) -> str:

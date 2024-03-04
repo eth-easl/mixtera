@@ -56,7 +56,7 @@ class TestSelect(unittest.TestCase):
 
     def test_repr(self):
         self.select.mdc = "mdc"
-        self.assertEqual(repr(self.select), "select<mdc>(field operator value)")
+        self.assertEqual(str(self.select), "select<mdc>(field operator value)")
 
 
 class TestCondition(unittest.TestCase):

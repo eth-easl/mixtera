@@ -54,7 +54,7 @@ class Select(Operator):
     def execute(self) -> None:
         assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
         assert self.mdc is not None, "Select operator must have a MixteraDataCollection"
-        # (todo: xiaozhe): In a future PR, we may want to only load the
+        # TODO(#42): In a future PR, we may want to only load the
         # index that meets the condition, instead of loading the entire index
         # and then filter the results.
         if (index := self.mdc.get_index(self.condition.field)) is None:

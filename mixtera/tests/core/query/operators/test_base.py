@@ -15,7 +15,7 @@ class TestOperator(unittest.TestCase):
         self.assertIsNone(self.operator.mdc)
 
     def test_repr(self):
-        self.assertEqual(repr(self.operator), "Operator")
+        self.assertEqual(str(self.operator), "Operator")
 
     def test_set_datacollection(self):
         mock_data_collection = MagicMock(spec=MixteraDataCollection)

@@ -79,6 +79,8 @@ class TestQueryE2E(unittest.TestCase):
         query_2 = query_2.union(query_1)
         query_result = query_2.execute(chunk_size=1)
         res = list(query_result)
+        # TODO(#41): We should update the test case once we have the
+        # deduplication operator and `deduplicate` parameter in Union
         self.assertEqual(
             res, [[{1: {self.file1_id: [(0, 2)]}}], [{1: {self.file1_id: [(1, 2)], self.file2_id: [(0, 1)]}}]]
         )

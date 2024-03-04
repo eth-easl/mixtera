@@ -29,4 +29,4 @@ class TestUnion(unittest.TestCase):
         self.assertIn("result5", self.union.results)
 
     def test_repr(self):
-        self.assertEqual(repr(self.union), "union<>()")
+        self.assertEqual(str(self.union), "union<>()")

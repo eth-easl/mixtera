@@ -367,7 +367,7 @@ class LocalDataCollection(MixteraDataCollection):
             return self._index
         if property_name not in self._index:
             # If the property is not in the index, it may be in the database, so we check it there
-            # TODO(xiaozhe): user may also interested to force refresh the index from database.
+            # TODO(#43): user may also interested to force refresh the index from database.
             self._index = merge_defaultdicts(self._index, self._read_index_from_database(property_name))
         if property_name not in self._index:
             logger.warning(f"Property {property_name} not found in index, returning None.")

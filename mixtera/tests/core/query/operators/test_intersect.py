@@ -40,7 +40,7 @@ class TestIntersection(unittest.TestCase):
             self.intersection.execute()
 
     def test_repr(self):
-        self.assertEqual(repr(self.intersection), "intersection<>()")
+        self.assertEqual(str(self.intersection), "intersection<>()")
 
 
 if __name__ == "__main__":

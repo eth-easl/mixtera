@@ -1,3 +1,4 @@
+from loguru import logger
 from mixtera.core.query.query import QueryPlan
 
 from ._base import Operator
@@ -16,8 +17,12 @@ class Intersection(Operator):
 
     def execute(self) -> None:
         assert len(self.children) == 2, f"Intersection operator must have 2 children, got {len(self.children)}"
-        # (todo: Xiaozhe): This is a dummy implementation, we need to implement the real intersection logic.
+        # TODO(#39): This is a dummy implementation, we need to implement the real intersection logic.
         # Will do it in a following PR.
+        logger.warning(
+            "Intersection operator is not implemented properly yet, "
+            "returning the intersection of the results of the two queries."
+        )
         self.results = [x for x in self.children[0].results if x in self.children[1].results]
 
     def __str__(self) -> str:

@@ -39,4 +39,4 @@ class TestMaterialize(unittest.TestCase):
     def test_repr(self):
         mdc_mock = MagicMock()
         self.materialize.mdc = mdc_mock
-        self.assertEqual(repr(self.materialize), f"materialize<{mdc_mock}>")
+        self.assertEqual(str(self.materialize), f"materialize<{mdc_mock}>")
