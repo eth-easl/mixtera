@@ -1,7 +1,6 @@
 from typing import Any, Optional
 
 from loguru import logger
-from mixtera.core.datacollection.index import Index
 from mixtera.core.datacollection.index.parser import MetadataParser
 
 
@@ -27,14 +26,6 @@ class RedPajamaMetadataParser(MetadataParser):
             else:
                 # TODO(#11): Support numerical buckets, not just categorical
                 self._index.append_entry(index_field, value, self.dataset_id, self.file_id, line_number)
-
-    def get_index(self) -> Index:
-        if not self._index.is_compressed():
-            self.mark_complete()
-            logger.warning(
-                "Retrieving index without first marking parsing as complete. Index will be transparently compressed!"
-            )
-        return self._index
 
 
 class MetadataParserFactory:

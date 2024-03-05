@@ -48,7 +48,7 @@ class InMemoryDictionaryIndex(Index, ABC):
         self._index: defaultdict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
 
     @abstractmethod
-    def compress(self) -> None:
+    def compress(self) -> "InMemoryDictionaryRangeIndex":
         """
         Compresses the internal index, reducing contiguous line ranges to spans.
         E.g. [1,2,3,5,6] --> [(1,4), (5,7)]. All modifications are done in place
@@ -80,6 +80,10 @@ class InMemoryDictionaryIndex(Index, ABC):
         return list(self._index.keys())
 
     def merge(self, other: Index, copy_other: bool = False) -> None:
+        assert isinstance(other, self.__class__), (
+            "You cannot merge two indices of differnt types: "
+            f"<left: {self.__class__}> and <right: {other.__class__}>"
+        )
         other_raw_dict = other.get_full_index(copy=copy_other)
         self._index = merge_dicts(self._index, other_raw_dict)
 
@@ -101,7 +105,7 @@ class InMemoryDictionaryRangeIndex(InMemoryDictionaryIndex):
     as opposed to lists of row indices.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._is_compressed = True
 

@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from mixtera.core.datacollection.index import Index
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryIndex
 
 
 class MetadataParser(ABC):
@@ -28,7 +27,8 @@ class MetadataParser(ABC):
         """
         self.dataset_id: int = dataset_id
         self.file_id: int = file_id
-        self._index: Index = IndexFactory.create_index(index_type)
+        self._parsing_complete = False
+        self._index: InMemoryDictionaryIndex = IndexFactory.create_index(index_type)
 
     @abstractmethod
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
@@ -42,15 +42,27 @@ class MetadataParser(ABC):
         """
         raise NotImplementedError()
 
+    def get_index(self) -> InMemoryDictionaryIndex:
+        """
+        Returns the fully parsed metadata index. This method should only be called
+        once the index has been marked as complete.
+        """
+        assert self._parsing_complete, (
+            "Retrieving index without first marking parsing as complete. " "Index will be transparently compressed!"
+        )
+        return self._index
+
     def mark_complete(self) -> None:
         """
         Compresses the underlying index, allowing it to be exposed for reading.
         """
-        self._index.compress()
+        if not self._parsing_complete:
+            self._parsing_complete = True
+            self._index = self._index.compress()
 
-    @abstractmethod
-    def get_index(self) -> Index:
+    def is_parsing_complete(self) -> bool:
         """
-        Returns the fully parsed metadata index
+        True if the parsing is complete, and the underlying index has been
+        converted to ranges.
         """
-        raise NotImplementedError()
+        return self._parsing_complete

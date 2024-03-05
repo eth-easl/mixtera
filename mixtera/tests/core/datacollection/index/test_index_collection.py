@@ -43,11 +43,11 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
             },
             "publication_date": {"val1": {0: {0: [2]}}},
         }
-        C_sub_dict = target_index["language"]["C"].copy()
+        c_sub_dict = target_index["language"]["C"].copy()
         val1_sub_dict = target_index["publication_date"]["val1"].copy()
 
         index._index = target_index.copy()
-        self.assertEqual(index.get_by_feature_value("language", "C"), C_sub_dict)
+        self.assertEqual(index.get_by_feature_value("language", "C"), c_sub_dict)
         self.assertEqual(index.get_by_feature_value("publication_date", "val1"), val1_sub_dict)
         self.assertEqual(index.get_by_feature_value("non_existent", "non_existent"), {})
         self.assertEqual(index.get_by_feature_value("language", "non_existent"), {})

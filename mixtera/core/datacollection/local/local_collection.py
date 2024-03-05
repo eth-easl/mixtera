@@ -7,7 +7,7 @@ from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import Index
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
@@ -27,8 +27,7 @@ class LocalDataCollection(MixteraDataCollection):
         self._datasets: list[Dataset] = []
 
         # Index instantiations and parameters
-        self._index_type = IndexTypes.IN_MEMORY_DICT_BASED
-        self._index: Index = IndexFactory.create_index(self._index_type)
+        self._index: Index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         self._metadata_factory = MetadataParserFactory()
 
         if not self._database_path.exists():
@@ -90,7 +89,7 @@ class LocalDataCollection(MixteraDataCollection):
             metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
             dtype.build_file_index(file, metadata_parser)
             metadata_parser.mark_complete()
-            pre_index: Index = metadata_parser.get_index()
+            pre_index = metadata_parser.get_index()
             for property_name in pre_index.get_all_features():
                 self._insert_index_into_table(property_name, pre_index.get_by_feature(feature_name=property_name))
         return True
@@ -182,15 +181,15 @@ class LocalDataCollection(MixteraDataCollection):
 
         return -1
 
-    def _reformat_index(self, raw_indices: List) -> Index:
+    def _reformat_index(self, raw_indices: List) -> InMemoryDictionaryRangeIndex:
         # received from database: [(property_name, property_value, dataset_id, file_id, line_ids), ...]
         # converts to: {property_name: {property_value: {dataset_id: {file_id: [line_ids]}}}}
-        index: Index = IndexFactory.create_index(self._index_type, pre_compressed=True)
+        index: InMemoryDictionaryRangeIndex = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         for prop_name, prop_val, dataset_id, file_id, line_start, line_end in raw_indices:
-            index.append_index_range(prop_name, prop_val, dataset_id, file_id, line_start, line_end)
+            index.append_entry(prop_name, prop_val, dataset_id, file_id, (line_start, line_end))
         return index
 
-    def _read_index_from_database(self, property_name: Optional[str] = None) -> Index:
+    def _read_index_from_database(self, property_name: Optional[str] = None) -> InMemoryDictionaryRangeIndex:
         cur = self._connection.cursor()
         try:
             query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices"
@@ -203,7 +202,7 @@ class LocalDataCollection(MixteraDataCollection):
             results = self._reformat_index(cur.fetchall())
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during selection: {err}")
-            results = IndexFactory.create_index(self._index_type, pre_compressed=True)
+            results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         return results
 
     def check_dataset_exists(self, identifier: str) -> bool:
@@ -360,7 +359,7 @@ class LocalDataCollection(MixteraDataCollection):
         new_index = executor.run()
         self._insert_index_into_table(property_name, new_index)
 
-    def get_index(self, property_name: Optional[str] = None) -> Optional[Index]:
+    def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:
         if property_name is None:
             logger.warning(
                 "No property name provided, returning all indices from database. ",
@@ -371,9 +370,6 @@ class LocalDataCollection(MixteraDataCollection):
         if not self._index.has_feature(property_name):
             # If the property is not in the index, it may be in the database, so we check it there
             # TODO(xiaozhe): user may also interested to force refresh the index from database.
-            if not self._index.is_compressed():
-                self._index.compress()
-                logger.warning("Have seen request to merge non-compressed master index with secondary compressed index")
             self._index.merge(self._read_index_from_database(property_name))
         if not self._index.has_feature(property_name):
             logger.warning(f"Property {property_name} not found in index, returning None.")

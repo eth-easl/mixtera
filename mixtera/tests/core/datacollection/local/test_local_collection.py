@@ -512,7 +512,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     @patch("mixtera.core.datacollection.local.LocalDataCollection._read_index_from_database")
     def test_get_index(self, mock_read_index_from_database: MagicMock):
-        target_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_BASED, pre_compressed=True)
+        target_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
         target_index._index = {"property1": "value1", "property2": "value2"}
 
         mock_read_index_from_database.return_value = target_index
