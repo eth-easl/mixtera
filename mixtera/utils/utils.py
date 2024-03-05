@@ -50,16 +50,8 @@ def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
     return ddict
 
 
-def run_in_async_loop_and_return(call: Any) -> Any:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(call)
-    finally:
-        loop.close()
-
-    return result
-
+def run_async_until_complete(call: Any) -> Any:
+    return asyncio.get_event_loop().run_until_complete(call)
 
 def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
     # TODO(MaxiBoether): rewrite this better

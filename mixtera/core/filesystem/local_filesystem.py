@@ -1,8 +1,10 @@
 from pathlib import Path
-from typing import Generator, Iterable, Optional
+from typing import Generator, Iterable, Optional, TYPE_CHECKING
 
 from mixtera.core.filesystem import AbstractFilesystem
-from mixtera.network.connection import ServerConnection
+
+if TYPE_CHECKING:
+    from mixtera.network.connection import ServerConnection
 
 
 class LocalFilesystem(AbstractFilesystem):
@@ -10,9 +12,10 @@ class LocalFilesystem(AbstractFilesystem):
 
     @classmethod
     def get_file_iterable(
-        cls, file_path: str | Path, server_connection: Optional[ServerConnection] = None
+        cls, file_path: str | Path, server_connection: Optional["ServerConnection"] = None
     ) -> Iterable[str]:
         if server_connection is not None:
+            # TODO(create issue): We currently transfer the entire file, instead of parsing the ranges at server. Not sure what we want to do here.
             yield from server_connection.get_file_iterable(
                 cls.type_id, file_path if isinstance(file_path, str) else str(file_path)
             )

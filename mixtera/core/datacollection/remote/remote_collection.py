@@ -8,192 +8,51 @@ from mixtera.core.datacollection import IndexType, MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing.execution_mode import ExecutionMode
+from mixtera.network.connection import ServerConnection
 from mixtera.network.server.server import ID_BYTES, SAMPLE_SIZE_BYTES
-from mixtera.network.server.server_task import ServerTask
-from mixtera.utils import run_in_async_loop_and_return
+from mixtera.network.server_task import ServerTask
+from mixtera.utils import run_async_until_complete
 from mixtera.utils.network_utils import read_int, read_utf8_string, write_int, write_pickeled_object, write_utf8_string
+from mixtera.core.query import  RemoteQueryResult
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection import PropertyType
+    from mixtera.core.query import QueryResult, Query
 
 
 class RemoteDataCollection(MixteraDataCollection):
 
     def __init__(self, host: str, port: int, prefetch_buffer_size: int) -> None:
+        self._server_connection = ServerConnection(host, port)
         self._host = host
         self._port = port
-        self._prefetch_buffer_size = prefetch_buffer_size
-        self._data_queue: Queue[str] = Queue(maxsize=prefetch_buffer_size)
-        self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._loop_started_event = threading.Event()  # Signal that the loop is running
 
-        if self._prefetch_buffer_size < 1:
-            raise RuntimeError(f"prefetch_buffer_size = {self._prefetch_buffer_size} < 1")
 
-    def _start_async_loop(self) -> None:
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-        self._loop_started_event.set()
-        self._loop.run_forever()
+    def stream_query_results(self, query_result: "QueryResult", tunnel_via_server: bool = False) -> Generator[str, None, None]:
+        yield from MixteraDataCollection._stream_query_results(query_result, self._server_connection if tunnel_via_server else None)
 
-    def _stop_async_loop(self) -> None:
-        if self._loop is not None:
-            self._loop.call_soon_threadsafe(self._loop.stop)
+    def is_remote(self) -> bool:
+        return True
 
-        if self._thread is not None:
-            self._thread.join()
-
-        self._thread = None
-
-    async def _connect_to_server(self) -> tuple[Optional[asyncio.StreamReader], Optional[asyncio.StreamWriter]]:
-        try:
-            logger.debug("Connecting to server.")
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(self._host, self._port), timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.error(f"Connection to {self._host}:{self._port} timed out.")
-            return None, None
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Failed to connect to {self._host}:{self._port}. Is the server running?: {e}")
-            return None, None
-
-        logger.debug("Connected!")
-
-        return reader, writer
-
-    async def _fetch_data_async(self, query_id: int, node_id: int, worker_id: int) -> None:
-        assert self._loop is not None
-
-        reader, writer = await self._connect_to_server()
-
-        if reader is None or writer is None:
-            await self._loop.run_in_executor(None, self._data_queue.put, None)
-            return
-
-        # Announce we want to stream data
-        await write_int(int(ServerTask.STREAM_DATA), ID_BYTES, writer)
-
-        # Announce metadata
-        await write_int(query_id, ID_BYTES, writer, drain=False)
-        await write_int(node_id, ID_BYTES, writer, drain=False)
-        await write_int(worker_id, ID_BYTES, writer)
-
-        try:
-            while not self._stop_event.is_set():
-                # In the future, we might night custom logic using read_bytes here, if samples are not just strings
-                if (sample := await read_utf8_string(SAMPLE_SIZE_BYTES, reader)) is not None:
-                    await self._loop.run_in_executor(None, self._data_queue.put, sample)
-                else:
-                    break
-
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"There was an exception in the asyncio event loop!: {e}")
-            logger.exception(e)
-        finally:
-            try:
-                logger.info("Closing writer.")
-                writer.close()
-                await asyncio.wait_for(writer.wait_closed(), timeout=5)
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error(
-                    "Error while closing writer. This may be related to the previous error, "
-                    + f"for example if the server crashed: {e}"
-                )
-                logger.exception(e)
-            finally:
-                logger.info("Connections closed.")
-                await self._loop.run_in_executor(None, self._data_queue.put, None)  # Sentinel value
-
-    def _start_fetching_data_for_query(self, query_id: int, node_id: int, worker_id: int) -> None:
-        if self._thread is not None:
-            # we might need multiple threads if RDCs are shared
-            raise RuntimeError("RemoteDataCollection currently does not support multiple queries in parallel.")
-
-        self._thread = threading.Thread(target=self._start_async_loop)
-        self._thread.start()
-        self._loop_started_event.wait()  # wait for the event loop to run
-        assert self._loop is not None
-        asyncio.run_coroutine_threadsafe(self._fetch_data_async(query_id, node_id, worker_id), self._loop)
-
-    def stream_query_results(self, query_id: int, worker_id: int, node_id: int = 0) -> Generator[str, None, None]:
-        self._start_fetching_data_for_query(query_id, node_id, worker_id)
-
-        while not (self._stop_event.is_set() and self._data_queue.empty()):
-            try:
-                data_chunk = self._data_queue.get(timeout=1.0)
-            except Empty:
-                continue  # while loop breaks by condition
-
-            if data_chunk is None:
-                # Set the event for shutting down the coroutine loop and wait for it to finish
-                self._stop_event.set()
-                self._stop_async_loop()
-                continue  # outer while loop ends afterwards
-
-            yield data_chunk
-
-    async def _register_query(self, query: Any, training_id: str, num_nodes: int, num_workers_per_node: int) -> int:
-        reader, writer = await self._connect_to_server()
-
-        if reader is None or writer is None:
-            return -1
-
-        # Announce we want to register a query
-        await write_int(int(ServerTask.REGISTER_QUERY), ID_BYTES, writer)
-
-        # Announce training ID
-        await write_utf8_string(training_id, SAMPLE_SIZE_BYTES, writer)
-
-        # Announce metadata
-        await write_int(num_nodes, ID_BYTES, writer, drain=False)
-        await write_int(num_workers_per_node, ID_BYTES, writer)
-
-        # Announce query
-        await write_pickeled_object(query, SAMPLE_SIZE_BYTES, writer)
-
-        query_id = await read_int(ID_BYTES, reader)
-        logger.debug(f"Got query id {query_id} from server.")
-        return query_id
-
-    # TODO(MaxiBoether): Change Query type accordingly
-    def register_query(self, query: Any, training_id: str, num_workers_per_node: int, num_nodes: int = 1) -> int:
-        if (
-            query_id := run_in_async_loop_and_return(
-                self._register_query(query, training_id, num_nodes, num_workers_per_node)
-            )
-        ) < 0:
+    def execute_query_at_server(self, query: "Query", chunk_size: int) -> RemoteQueryResult:
+        if (query_id := self._server_connection.execute_query(query, chunk_size)) < 0:
             raise RuntimeError("Could not register query, got back invalid ID from server!")
 
-        logger.info(f"Registered query with query id {query_id} for training {training_id}")
+        logger.info(f"Registered query with query id {query_id} for training {query.training_id}")
 
-        return query_id
+        return RemoteQueryResult(self._server_connection, query_id)
 
-    async def _get_query_id(self, training_id: str) -> int:
-        reader, writer = await self._connect_to_server()
 
-        if reader is None or writer is None:
-            return -1
-
-        # Announce we want to get the query id
-        await write_int(int(ServerTask.GET_QUERY_ID), ID_BYTES, writer)
-
-        # Announce training ID
-        await write_utf8_string(training_id, SAMPLE_SIZE_BYTES, writer)
-        query_id = await read_int(ID_BYTES, reader, timeout=30)
-        logger.debug(f"Got query id {query_id} from server.")
-        return query_id
-
-    def get_query_id(self, training_id: str) -> int:
+    def get_query_result(self, training_id: str) -> "RemoteQueryResult":
         logger.info(
             "Obtaining query id from server. This may take some time if primary node has not registered the query yet."
         )
-        if (query_id := run_in_async_loop_and_return(self._get_query_id(training_id))) < 0:
+        if (query_id := self._server_connection.get_query_id(training_id)) < 0:
             raise RuntimeError("Could not register query, got back invalid ID from server!")
 
         logger.info(f"Got query id {query_id} for training {training_id}")
 
-        return query_id
+        return RemoteQueryResult(self._server_connection, query_id)
 
     def get_samples_from_ranges(
         self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]

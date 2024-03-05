@@ -1,14 +1,16 @@
 import itertools
 import json
 from pathlib import Path
-from typing import Callable, Iterable, Optional, Type
+from typing import Callable, Iterable, Optional, Type, TYPE_CHECKING
 
 from loguru import logger
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import MetadataParser
 from mixtera.core.filesystem import AbstractFilesystem
-from mixtera.network.connection import ServerConnection
+
+if TYPE_CHECKING:
+    from mixtera.network.connection import ServerConnection
 
 
 class JSONLDataset(Dataset):
@@ -38,7 +40,7 @@ class JSONLDataset(Dataset):
         ranges_per_file: dict[str, list[tuple[int, int]]],
         filesys_t: Type[AbstractFilesystem],
         parsing_func: Callable[[str], str],
-        server_connection: Optional[ServerConnection],
+        server_connection: Optional["ServerConnection"],
     ) -> Iterable[str]:
         for file, range_list in ranges_per_file.items():
             yield from JSONLDataset._read_ranges_from_file(file, filesys_t, range_list, parsing_func, server_connection)
@@ -49,7 +51,7 @@ class JSONLDataset(Dataset):
         filesys_t: Type[AbstractFilesystem],
         range_list: list[tuple[int, int]],
         parsing_func: Callable[[str], str],
-        server_connection: Optional[ServerConnection],
+        server_connection: Optional["ServerConnection"],
     ) -> Iterable[str]:
         with filesys_t.open_file(file, server_connection=server_connection) as text_file:
             last_line_read = 0

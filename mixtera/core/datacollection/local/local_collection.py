@@ -2,7 +2,7 @@ import sqlite3
 import threading
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Generator, Iterable, List, Optional, Type
+from typing import Any, Callable, Generator, Iterable, List, Optional, Type, TYPE_CHECKING
 
 import dill
 from loguru import logger
@@ -14,9 +14,8 @@ from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type, wait_for_key_in_dict
 
-# TODO(#): Use actual query instead of dict of ranges
-QueryType = dict[int, dict[int, list[tuple[int, int]]]]
-
+if TYPE_CHECKING:
+    from mixtera.core.query import QueryResult, Query, LocalQueryResult
 
 class LocalDataCollection(MixteraDataCollection):
 
@@ -40,7 +39,7 @@ class LocalDataCollection(MixteraDataCollection):
             self._connection = sqlite3.connect(self._database_path)
 
         self._queries_lock = threading.Lock()
-        self._queries: list[tuple[QueryType, int, int]] = []  # (query, num nodes, num workers per node)
+        self._queries: list[tuple[Query, int]] = []  # (query, num nodes, num workers per node)
         self._training_query_map: dict[str, int] = {}
 
     def _init_database(self) -> sqlite3.Connection:
@@ -333,7 +332,7 @@ class LocalDataCollection(MixteraDataCollection):
         if not isinstance(result, int):
             raise RuntimeError(f"Filesystem type {result} for dataset {did} is not an int")
 
-        return AbstractFilesystem.from_type_id(result)
+        return AbstractFilesystem.from_id(result)
 
     def _get_file_path_by_id(self, fid: int) -> str:
         try:
@@ -349,7 +348,35 @@ class LocalDataCollection(MixteraDataCollection):
             raise RuntimeError(f"Could not get file path by id for file id {fid}")
 
         return result[0]
+    
+    def is_remote(self) -> bool:
+        return False
 
+    def stream_query_results(self, query_result: "QueryResult", tunnel_via_server: bool = False) -> Generator[str, None, None]:
+        if tunnel_via_server:
+            raise RuntimeError("Cannot tunnel via server on a LocalDataCollection, can only do this remotely!")
+
+        yield from MixteraDataCollection._stream_query_results(query_result, None)
+
+    def stream_query_results_anotherold(self, query_id: int, worker_id: int, node_id: int = 0) -> Generator[str, None, None]:
+        if query_id < 0 or query_id >= len(self._queries):
+            logger.error(f"Invalid query_id {query_id}")
+            return
+
+        query, num_nodes, num_workers_per_node = self._queries[query_id]
+
+        if node_id < 0 or node_id >= num_nodes:
+            logger.error(f"Invalid node {node_id} for query {query_id} (total nodes = {num_nodes})")
+            return
+
+        if worker_id < 0 or worker_id >= num_workers_per_node:
+            logger.error(f"Invalid worker {worker_id} for query {query_id} (workers per node = {num_workers_per_node})")
+            return
+
+        # TODO(#): Actually take node_id/worker_id into consideration. We might also want to have internal prefetching.
+        yield from self.get_samples_from_ranges(query)
+
+    # TODO delete this function
     def get_samples_from_ranges(
         self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
     ) -> Iterable[str]:
@@ -425,27 +452,32 @@ class LocalDataCollection(MixteraDataCollection):
             return None
         return self._index[property_name]
 
-    # TODO(MaxiBoether): Change Query type accordingly
-    def register_query(self, query: Any, training_id: str, num_workers_per_node: int, num_nodes: int = 1) -> int:
-        if training_id in self._training_query_map:
-            logger.warning("We already have a query for that training!")
+    def register_query(self, query: "Query", chunk_size: int) -> int:
+        if query.training_id in self._training_query_map:
+            logger.warning(f"We already have a query for training {query.training_id}!")
             return -1
 
         with self._queries_lock:
-            self._queries.append((query, num_nodes, num_workers_per_node))
+            self._queries.append((query, chunk_size))
             index = len(self._queries) - 1
-            self._training_query_map[training_id] = index
-
-        # TODO(#): We might want to start executing the query here already and even prefetch some data
+            self._training_query_map[query.training_id] = index
 
         logger.info(
-            f"Registered query {index} with {num_nodes} nodes and "
-            + f"{num_workers_per_node} workers per node for training {training_id}."
+            f"Registered query {str(query)} with chunk_size {chunk_size}"
+            + f" for training {query.training_id}."
         )
+
         return index
 
+    def get_query_result(self, training_id: str) -> "LocalQueryResult":
+        # What if query has not been executed?
+        if (query_id := self.get_query_id(training_id) < 0):
+            raise RuntimeError(f"Unknown training {training_id}")
+        
+        return self._queries[query_id][0].results
+        
     def get_query_id(self, training_id: str) -> int:
-        if wait_for_key_in_dict(self._training_query_map, training_id, 15.0):
+        if wait_for_key_in_dict(self._training_query_map, training_id, 120.0):
             query_id = self._training_query_map[training_id]
             logger.debug(f"Query ID for training {training_id} is {query_id}")
             return query_id
@@ -453,20 +485,7 @@ class LocalDataCollection(MixteraDataCollection):
         logger.warning(f"Did not find query ID for training {training_id} after 15 seconds.")
         return -1
 
-    def stream_query_results(self, query_id: int, worker_id: int, node_id: int = 0) -> Generator[str, None, None]:
-        if query_id < 0 or query_id >= len(self._queries):
-            logger.error(f"Invalid query_id {query_id}")
-            return
-
-        query, num_nodes, num_workers_per_node = self._queries[query_id]
-
-        if node_id < 0 or node_id >= num_nodes:
-            logger.error(f"Invalid node {node_id} for query {query_id} (total nodes = {num_nodes})")
-            return
-
-        if worker_id < 0 or worker_id >= num_workers_per_node:
-            logger.error(f"Invalid worker {worker_id} for query {query_id} (workers per node = {num_workers_per_node})")
-            return
-
-        # TODO(#): Actually take node_id/worker_id into consideration. We might also want to have internal prefetching.
-        yield from self.get_samples_from_ranges(query)
+    def next_query_result_chunk(self, query_id: int) -> Optional[list[IndexType]]:
+        # TODO: also use this method locally? avoid duplication after fork? use mp.Lock instead?
+        with self._queries_lock:
+            return next(self._queries[query_id][0].results, None)

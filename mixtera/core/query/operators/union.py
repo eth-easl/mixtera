@@ -1,5 +1,9 @@
-from mixtera.core.query.query import Query
 from mixtera.utils import flatten
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mixtera.core.datacollection.local import LocalDataCollection
+    from mixtera.core.query.query import Query
 
 from ._base import Operator
 
@@ -12,11 +16,12 @@ class Union(Operator):
         Operator (Query): a query to combine with the current query.
     """
 
-    def __init__(self, query_a: Query) -> None:
+    def __init__(self, query_a: "Query") -> None:
         super().__init__()
         self.children.append(query_a.root)
 
-    def execute(self) -> None:
+    def execute(self, ldc: "LocalDataCollection") -> None:
+        del ldc
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
         self.results = flatten([x.results for x in self.children])
 

@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Iterable, Optional, Type
+from typing import Generator, Iterable, Optional, Type, TYPE_CHECKING
 
-from mixtera.network.connection import ServerConnection
+if TYPE_CHECKING:
+    from mixtera.network.connection import ServerConnection
 
 
 class AbstractFilesystem(ABC):
@@ -33,7 +34,7 @@ class AbstractFilesystem(ABC):
     @classmethod
     @contextmanager
     def open_file(
-        cls, file_path: str | Path, server_connection: Optional[ServerConnection] = None
+        cls, file_path: str | Path, server_connection: Optional["ServerConnection"] = None
     ) -> Generator[Iterable[str], None, None]:
         """
         Context manager to abstract the opening of files across different file systems.
@@ -49,7 +50,7 @@ class AbstractFilesystem(ABC):
     @classmethod
     @abstractmethod
     def get_file_iterable(
-        cls, file_path: str | Path, server_connection: Optional[ServerConnection] = None
+        cls, file_path: str | Path, server_connection: Optional["ServerConnection"] = None
     ) -> Iterable[str]:
         """
         Method to get an iterable of lines from a file that is stored on a file system.

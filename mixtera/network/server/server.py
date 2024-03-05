@@ -3,11 +3,12 @@ from pathlib import Path
 
 from loguru import logger
 from mixtera.core.datacollection.local import LocalDataCollection
-from mixtera.network.server.server_task import ServerTask
-from mixtera.utils.network_utils import read_int, read_pickeled_object, read_utf8_string, write_int, write_utf8_string
+from mixtera.core.filesystem import AbstractFilesystem
+from mixtera.network.server_task import ServerTask
+from mixtera.utils.network_utils import read_int, read_pickeled_object, read_utf8_string, write_int, write_pickeled_object, write_utf8_string
+from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
 
-ID_BYTES = 8
-SAMPLE_SIZE_BYTES = 16
+
 
 # TODO(#): Use actual query instead of dict of ranges
 QueryType = dict[int, dict[int, list[tuple[int, int]]]]
@@ -23,16 +24,16 @@ class MixteraServer:
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         # TODO(#): Use actual query instead of dict of ranges
 
-        training_id = await read_utf8_string(SAMPLE_SIZE_BYTES, reader)
-        logger.debug(f"Received register training request for training id {training_id}")
-        num_nodes = await read_int(ID_BYTES, reader)
-        num_workers_per_node = await read_int(ID_BYTES, reader)
-        logger.debug(f"num_nodes = {num_nodes}, num_workers_per_node = {num_workers_per_node}")
+        logger.debug(f"Received register training request")
+        chunk_size = await read_int(ID_BYTES, reader)
+        logger.debug(f"chunk_size = {chunk_size}")
         query = await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
-        logger.debug(f"Received query = {query}")
+        logger.debug(f"Received query = {str(query)}. Executing it.")
+        _ = query.execute(self._ldc)
 
-        query_id = self._ldc.register_query(query, training_id, num_workers_per_node, num_nodes=num_nodes)
-        await write_int(query_id, ID_BYTES, writer)
+        logger.debug(f"Registered query under ID {query.query_id} in LDC and executed it.")
+        
+        await write_int(query.query_id, ID_BYTES, writer)
 
     async def _parse_ids(self, reader: asyncio.StreamReader) -> tuple[int, int, int]:
         query_id = await read_int(ID_BYTES, reader)
@@ -48,11 +49,37 @@ class MixteraServer:
         logger.debug(f"Looking up query ID for training {training_id}")
         return self._ldc.get_query_id(training_id)
 
-    async def _stream_query_results(
-        self, node_id: int, worker_id: int, query_id: int, writer: asyncio.StreamWriter
+    async def _read_file(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        for data in self._ldc.stream_query_results(query_id, worker_id, node_id=node_id):
-            await write_utf8_string(data, SAMPLE_SIZE_BYTES, writer)
+        filesys_t = await read_int(ID_BYTES, reader)
+
+        valid_input = True
+
+        if filesys_t is None:
+            logger.warning("Did not receive filesystem type.")
+            valid_input = False
+
+        file_path = await read_utf8_string(ID_BYTES, reader)
+
+        if file_path is None or file_path == "":
+            logger.warning(f"Did not receive file path.")
+            valid_input = False
+
+        if not valid_input:
+            return
+        
+        logger.info(f"Got a _read_file request for file {file_path}")
+        file_data = "\n".join(AbstractFilesystem.from_id(filesys_t).get_file_iterable(file_path, None))
+        logger.debug("File read.")
+        await write_utf8_string(file_data, SAMPLE_SIZE_BYTES, writer, drain=False)
+        logger.debug("Data written.")
+        await writer.drain()
+        logger.debug("Data drained.")
+
+    async def _return_next_result_chunk(self, query_id: int, writer: asyncio.StreamWriter) -> None:
+        next_chunk = self._ldc.next_query_result_chunk(query_id) # This function should be thread safe
+        await write_pickeled_object(next_chunk, SAMPLE_SIZE_BYTES, writer)
 
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -63,12 +90,17 @@ class MixteraServer:
 
             if task == ServerTask.REGISTER_QUERY:
                 await self._register_query(reader, writer)
-            elif task == ServerTask.STREAM_DATA:
-                node_id, worker_id, query_id = await self._parse_ids(reader)
-                await self._stream_query_results(node_id, worker_id, query_id, writer)
+            elif task == ServerTask.READ_FILE:
+                await self._read_file(reader, writer)
             elif task == ServerTask.GET_QUERY_ID:
                 query_id = await self._get_query_id(reader)
                 await write_int(query_id, ID_BYTES, writer)
+            elif task == ServerTask.GET_META_RESULT:
+                query_id = await read_int(ID_BYTES, reader)
+                await write_pickeled_object(self._ldc._queries[query_id][0].results._meta, SAMPLE_SIZE_BYTES, writer)
+            elif task == ServerTask.GET_NEXT_RESULT_CHUNK:
+                query_id = await read_int(ID_BYTES, reader)
+                await self._return_next_result_chunk(query_id, writer)
             else:
                 logger.error(f"Client sent unsupport task {task}")
 
@@ -79,6 +111,7 @@ class MixteraServer:
             logger.exception(e)
         finally:
             try:
+                logger.info("Closing writer...")
                 writer.close()
                 await writer.wait_closed()
             except Exception as e:  # pylint: disable=broad-exception-caught

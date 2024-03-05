@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Iterable, Optional, Type
+from typing import Callable, Iterable, Optional, Type, TYPE_CHECKING
 
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.index import MetadataParser
 from mixtera.core.filesystem.abstract_filesystem import AbstractFilesystem
-from mixtera.network.connection import ServerConnection
+
+if TYPE_CHECKING:
+    from mixtera.network.connection import ServerConnection
 
 
 class Dataset(ABC):
@@ -71,7 +73,7 @@ class Dataset(ABC):
         ranges_per_file: dict[str, list[tuple[int, int]]],
         filesys_t: Type[AbstractFilesystem],
         parsing_func: Callable[[str], str],
-        server_connection: Optional[ServerConnection],
+        server_connection: Optional["ServerConnection"],
     ) -> Iterable[str]:
         """
         Given a list of ranges per file, iterates over the according files and yields all samples in the file.

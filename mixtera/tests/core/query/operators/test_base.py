@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.query.operators._base import MixteraDataCollection, Operator
-from mixtera.core.query.query import QueryPlan
+from mixtera.core.query.query_plan import QueryPlan
 
 
 class TestOperator(unittest.TestCase):

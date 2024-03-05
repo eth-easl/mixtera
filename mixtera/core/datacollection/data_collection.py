@@ -1,16 +1,19 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Generator, Iterable, List, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing import ExecutionMode
 
+
 if TYPE_CHECKING:
     from mixtera.core.datacollection import IndexType, PropertyType
     from mixtera.core.datacollection.local import LocalDataCollection
     from mixtera.core.datacollection.remote import RemoteDataCollection
-
+    from mixtera.core.query.query_result import QueryResult
+    from mixtera.network.connection.server_connection import ServerConnection
 
 class MixteraDataCollection(ABC):
 
@@ -140,9 +143,9 @@ class MixteraDataCollection(ABC):
         """
         raise NotImplementedError()
 
-    # TODO(MaxiBoether): Change Query type accordingly
+
     @abstractmethod
-    def register_query(self, query: Any, training_id: str, num_workers_per_node: int, num_nodes: int = 1) -> int:
+    def get_query_result(self, training_id: str) -> "QueryResult":
         """
         TODO
 
@@ -156,7 +159,7 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_query_id(self, training_id: str) -> int:
+    def stream_query_results(self, query_result: "QueryResult", tunnel_via_server: bool = False) -> Generator[str, None, None]:
         """
         TODO
 
@@ -169,8 +172,8 @@ class MixteraDataCollection(ABC):
 
         raise NotImplementedError()
 
-    @abstractmethod
-    def stream_query_results(self, query_id: int, worker_id: int, node_id: int = 0) -> Generator[str, None, None]:
+    @staticmethod
+    def _stream_query_results(query_result: "QueryResult", server_connection: Optional["ServerConnection"] = None) -> Generator[str, None, None]:
         """
         TODO
 
@@ -180,7 +183,34 @@ class MixteraDataCollection(ABC):
         Returns:
             TODO
         """
+        # TODO(MaxiBoether): this needs adjustments after the index PR
+        for index_list in query_result:
+            for index in index_list:
+                # We first collapse the index into a dict where the dataset are the outermost keys
+                # Note that this loses information on which bucket items belong to, i.e.,
+                # we cannot enforce mixture on the property level anymore
+                #ranges_per_dataset_and_file: defaultdict[int, defaultdict[int, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(lambda: list))
+                #print(index)
 
+                #for _, bucket_dict in index.items():
+                #    for _, dataset_dict in bucket_dict.items():
+                #        for did, file_dict in dataset_dict.items():
+                #            for fid, range_list in file_dict.items():
+                #                ranges_per_dataset_and_file[did][fid].extend(range_list)   
+
+                # TODO(create issue): This currently iterates through it dataset by dataset. Instead, we want to sample from it uniform at random 
+                # It is a bit unclear how to implementing sampling here, since we work with ranges. In the best case, we would sample line by line u.a.r.
+                for did, file_dict in index.items():
+                    filesystem = query_result.dataset_fs[did]
+                    dtype = query_result.dataset_type[did]
+                    parsing_func = query_result.parsing_func[did]
+                    filename_dict = {
+                        query_result.file_path[file_id]: file_ranges for file_id, file_ranges in file_dict.items()
+                    }
+                    yield from dtype.read_ranges_from_files(filename_dict, filesystem, parsing_func, server_connection)
+
+    @abstractmethod
+    def is_remote(self) -> bool:
         raise NotImplementedError()
 
     @abstractmethod
