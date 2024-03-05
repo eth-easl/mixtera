@@ -418,7 +418,7 @@ class TestLocalDataCollection(unittest.TestCase):
         )
 
     @patch("sqlite3.connect")
-    def test_insert_index_into_table(self, mock_connect):
+    def test_insert_partial_index_into_table(self, mock_connect):
         mock_connection = MagicMock()
         mock_connect.return_value = mock_connection
         mock_cursor = MagicMock()
@@ -429,17 +429,56 @@ class TestLocalDataCollection(unittest.TestCase):
         # Test successful insertion
         mock_cursor.lastrowid = 1
         mock_cursor.rowcount = 1
-        result = ldc._insert_index_into_table("property1", index)
+        result = ldc._insert_partial_index_into_table("property1", index)
         self.assertEqual(result, 1)
         # Test sqlite error during insertion
         mock_cursor.execute.side_effect = sqlite3.Error("Test error")
-        result = ldc._insert_index_into_table("property1", index)
+        result = ldc._insert_partial_index_into_table("property1", index)
         self.assertEqual(result, -1)
         # Test failed insertion (no rows affected)
         mock_cursor.execute.side_effect = None
         mock_cursor.rowcount = 0
-        result = ldc._insert_index_into_table("property1", index)
+        result = ldc._insert_partial_index_into_table("property1", index)
         self.assertEqual(result, -1)
+
+    @patch("sqlite3.connect")
+    def test_insert_index_into_table(self, mock_connect):
+        mock_connection = MagicMock()
+        mock_connect.return_value = mock_connection
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor
+        directory = Path(self.temp_dir.name)
+        ldc = LocalDataCollection(directory)
+
+        # 8 rows
+        index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        index._index = {
+            "language": {
+                "C": {0: {0: [(0, 1), (2, 3), (4, 5), (9, 10)]}},
+                "PHP": {0: {0: [(1, 2)]}},
+            },
+            "publication_date": {"val1": {0: {0: [(0, 1), (2, 6), (9, 11)]}}},
+        }
+
+        # Test successful insertion
+        mock_cursor.rowcount = 8
+        result = ldc._insert_index_into_table(index)
+        self.assertEqual(result, 8)
+
+        # Test partial insertion
+        mock_cursor.rowcount = 7
+        result = ldc._insert_index_into_table(index)
+        self.assertEqual(result, 7)
+
+        # Test sqlite error during insertion
+        mock_cursor.executemany.side_effect = sqlite3.Error("Test error")
+        result = ldc._insert_index_into_table(index)
+        self.assertEqual(result, -1)
+
+        # Test hard partial insertion
+        mock_cursor.rowcount = 7
+        mock_cursor.executemany.side_effect = None
+        self.assertRaises(AssertionError, ldc._insert_index_into_table, index, full_or_fail=True)
 
     def test_reformat_index(self):
         ldc = LocalDataCollection(Path(self.temp_dir.name))

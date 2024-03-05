@@ -173,6 +173,12 @@ class TestInMemoryDictionaryLineIndex(unittest.TestCase):
         index1.merge(index2)
         self.assertEqual(index1.get_full_index(), target_index)
 
+    def test_invalid_merge(self):
+        index1 = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
+        index2 = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+
+        self.assertRaises(AssertionError, index1.merge, index2)
+
 
 class TestInMemoryDictionaryRangeIndex(unittest.TestCase):
     def test_append_index_entry(self):
