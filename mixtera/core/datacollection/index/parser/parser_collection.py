@@ -23,12 +23,10 @@ class RedPajamaMetadataParser(MetadataParser):
             value = metadata[index_field]
             if index_field == "language":
                 for language in value:
-                    self._index.append_index_entry(
-                        index_field, language["name"], self.dataset_id, self.file_id, line_number
-                    )
+                    self._index.append_entry(index_field, language["name"], self.dataset_id, self.file_id, line_number)
             else:
                 # TODO(#11): Support numerical buckets, not just categorical
-                self._index.append_index_entry(index_field, value, self.dataset_id, self.file_id, line_number)
+                self._index.append_entry(index_field, value, self.dataset_id, self.file_id, line_number)
 
     def get_index(self) -> Index:
         if not self._index.is_compressed():

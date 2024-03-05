@@ -3,17 +3,25 @@ from typing import Union
 
 # Compressed hierarchy (i.e. uses ranges)
 IndexRowRangeType = list[tuple[int, int]]
-IndexFileEntryType = dict[int, IndexRowRangeType]
-IndexDatasetEntryType = dict[int, IndexFileEntryType]
-IndexFeatureValueType = dict[Union[int, float, str], IndexDatasetEntryType]
-IndexType = dict[str, IndexFeatureValueType]
+IndexFileEntryRangeType = dict[int, IndexRowRangeType]
+IndexDatasetEntryRangeType = dict[int, IndexFileEntryRangeType]
+IndexFeatureValueRangeType = dict[Union[int, float, str], IndexDatasetEntryRangeType]
+IndexRangeType = dict[str, IndexFeatureValueRangeType]
 
 # Uncompressed hierarchy (i.e. uses raw row identifiers)
 IndexRowIndicatorsType = list[int]
-IndexFileEntryUncompressedType = dict[int, IndexRowIndicatorsType]
-IndexDatasetEntryUncompressedType = dict[int, IndexFileEntryUncompressedType]
-IndexFeatureValueUncompressedType = dict[Union[int, float, str], IndexDatasetEntryUncompressedType]
-IndexUncompressedType = dict[str, IndexFeatureValueUncompressedType]
+IndexFileEntryLineType = dict[int, IndexRowIndicatorsType]
+IndexDatasetEntryLineType = dict[int, IndexFileEntryLineType]
+IndexFeatureValueLineType = dict[Union[int, float, str], IndexDatasetEntryLineType]
+IndexLineType = dict[str, IndexFeatureValueLineType]
+
+
+# Common types
+IndexCommonType = IndexRowRangeType | IndexRowIndicatorsType
+IndexFileEntryType = dict[int, IndexCommonType]
+IndexDatasetEntryType = dict[int, IndexFileEntryType]
+IndexFeatureValueType = dict[Union[int, float, str], IndexDatasetEntryType]
+IndexType = dict[str, IndexFeatureValueType]
 
 
 class Index(ABC):
@@ -26,63 +34,39 @@ class Index(ABC):
         "feature_value": {
           dataset_id: {
             file_id: [
-              line number | line range tuple
+              payload (e.g. could be row index or row range)
             ]
           }
         }
       }
     }
-
-    Once the index is fully built, `compress()` should be called. This switches
-    the representation internal representation from `IndexUncompressedType` to
-    `IndexType`. No additions should be made to an index that has been
-    finalized. The only changes that can be made refer to merging additional
-    indexes into this one.
     """
 
+    # Line-based
     @abstractmethod
-    def append_index_entry(
-        self, feature_name: str, feature_value: Union[int, float, str], dataset_id: int, file_id: int, row_number: int
-    ) -> None:
-        """
-        Appends a new row number entry to the index. For efficiency reasons, it
-        is assumed for now that row numbers pertaining to the same feature, value,
-        dataset and file are always added in monotonically increasing order.
-
-        Args:
-          feature_name: the name of feature (e.g. 'language')
-          feature_value: the value of the feature (e.g. 'Italian')
-          dataset_id: the id of the dataset
-          file_id: the id of the file within the dataset
-          row_number: the row number of the valid instance
-        """
-        raise NotImplementedError("Method must be implemented in subclass!")
-
-    @abstractmethod
-    def append_index_range(
+    def append_entry(
         self,
         feature_name: str,
         feature_value: Union[int, float, str],
         dataset_id: int,
         file_id: int,
-        low_bound: int,
-        high_bound: int,
+        payload: Union[int, tuple[int, int]],
     ) -> None:
         """
-        Appends a new range entry to the index. For efficiency reasons, it
-        is assumed that row the added row ranges are perfectly increasing (i.e.
-        can always be appended)
+        Appends a new payload entry to the index. For efficiency reasons, it
+        is assumed that if the payloads are comparable, they are always added
+        to the index in monotonically increasing order.
 
         Args:
           feature_name: the name of feature (e.g. 'language')
           feature_value: the value of the feature (e.g. 'Italian')
           dataset_id: the id of the dataset
           file_id: the id of the file within the dataset
-          low_bound: the lower bound of an interval (inclusive)
-          high_bound: the higher bound of an interval (exclusive)
+          payload: the
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    # Common
     @abstractmethod
     def get_full_index(self, copy: bool = False) -> IndexType:
         """
@@ -97,6 +81,7 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    # Common
     @abstractmethod
     def get_by_feature(self, feature_name: str, copy: bool = False) -> "IndexFeatureValueType":
         """
@@ -114,6 +99,7 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    # Common
     @abstractmethod
     def get_by_feature_value(
         self, feature_name: str, feature_value: Union[str, int, float], copy: bool = False
@@ -134,12 +120,13 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    # Common
     @abstractmethod
     def merge(self, other: "Index", copy_other: bool = False) -> None:
         """
         Merges another index into this one. It is assumed that the indexes never
-        have collisions. In other words, they may map over the same feature, value,
-        and dataset, but never over the same files within each category.
+        have collisions. In other words, they may map over the same feature,
+        value, and dataset, but never over the same files within each category.
 
         Args:
           other: The other index
@@ -152,24 +139,7 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    @abstractmethod
-    def compress(self) -> None:
-        """
-        Compresses the internal index, reducing contiguous line ranges to spans.
-        E.g. [1,2,3,5,6] --> [(1,4), (5,7)]. All modifications are done in place
-        on the index. Note that the lower bound of each range is inclusive, but
-        the upper bound is exclusive. This converts the index from the
-        `IndexUncompressedType` to the `IndexType`
-        """
-        raise NotImplementedError("Method must be implemented in subclass!")
-
-    @abstractmethod
-    def is_compressed(self) -> bool:
-        """
-        Returns True if the index is compressed and safe to read, otherwise False.
-        """
-        raise NotImplementedError("Method must be implemented in subclass!")
-
+    # Common
     @abstractmethod
     def get_all_features(self) -> list[str]:
         """
@@ -181,6 +151,7 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    # Common
     @abstractmethod
     def has_feature(self, feature_name: str) -> bool:
         """
@@ -194,6 +165,7 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    # Common
     @abstractmethod
     def keep_only_feature(self, feature_names: Union[str, list[str]]) -> None:
         """

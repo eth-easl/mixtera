@@ -15,7 +15,7 @@ class MetadataParser(ABC):
     """
 
     def __init__(
-        self, dataset_id: int, file_id: int, index_type: Optional[IndexTypes] = IndexTypes.IN_MEMORY_DICT_BASED
+        self, dataset_id: int, file_id: int, index_type: Optional[IndexTypes] = IndexTypes.IN_MEMORY_DICT_LINES
     ):
         """
         Initializes the metadata parser. This initializer also sets up its own
