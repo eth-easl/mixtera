@@ -4,14 +4,17 @@ from enum import Enum
 from typing import Union
 
 from loguru import logger
-from mixtera.core.datacollection.index import (
-    Index,
-    IndexDatasetEntryRangeType,
-    IndexFeatureValueRangeType,
-    IndexRangeType,
-)
+from mixtera.core.datacollection import IndexType
+from mixtera.core.datacollection.index import Index, IndexDatasetEntryRangeType, IndexFeatureValueType, IndexRangeType
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
+
+
+def raw_index_dict_instantiator() -> IndexType:
+    """
+    Instantiates and returns a raw index dict of `IndexType`.
+    """
+    return defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
 
 
 class InMemoryDictionaryIndex(Index, ABC):
@@ -23,16 +26,26 @@ class InMemoryDictionaryIndex(Index, ABC):
 
     def __init__(self) -> None:
         """
-        Initializes an `InMemoryDictionaryIndex` instance
-
-        Args:
-            pre_compressed: if False, this starts as a regular non-compressed index
-            where scalar row indicators are added. `compress` needs to be called later
-            to reduce the row indicators to compact row ranges. If True, this is
-            readily an index where only row-ranges are allowed to be added.
+        Based initializer for an `InMemoryDictionaryIndex` instance
         """
         self._is_compressed = False
-        self._index: defaultdict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        self._index: defaultdict = raw_index_dict_instantiator()
+
+    def _copy_constructor(self, index_payload: IndexType) -> "InMemoryDictionaryIndex":
+        """
+        Creates a new InMemoryDictionaryIndex object from the given `index_payload` dict.
+        It should be noted that the concrete type of the new object will be one of the
+        subclasses' (as only they can be instantiated).
+
+        Args:
+            index_payload: the payload from which the new index object should be created
+
+        Returns:
+            A new index object with the same type as the calling object.
+        """
+        new_index = self.__class__()
+        new_index._index = index_payload
+        return new_index
 
     @abstractmethod
     def compress(self) -> "InMemoryDictionaryRangeIndex":
@@ -50,16 +63,31 @@ class InMemoryDictionaryIndex(Index, ABC):
     def is_compressed(self) -> bool:
         return self._is_compressed
 
-    def get_full_index(self, copy: bool = False) -> IndexRangeType:
+    def get_full_dict_index(self, copy: bool = False) -> IndexRangeType:
         return return_with_deepcopy_or_noop(self._index, copy)
 
-    def get_by_feature(self, feature_name: str, copy: bool = False) -> IndexFeatureValueRangeType:
-        if feature_name not in self._index:
-            logger.warning(f"Feature {feature_name} was not found in index; returning emtpy dict!")
-            return {}
-        return return_with_deepcopy_or_noop(self._index[feature_name], copy)
+    def get_index_by_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> Index:
+        return self._copy_constructor(self.get_dict_index_by_many_features(feature_names, copy=copy))
 
-    def get_by_feature_value(
+    def get_dict_index_by_many_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> IndexType:
+        if isinstance(feature_names, str):
+            feature_names = [feature_names]
+
+        result = raw_index_dict_instantiator()
+        for feature_name in feature_names:
+            if feature_name in self._index:
+                result[feature_name] = self._index[feature_name]
+
+        if not result:
+            logger.warning(f"None of the features {feature_names} were found; returning empty result!")
+            return result
+        return return_with_deepcopy_or_noop(result, copy)
+
+    def get_dict_index_by_feature(self, feature_name: str, copy: bool = False) -> IndexFeatureValueType:
+        returned = self.get_dict_index_by_many_features(feature_name, copy)
+        return returned[feature_name]
+
+    def get_dict_index_by_feature_value(
         self, feature_name: str, feature_value: Union[str, int, float], copy: bool = False
     ) -> IndexDatasetEntryRangeType:
         if feature_name not in self._index or feature_value not in self._index[feature_name]:
@@ -78,13 +106,13 @@ class InMemoryDictionaryIndex(Index, ABC):
             "You cannot merge two indices of differnt types: "
             f"<left: {self.__class__}> and <right: {other.__class__}>"
         )
-        other_raw_dict = other.get_full_index(copy=copy_other)
+        other_raw_dict = other.get_full_dict_index(copy=copy_other)
         self._index = merge_dicts(self._index, other_raw_dict)
 
     def has_feature(self, feature_name: str) -> bool:
         return feature_name in self._index
 
-    def keep_only_feature(self, feature_names: Union[str, list[str]]) -> None:
+    def drop_other_features(self, feature_names: Union[str, list[str]]) -> None:
         if isinstance(feature_names, str):
             feature_names = [feature_names]
         feature_names = set(feature_names)  # type: ignore[assignment]

@@ -68,9 +68,9 @@ class Index(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def get_full_index(self, copy: bool = False) -> IndexType:
+    def get_full_dict_index(self, copy: bool = False) -> IndexType:
         """
-        Return the full index. The index should always be compressed into ranges.
+        Return the full index in a dictionary form. The index should always be compressed into ranges.
 
         Args:
           copy: if True, returns a copy of the index. Otherwise, it returns the
@@ -82,12 +82,48 @@ class Index(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def get_by_feature(self, feature_name: str, copy: bool = False) -> "IndexFeatureValueType":
+    def get_index_by_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> "Index":
         """
-        Returns the entries under the name of this feature
+        Creates a new Index object from this index object, discarding the feature
+        names that are not in the `feature_names` parameter.
 
         Args:
-          feature_name: the name of the feature
+            feature_names: a single str or a list of str objects that identify features
+                that should be carried over the current index to the new one
+            copy: if True, the values that are selected and are moved to the other index
+                will be deep copied. Otherwise, index entries are passed by reference,
+                and side-effects might occur if index contents are modified. In such
+                cases, indexes should remain immutable.
+        Returns:
+            A new Index object, or an empty index if none of the specified `feature_names`
+            exist in this index.
+        """
+
+    @abstractmethod
+    def get_dict_index_by_many_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> IndexType:
+        """
+        Returns the index entries of these features in a dictionary form.
+
+        Args:
+          feature_names: a single name or a list of names corresponding to features
+            that will be returned
+          copy: if True, the returned dictionary is a copy of the internal data,
+            meaning no side-effects can arise by changing the returned data
+            structure. This is more expensive, and deactivated by default.
+
+        Returns:
+          An instance of IndexType; if none of the features are found, an empty
+          dictionary is returned
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
+    @abstractmethod
+    def get_dict_index_by_feature(self, feature_name: str, copy: bool = False) -> "IndexFeatureValueType":
+        """
+        Returns the entries under the name of this feature in a dictionary form.
+
+        Args:
+          feature_name: a single feature name
           copy: if True, the returned dictionary is a copy of the internal data,
             meaning no side-effects can arise by changing the returned data
             structure. This is more expensive, and deactivated by default.
@@ -99,11 +135,11 @@ class Index(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def get_by_feature_value(
+    def get_dict_index_by_feature_value(
         self, feature_name: str, feature_value: Union[str, int, float], copy: bool = False
     ) -> IndexDatasetEntryType:
         """
-        Returns the entries in the index for this feature and its value.
+        Returns the entries in the index for this feature and its value in a dictionary form.
 
         Args:
           feature_name: the name of the feature
@@ -161,9 +197,10 @@ class Index(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def keep_only_feature(self, feature_names: Union[str, list[str]]) -> None:
+    def drop_other_features(self, feature_names: Union[str, list[str]]) -> None:
         """
-        Discards all features that are not present in the `feature_names` parameter.
+        Discards all features that are not present in the `feature_names` parameter. This
+        modification is done in place.
 
         Args:
             feature_names: can either be a list or a string literal. Indicates

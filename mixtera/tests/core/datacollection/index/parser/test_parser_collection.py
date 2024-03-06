@@ -116,7 +116,7 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
             red_pajama_metadata_parser.parse(line_number, metadata)
 
         red_pajama_metadata_parser.finalize()
-        result_index = defaultdict_to_dict(red_pajama_metadata_parser.get_index().get_full_index())
+        result_index = defaultdict_to_dict(red_pajama_metadata_parser.get_index().get_full_dict_index())
         self.assertEqual(expected, result_index)
 
     def test_get_index(self):
@@ -141,7 +141,7 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         }
 
         red_pajama_metadata_parser.finalize()
-        self.assertEqual(target_index, red_pajama_metadata_parser.get_index().get_full_index())
+        self.assertEqual(target_index, red_pajama_metadata_parser.get_index().get_full_dict_index())
 
 
 class TestMetadataParserFactory(unittest.TestCase):

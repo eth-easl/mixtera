@@ -15,7 +15,7 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
         }
 
         index._index = target_index.copy()
-        self.assertEqual(index.get_full_index(), target_index)
+        self.assertEqual(index.get_full_dict_index(), target_index)
 
     def test_get_by_feature(self):
         index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
@@ -30,9 +30,9 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
         pub_date_sub_dict = target_index["publication_date"].copy()
 
         index._index = target_index.copy()
-        self.assertEqual(index.get_by_feature("language"), language_sub_dict)
-        self.assertEqual(index.get_by_feature("publication_date"), pub_date_sub_dict)
-        self.assertEqual(index.get_by_feature("non_existent"), {})
+        self.assertEqual(index.get_dict_index_by_feature("language"), language_sub_dict)
+        self.assertEqual(index.get_dict_index_by_feature("publication_date"), pub_date_sub_dict)
+        self.assertEqual(index.get_dict_index_by_feature("non_existent"), {})
 
     def test_get_by_feature_value(self):
         index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
@@ -47,10 +47,10 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
         val1_sub_dict = target_index["publication_date"]["val1"].copy()
 
         index._index = target_index.copy()
-        self.assertEqual(index.get_by_feature_value("language", "C"), c_sub_dict)
-        self.assertEqual(index.get_by_feature_value("publication_date", "val1"), val1_sub_dict)
-        self.assertEqual(index.get_by_feature_value("non_existent", "non_existent"), {})
-        self.assertEqual(index.get_by_feature_value("language", "non_existent"), {})
+        self.assertEqual(index.get_dict_index_by_feature_value("language", "C"), c_sub_dict)
+        self.assertEqual(index.get_dict_index_by_feature_value("publication_date", "val1"), val1_sub_dict)
+        self.assertEqual(index.get_dict_index_by_feature_value("non_existent", "non_existent"), {})
+        self.assertEqual(index.get_dict_index_by_feature_value("language", "non_existent"), {})
 
     def test_get_all_features(self):
         index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
@@ -82,11 +82,11 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
             "publication_date": {},
             "publication_venue": {},
         }
-        index.keep_only_feature(["language", "publication_date"])
-        self.assertEqual(index.get_full_index(), {"language": {}, "publication_date": {}})
+        index.drop_other_features(["language", "publication_date"])
+        self.assertEqual(index.get_full_dict_index(), {"language": {}, "publication_date": {}})
 
-        index.keep_only_feature("language")
-        self.assertEqual(index.get_full_index(), {"language": {}})
+        index.drop_other_features("language")
+        self.assertEqual(index.get_full_dict_index(), {"language": {}})
 
 
 class TestInMemoryDictionaryLineIndex(unittest.TestCase):
@@ -112,7 +112,7 @@ class TestInMemoryDictionaryLineIndex(unittest.TestCase):
 
         compressed_index = index.compress()
         self.assertIsInstance(compressed_index, InMemoryDictionaryRangeIndex)
-        self.assertEqual(target_index, compressed_index.get_full_index())
+        self.assertEqual(target_index, compressed_index.get_full_dict_index())
         self.assertFalse(index.is_compressed)
         self.assertTrue(compressed_index.is_compressed)
 
@@ -133,7 +133,7 @@ class TestInMemoryDictionaryLineIndex(unittest.TestCase):
                         for line_number in file_id_entries:
                             index.append_entry(feature, value, dataset_id, file_id, line_number)
 
-        self.assertEqual(index.get_full_index(), base_index)
+        self.assertEqual(index.get_full_dict_index(), base_index)
 
     def test_merge(self):
         index1 = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
@@ -171,7 +171,7 @@ class TestInMemoryDictionaryLineIndex(unittest.TestCase):
         }
 
         index1.merge(index2)
-        self.assertEqual(index1.get_full_index(), target_index)
+        self.assertEqual(index1.get_full_dict_index(), target_index)
 
     def test_invalid_merge(self):
         index1 = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
@@ -198,7 +198,7 @@ class TestInMemoryDictionaryRangeIndex(unittest.TestCase):
                         for line_range in file_id_entries:
                             index.append_entry(feature, value, dataset_id, file_id, line_range)
 
-        self.assertEqual(index.get_full_index(), base_index)
+        self.assertEqual(index.get_full_dict_index(), base_index)
 
     def test_merge(self):
         index1 = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
@@ -236,4 +236,4 @@ class TestInMemoryDictionaryRangeIndex(unittest.TestCase):
         }
 
         index1.merge(index2)
-        self.assertEqual(index1.get_full_index(), target_index)
+        self.assertEqual(index1.get_full_dict_index(), target_index)

@@ -209,7 +209,7 @@ class TestLocalDataCollection(unittest.TestCase):
             },
         }
 
-        self.assertEqual(defaultdict_to_dict(ldc.get_index().get_full_index()), expected_index)
+        self.assertEqual(defaultdict_to_dict(ldc.get_index().get_full_dict_index()), expected_index)
 
     def test_insert_dataset_into_table(self):
         directory = Path(self.temp_dir.name)
@@ -367,7 +367,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_executor.run.assert_called_once()
 
         self.assertDictEqual(
-            defaultdict_to_dict(ldc.get_index(property_name="property_name").get_full_index()),
+            defaultdict_to_dict(ldc.get_index(property_name="property_name").get_full_dict_index()),
             {"property_name": {"bucket": {"ds": {0: [(0, 1)]}}}},
         )
 
@@ -413,7 +413,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
         self.assertTrue(index.has_feature("test_property"))
         self.assertEqual(
-            defaultdict_to_dict(index.get_by_feature("test_property")),
+            defaultdict_to_dict(index.get_dict_index_by_feature("test_property")),
             {"pref_2022": {dataset_id: {1: [(0, 1)]}}, "pref_2021": {dataset_id: {1: [(1, 2)]}}},
         )
 
@@ -486,12 +486,12 @@ class TestLocalDataCollection(unittest.TestCase):
         # Test with empty list
         raw_indices = []
         result = ldc._reformat_index(raw_indices)
-        self.assertEqual(result.get_full_index(), {})
+        self.assertEqual(result.get_full_dict_index(), {})
 
         # Test with single item in list
         raw_indices = [("prop1", "val1", 1, 0, 1, 2)]
         result = ldc._reformat_index(raw_indices)
-        self.assertEqual(result.get_full_index(), {"prop1": {"val1": {1: {0: [(1, 2)]}}}})
+        self.assertEqual(result.get_full_dict_index(), {"prop1": {"val1": {1: {0: [(1, 2)]}}}})
 
         # Test with multiple items in list
         raw_indices = [
@@ -505,7 +505,7 @@ class TestLocalDataCollection(unittest.TestCase):
             "prop2": {"val1": {0: {0: [(7, 8)]}}},
         }
         result = ldc._reformat_index(raw_indices)
-        self.assertEqual(result.get_full_index(), expected)
+        self.assertEqual(result.get_full_dict_index(), expected)
 
     @patch("sqlite3.connect")
     def test_read_index_from_database_with_property_name(self, mock_connect: MagicMock):
@@ -522,12 +522,12 @@ class TestLocalDataCollection(unittest.TestCase):
 
         result = ldc._read_index_from_database("property_name")
         self.assertEqual(
-            result.get_full_index(), {"property_name": {"property_value": {"dataset_id": {"file_id": [(1, 2)]}}}}
+            result.get_full_dict_index(), {"property_name": {"property_value": {"dataset_id": {"file_id": [(1, 2)]}}}}
         )
         # test sqlite error
         mock_cursor_instance.execute.side_effect = sqlite3.Error("Test error")
         result = ldc._read_index_from_database("property_name")
-        self.assertEqual(result.get_full_index(), {})
+        self.assertEqual(result.get_full_dict_index(), {})
 
     @patch("sqlite3.connect")
     def test_read_index_from_database_without_property_name(self, mock_connect: MagicMock):
@@ -546,7 +546,7 @@ class TestLocalDataCollection(unittest.TestCase):
         result = ldc._read_index_from_database()
 
         self.assertEqual(
-            result.get_full_index(), {"property_name": {"property_value": {"dataset_id": {"file_id": [(1, 2)]}}}}
+            result.get_full_dict_index(), {"property_name": {"property_value": {"dataset_id": {"file_id": [(1, 2)]}}}}
         )
 
     @patch("mixtera.core.datacollection.local.LocalDataCollection._read_index_from_database")
@@ -558,11 +558,11 @@ class TestLocalDataCollection(unittest.TestCase):
         ldc = LocalDataCollection(Path(self.temp_dir.name))
         result = ldc.get_index()
         mock_read_index_from_database.assert_called_once()
-        self.assertEqual(result.get_full_index(), {"property1": "value1", "property2": "value2"})
+        self.assertEqual(result.get_full_dict_index(), {"property1": "value1", "property2": "value2"})
         result = ldc.get_index("property1")
         # here it should still be called once, because the result is already cached
         mock_read_index_from_database.assert_called_once()
-        self.assertEqual(result.get_full_index(), {"property1": "value1"})
+        self.assertEqual(result.get_full_dict_index(), {"property1": "value1"})
 
         # test with non-existing property
         result = ldc.get_index("property3")

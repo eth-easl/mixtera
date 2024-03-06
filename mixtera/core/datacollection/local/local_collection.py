@@ -163,7 +163,7 @@ class LocalDataCollection(MixteraDataCollection):
 
         # Build a large payload to schedule the execution of many SQL statements
         query_payload = []
-        raw_index = index.get_full_index()
+        raw_index = index.get_full_dict_index()
         for property_name, property_values in raw_index.items():
             for property_value, dataset_ids in property_values.items():
                 for dataset_id, file_ids in dataset_ids.items():
@@ -425,5 +425,5 @@ class LocalDataCollection(MixteraDataCollection):
         if not self._index.has_feature(property_name):
             logger.warning(f"Property {property_name} not found in index, returning None.")
             return None
-        self._index.keep_only_feature(property_name)
+        self._index.drop_other_features(property_name)
         return self._index
