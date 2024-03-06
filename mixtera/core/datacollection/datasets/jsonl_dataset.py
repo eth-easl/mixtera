@@ -10,7 +10,6 @@ from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.server import ServerConnection
 
 
-
 class JSONLDataset(Dataset):
     type_id = 1
 

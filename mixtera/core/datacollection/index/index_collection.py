@@ -4,8 +4,13 @@ from enum import Enum
 from typing import Union
 
 from loguru import logger
-from mixtera.core.datacollection import IndexType
-from mixtera.core.datacollection.index import Index, IndexDatasetEntryRangeType, IndexFeatureValueType, IndexRangeType
+from mixtera.core.datacollection.index import (
+    Index,
+    IndexDatasetEntryRangeType,
+    IndexFeatureValueType,
+    IndexRangeType,
+    IndexType,
+)
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
 

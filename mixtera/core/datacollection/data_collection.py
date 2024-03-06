@@ -3,11 +3,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
+from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
 from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing import ExecutionMode
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection import IndexType, PropertyType
+    from mixtera.core.datacollection import PropertyType
     from mixtera.core.datacollection.local import LocalDataCollection
     from mixtera.core.datacollection.remote import RemoteDataCollection
 
@@ -179,12 +180,16 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_index(self, property_name: Optional[str] = None) -> "IndexType":
+    def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:
         """
         This function returns the index of the MixteraDataCollection.
 
         Args:
             property_name (Optional[str], optional): The name of the property to query.
                 If not provided, all properties are returned.
+
+        Returns:
+            An `InMemoryDictionaryRangeIndex` object or None if a `property_name`
+            is specified, but is not present in the index.
         """
         raise NotImplementedError()

@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Type
 
-from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem.abstract_filesystem import AbstractFilesystem
 from mixtera.server import ServerConnection
