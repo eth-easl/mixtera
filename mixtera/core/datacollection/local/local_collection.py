@@ -8,7 +8,8 @@ from mixtera.core.datacollection import MixteraDataCollection, Property, Propert
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import Index
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
-from mixtera.core.datacollection.index.parser import MetadataParserFactoryfrom mixtera.core.filesystem import AbstractFilesystem
+from mixtera.core.datacollection.index.parser import MetadataParserFactory
+from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
