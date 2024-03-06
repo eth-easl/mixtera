@@ -1,12 +1,10 @@
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Generator, Iterable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing import ExecutionMode
-
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection import IndexType, PropertyType
@@ -14,6 +12,7 @@ if TYPE_CHECKING:
     from mixtera.core.datacollection.remote import RemoteDataCollection
     from mixtera.core.query.query_result import QueryResult
     from mixtera.network.connection.server_connection import ServerConnection
+
 
 class MixteraDataCollection(ABC):
 
@@ -45,11 +44,11 @@ class MixteraDataCollection(ABC):
         raise RuntimeError(f"Directory {dir_path} does not exist.")
 
     @staticmethod
-    def from_remote(host: str, port: int, prefetch_buffer_size: int) -> "RemoteDataCollection":
+    def from_remote(host: str, port: int) -> "RemoteDataCollection":
         # Local import to avoid circular dependency
         from mixtera.core.datacollection.remote import RemoteDataCollection  # pylint: disable=import-outside-toplevel
 
-        return RemoteDataCollection(host, port, prefetch_buffer_size)
+        return RemoteDataCollection(host, port)
 
     @abstractmethod
     def register_dataset(
@@ -127,24 +126,6 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_samples_from_ranges(
-        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
-    ) -> Iterable[str]:
-        """
-        Given a list of ranges for each file in each datasets, returns an Iterable over the samples.
-
-        Args:
-            ranges_per_dataset_and_file (dict[int, dict[int, list[tuple[int, int]]]]): Dict that
-                maps each dataset ID to another dict containing file IDs as keys. This dict then
-                contains the ranges as values.
-
-        Returns:
-            Iterable over the samples.
-        """
-        raise NotImplementedError()
-
-
-    @abstractmethod
     def get_query_result(self, training_id: str) -> "QueryResult":
         """
         TODO
@@ -159,7 +140,9 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def stream_query_results(self, query_result: "QueryResult", tunnel_via_server: bool = False) -> Generator[str, None, None]:
+    def stream_query_results(
+        self, query_result: "QueryResult", tunnel_via_server: bool = False
+    ) -> Generator[str, None, None]:
         """
         TODO
 
@@ -173,7 +156,9 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @staticmethod
-    def _stream_query_results(query_result: "QueryResult", server_connection: Optional["ServerConnection"] = None) -> Generator[str, None, None]:
+    def _stream_query_results(
+        query_result: "QueryResult", server_connection: Optional["ServerConnection"] = None
+    ) -> Generator[str, None, None]:
         """
         TODO
 
@@ -183,23 +168,13 @@ class MixteraDataCollection(ABC):
         Returns:
             TODO
         """
-        # TODO(MaxiBoether): this needs adjustments after the index PR
+        # TODO(MaxiBoether): This might need adjustments after the index PR
         for index_list in query_result:
             for index in index_list:
-                # We first collapse the index into a dict where the dataset are the outermost keys
-                # Note that this loses information on which bucket items belong to, i.e.,
-                # we cannot enforce mixture on the property level anymore
-                #ranges_per_dataset_and_file: defaultdict[int, defaultdict[int, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(lambda: list))
-                #print(index)
-
-                #for _, bucket_dict in index.items():
-                #    for _, dataset_dict in bucket_dict.items():
-                #        for did, file_dict in dataset_dict.items():
-                #            for fid, range_list in file_dict.items():
-                #                ranges_per_dataset_and_file[did][fid].extend(range_list)   
-
-                # TODO(create issue): This currently iterates through it dataset by dataset. Instead, we want to sample from it uniform at random 
-                # It is a bit unclear how to implementing sampling here, since we work with ranges. In the best case, we would sample line by line u.a.r.
+                # TODO(create issue): This currently iterates through it dataset by dataset.
+                # Instead, we want to sample from it uniform at random
+                # It is a bit unclear how to implementing sampling here, since we work with ranges.
+                # In the best case, we would sample line by line u.a.r.
                 for did, file_dict in index.items():
                     filesystem = query_result.dataset_fs[did]
                     dtype = query_result.dataset_type[did]

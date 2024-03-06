@@ -8,7 +8,7 @@ from mixtera.core.query.query import Query
 class TestUnion(unittest.TestCase):
     def setUp(self):
         self.mdc = MixteraDataCollection.from_directory(".")
-        self.query_a = Query.from_datacollection(self.mdc).select(("field1", "==", "value1"))
+        self.query_a = Query.for_training("training_id", 1).select(("field1", "==", "value1"))
         self.query_a.root.results = ["result1", "result2", "result3"]
         self.union = Union(self.query_a)
 
@@ -17,10 +17,10 @@ class TestUnion(unittest.TestCase):
         self.assertEqual(self.union.children[0], self.query_a.root)
 
     def test_execute(self):
-        query_b = Query.from_datacollection(self.mdc).select(("field1", "==", "value2"))
+        query_b = Query.for_training("training_id", 1).select(("field1", "==", "value2"))
         query_b.root.results = ["result3", "result4", "result5"]
         self.union.children.append(query_b.root)
-        self.union.execute()
+        self.union.execute(self.mdc)
         self.assertEqual(len(self.union.results), 6)
         self.assertIn("result1", self.union.results)
         self.assertIn("result2", self.union.results)

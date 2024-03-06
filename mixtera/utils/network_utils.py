@@ -76,7 +76,8 @@ async def write_utf8_string(string: str, size_bytes: int, writer: asyncio.Stream
 
     if drain:
         await writer.drain()
-    
+
+
 async def write_pickeled_object(obj: Any, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True) -> None:
     obj_bytes = dill.dumps(obj)
     writer.write(len(obj_bytes).to_bytes(size_bytes, "big"))

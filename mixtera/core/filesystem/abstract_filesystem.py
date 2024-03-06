@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Iterable, Optional, Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Generator, Iterable, Optional, Type
 
 if TYPE_CHECKING:
     from mixtera.network.connection import ServerConnection

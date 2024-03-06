@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Iterable, Optional, Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Iterable, Optional, Type
 
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.index import MetadataParser

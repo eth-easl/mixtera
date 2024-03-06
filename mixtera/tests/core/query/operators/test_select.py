@@ -30,15 +30,15 @@ class TestSelect(unittest.TestCase):
             Select("invalid_condition")
 
     def test_execute_with_no_children(self):
-        self.select.mdc = MagicMock()
-        self.select.mdc.get_index.return_value = {"value": "index_value"}
+        mdc = MagicMock()
+        mdc.get_index.return_value = {"value": "index_value"}
         self.select.condition.meet = MagicMock(return_value=True)
-        self.select.execute()
+        self.select.execute(mdc)
         self.assertEqual(self.select.results, ["index_value"])
 
     def test_execute_with_one_child(self):
-        self.select.mdc = MagicMock()
-        self.select.mdc.get_index.return_value = {"value": "index_value"}
+        mdc = MagicMock()
+        mdc.get_index.return_value = {"value": "index_value"}
         self.select.condition.meet = MagicMock(return_value=True)
         self.select.children = [MagicMock()]
         self.assertEqual(self.select.results, [])
@@ -55,8 +55,7 @@ class TestSelect(unittest.TestCase):
         self.assertEqual(query_plan.root.children[1], select_2)
 
     def test_repr(self):
-        self.select.mdc = "mdc"
-        self.assertEqual(repr(self.select), "select<mdc>(field operator value)")
+        self.assertEqual(repr(self.select), "select<>(field operator value)")
 
 
 class TestCondition(unittest.TestCase):

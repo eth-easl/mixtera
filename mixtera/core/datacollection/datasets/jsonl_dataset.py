@@ -1,7 +1,7 @@
 import itertools
 import json
 from pathlib import Path
-from typing import Callable, Iterable, Optional, Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Iterable, Optional, Type
 
 from loguru import logger
 from mixtera.core.datacollection import IndexType

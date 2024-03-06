@@ -4,11 +4,16 @@ from pathlib import Path
 from loguru import logger
 from mixtera.core.datacollection.local import LocalDataCollection
 from mixtera.core.filesystem import AbstractFilesystem
-from mixtera.network.server_task import ServerTask
-from mixtera.utils.network_utils import read_int, read_pickeled_object, read_utf8_string, write_int, write_pickeled_object, write_utf8_string
 from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
-
-
+from mixtera.network.server_task import ServerTask
+from mixtera.utils.network_utils import (
+    read_int,
+    read_pickeled_object,
+    read_utf8_string,
+    write_int,
+    write_pickeled_object,
+    write_utf8_string,
+)
 
 # TODO(#): Use actual query instead of dict of ranges
 QueryType = dict[int, dict[int, list[tuple[int, int]]]]
@@ -22,17 +27,14 @@ class MixteraServer:
         self._directory = directory
 
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        # TODO(#): Use actual query instead of dict of ranges
-
-        logger.debug(f"Received register training request")
+        logger.debug("Received register training request")
         chunk_size = await read_int(ID_BYTES, reader)
         logger.debug(f"chunk_size = {chunk_size}")
         query = await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
         _ = query.execute(self._ldc)
-
         logger.debug(f"Registered query under ID {query.query_id} in LDC and executed it.")
-        
+
         await write_int(query.query_id, ID_BYTES, writer)
 
     async def _parse_ids(self, reader: asyncio.StreamReader) -> tuple[int, int, int]:
@@ -49,9 +51,7 @@ class MixteraServer:
         logger.debug(f"Looking up query ID for training {training_id}")
         return self._ldc.get_query_id(training_id)
 
-    async def _read_file(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
+    async def _read_file(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         filesys_t = await read_int(ID_BYTES, reader)
 
         valid_input = True
@@ -63,14 +63,14 @@ class MixteraServer:
         file_path = await read_utf8_string(ID_BYTES, reader)
 
         if file_path is None or file_path == "":
-            logger.warning(f"Did not receive file path.")
+            logger.warning("Did not receive file path.")
             valid_input = False
 
         if not valid_input:
             return
-        
+
         logger.info(f"Got a _read_file request for file {file_path}")
-        file_data = "\n".join(AbstractFilesystem.from_id(filesys_t).get_file_iterable(file_path, None))
+        file_data = "".join(AbstractFilesystem.from_id(filesys_t).get_file_iterable(file_path, None))
         logger.debug("File read.")
         await write_utf8_string(file_data, SAMPLE_SIZE_BYTES, writer, drain=False)
         logger.debug("Data written.")
@@ -78,7 +78,7 @@ class MixteraServer:
         logger.debug("Data drained.")
 
     async def _return_next_result_chunk(self, query_id: int, writer: asyncio.StreamWriter) -> None:
-        next_chunk = self._ldc.next_query_result_chunk(query_id) # This function should be thread safe
+        next_chunk = self._ldc.next_query_result_chunk(query_id)  # This function should be thread safe
         await write_pickeled_object(next_chunk, SAMPLE_SIZE_BYTES, writer)
 
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

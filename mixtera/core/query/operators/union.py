@@ -1,11 +1,12 @@
-from mixtera.utils import flatten
 from typing import TYPE_CHECKING
+
+from mixtera.utils import flatten
+
+from ._base import Operator
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.local import LocalDataCollection
     from mixtera.core.query.query import Query
-
-from ._base import Operator
 
 
 class Union(Operator):

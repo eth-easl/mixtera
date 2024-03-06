@@ -1,38 +1,24 @@
-import asyncio
-import threading
-from queue import Empty, Queue
-from typing import TYPE_CHECKING, Any, Callable, Generator, Optional, Type
+from typing import TYPE_CHECKING, Callable, Generator, Optional, Type
 
 from loguru import logger
 from mixtera.core.datacollection import IndexType, MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.core.processing.execution_mode import ExecutionMode
+from mixtera.core.query import RemoteQueryResult
 from mixtera.network.connection import ServerConnection
-from mixtera.network.server.server import ID_BYTES, SAMPLE_SIZE_BYTES
-from mixtera.network.server_task import ServerTask
-from mixtera.utils import run_async_until_complete
-from mixtera.utils.network_utils import read_int, read_utf8_string, write_int, write_pickeled_object, write_utf8_string
-from mixtera.core.query import  RemoteQueryResult
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection import PropertyType
-    from mixtera.core.query import QueryResult, Query
+    from mixtera.core.query import Query, QueryResult
 
 
 class RemoteDataCollection(MixteraDataCollection):
 
-    def __init__(self, host: str, port: int, prefetch_buffer_size: int) -> None:
+    def __init__(self, host: str, port: int) -> None:
         self._server_connection = ServerConnection(host, port)
         self._host = host
         self._port = port
-
-
-    def stream_query_results(self, query_result: "QueryResult", tunnel_via_server: bool = False) -> Generator[str, None, None]:
-        yield from MixteraDataCollection._stream_query_results(query_result, self._server_connection if tunnel_via_server else None)
-
-    def is_remote(self) -> bool:
-        return True
 
     def execute_query_at_server(self, query: "Query", chunk_size: int) -> RemoteQueryResult:
         if (query_id := self._server_connection.execute_query(query, chunk_size)) < 0:
@@ -41,7 +27,6 @@ class RemoteDataCollection(MixteraDataCollection):
         logger.info(f"Registered query with query id {query_id} for training {query.training_id}")
 
         return RemoteQueryResult(self._server_connection, query_id)
-
 
     def get_query_result(self, training_id: str) -> "RemoteQueryResult":
         logger.info(
@@ -54,12 +39,15 @@ class RemoteDataCollection(MixteraDataCollection):
 
         return RemoteQueryResult(self._server_connection, query_id)
 
-    def get_samples_from_ranges(
-        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
+    def stream_query_results(
+        self, query_result: "QueryResult", tunnel_via_server: bool = False
     ) -> Generator[str, None, None]:
-        raise NotImplementedError(
-            "Querying ranges from a RemoteDataCollection is currently not supported. Please run a query instead."
+        yield from MixteraDataCollection._stream_query_results(
+            query_result, self._server_connection if tunnel_via_server else None
         )
+
+    def is_remote(self) -> bool:
+        return True
 
     def register_dataset(
         self,
@@ -98,11 +86,4 @@ class RemoteDataCollection(MixteraDataCollection):
         raise NotImplementedError()
 
     def get_index(self, property_name: Optional[str] = None) -> IndexType:
-        """
-        This function returns the index of the MixteraDataCollection.
-
-        Args:
-            property_name (Optional[str], optional): The name of the property to query.
-                If not provided, all properties are returned.
-        """
         raise NotImplementedError()

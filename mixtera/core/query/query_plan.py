@@ -1,5 +1,5 @@
-
 from typing import Optional
+
 from mixtera.core.query.operators._base import Operator
 
 
@@ -45,4 +45,3 @@ class QueryPlan:
             # there is a trailing newline, so we strip it
             return self.root.string(level=0).strip("\n")
         return "<empty>"
-

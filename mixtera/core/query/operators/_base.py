@@ -1,10 +1,11 @@
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from mixtera.core.datacollection import IndexType
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.local import LocalDataCollection
     from mixtera.core.query.query_plan import QueryPlan
+
 
 class Operator:
     """
@@ -23,7 +24,7 @@ class Operator:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}"
-    
+
     def insert(self, query_plan: "QueryPlan") -> "Operator":
         """
         For most operators, the insert function (insert this node into the query)

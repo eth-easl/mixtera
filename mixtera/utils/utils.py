@@ -53,6 +53,7 @@ def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
 def run_async_until_complete(call: Any) -> Any:
     return asyncio.get_event_loop().run_until_complete(call)
 
+
 def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
     # TODO(MaxiBoether): rewrite this better
     timeout_at = time.time() + timeout

@@ -1,8 +1,8 @@
+from typing import TYPE_CHECKING
+
 from mixtera.core.query.query_plan import QueryPlan
 
 from ._base import Operator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.local import LocalDataCollection

@@ -14,7 +14,8 @@ class MockOperator(Operator):
     def display(self, level):
         print(" " * level + self.name)
 
-    def execute(self):
+    def execute(self, ldc):
+        del ldc
         self.results = [{1: {1: [(1, 2)]}}] * self.len_results
 
 
@@ -44,24 +45,23 @@ class TestQueryPlan(unittest.TestCase):
 class TestQuery(unittest.TestCase):
     def setUp(self):
         self.mdc = MixteraDataCollection.from_directory(".")
-        self.query = Query(self.mdc)
+        self.query = Query("training_id", 1, 1)
 
     def test_init(self):
-        self.assertEqual(self.query.mdc, self.mdc)
         self.assertIsInstance(self.query.query_plan, QueryPlan)
 
     def test_register(self):
         class TestOperator(Operator):
-            def execute(self) -> None:
+            def execute(self, ldc) -> None:
+                del ldc
                 self.results = ["test"]
 
         Query.register(TestOperator)
         self.assertTrue(hasattr(Query, "testoperator"))
 
-    def test_from_datacollection(self):
-        query = Query.from_datacollection(self.mdc)
-        self.assertEqual(query.mdc, self.mdc)
-        self.assertIsInstance(query.query_plan, QueryPlan)
+    def test_for_training(self):
+        query = Query.for_training("training_id", 1)
+        self.assertEqual(query.training_id, "training_id")
 
     def test_root(self):
         operator = MockOperator("test_operator")
@@ -88,8 +88,8 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
-        query = Query(self.mdc).mockoperator("test")
-        query_result = query.execute(chunk_size=1)
+        query = Query("training_id", 1, 1).mockoperator("test")
+        query_result = query.execute(self.mdc, chunk_size=1)
         res = list(query_result)
         gt_meta = {
             "dataset_type": {1: "test_dataset_type"},
@@ -113,7 +113,7 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
-        query = Query(self.mdc).mockoperator("test", len_results=2)
-        res = query.execute(chunk_size=2)
+        query = Query.for_training("training_id", 1, 1).mockoperator("test", len_results=2)
+        res = query.execute(self.mdc, chunk_size=2)
         res = list(res)
         self.assertEqual(res, [[{1: {1: [(1, 2)]}}, {1: {1: [(1, 2)]}}]])

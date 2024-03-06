@@ -1,10 +1,9 @@
-from ._base import Operator
-
 from typing import TYPE_CHECKING
+
+from ._base import Operator
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.local import LocalDataCollection
-
 
 
 class Materialize(Operator):
@@ -28,4 +27,4 @@ class Materialize(Operator):
         self.results = list(ldc.get_samples_from_ranges(res) for res in self.results)
 
     def __repr__(self) -> str:
-        return f"materialize<{self.mdc}>"
+        return "materialize<>"

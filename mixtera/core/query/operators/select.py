@@ -1,13 +1,13 @@
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from mixtera.core.query.query_plan import QueryPlan
-from typing import TYPE_CHECKING
+
+from ._base import Operator
+from .intersect import Intersection
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.local import LocalDataCollection
 
-from ._base import Operator
-from .intersect import Intersection
 
 valid_operators = ["==", ">", "<", ">=", "<=", "!="]
 

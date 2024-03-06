@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Generator, Iterable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Generator, Iterable, Optional
 
 from mixtera.core.filesystem import AbstractFilesystem
 
@@ -15,7 +15,8 @@ class LocalFilesystem(AbstractFilesystem):
         cls, file_path: str | Path, server_connection: Optional["ServerConnection"] = None
     ) -> Iterable[str]:
         if server_connection is not None:
-            # TODO(create issue): We currently transfer the entire file, instead of parsing the ranges at server. Not sure what we want to do here.
+            # TODO(create issue): We currently transfer the entire file, instead of parsing the ranges at server.
+            # It is unclear what is better (local parsing vs at-client parsing)
             yield from server_connection.get_file_iterable(
                 cls.type_id, file_path if isinstance(file_path, str) else str(file_path)
             )

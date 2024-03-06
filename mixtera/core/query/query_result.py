@@ -1,16 +1,21 @@
-from typing import Callable, Generator, Optional, Type
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Generator, Optional, Type
+
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.local import LocalDataCollection
 from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.network.connection import ServerConnection
-from abc import ABC, abstractmethod
+
 
 class QueryResult(ABC):
     @abstractmethod
-    def __iter__(self) -> Generator[list[IndexType], None, None]:
+    def __next__(self) -> list[IndexType]:
         raise NotImplementedError()
-    
+
+    def __iter__(self) -> "QueryResult":
+        return self
+
     @property
     @abstractmethod
     def dataset_fs(self) -> dict[int, Type[AbstractFilesystem]]:
@@ -30,6 +35,7 @@ class QueryResult(ABC):
     @abstractmethod
     def parsing_func(self) -> dict[int, Callable[[str], str]]:
         raise NotImplementedError()
+
 
 class LocalQueryResult(QueryResult):
     """QueryResult is a class that represents the results of a query.
@@ -87,56 +93,68 @@ class LocalQueryResult(QueryResult):
     @property
     def dataset_fs(self) -> dict[int, Type[AbstractFilesystem]]:
         return self._meta["dataset_fs"]
-    
-    def __iter__(self):
-        return self
-    
-    def __next__(self):
+
+    def __next__(self) -> list[IndexType]:
         """Iterate over the results of the query with a chunk size.
 
         This method is very dummy right now without ensuring the correct mixture.
         """
         if self._index < len(self.results):
-            next_chunk = self.results[self._index:self._index + self.chunk_size]
+            next_chunk = self.results[self._index : self._index + self.chunk_size]
             self._index += self.chunk_size
             return next_chunk
-        else:
-            raise StopIteration
+
+        raise StopIteration
 
 
 class RemoteQueryResult(QueryResult):
     def __init__(self, server_connection: ServerConnection, query_id: int):
         self._server_connection = server_connection
         self._query_id = query_id
-        self._meta: Optional[dict] = None
+        self._meta: dict[str, Any] = {}
+        self._result_generator: Optional[Generator[list[IndexType], None, None]] = None
 
-    def _fetch_meta_if_none(self) -> None:
-        if self._meta is None:
+    def _fetch_meta_if_empty(self) -> None:
+        if not self._meta:
             if (meta := self._server_connection.get_query_result_meta(self._query_id)) is None:
                 raise RuntimeError("Error while fetching meta results")
-            
+
             self._meta = meta
 
-    
     @property
     def dataset_type(self) -> dict[int, Type[Dataset]]:
-        self._fetch_meta_if_none()
+        self._fetch_meta_if_empty()
         return self._meta["dataset_type"]
 
     @property
     def file_path(self) -> dict[int, str]:
-        self._fetch_meta_if_none()
+        self._fetch_meta_if_empty()
         return self._meta["file_path"]
 
     @property
     def parsing_func(self) -> dict[int, Callable[[str], str]]:
-        self._fetch_meta_if_none()
+        self._fetch_meta_if_empty()
         return self._meta["parsing_func"]
-    
+
     @property
     def dataset_fs(self) -> dict[int, Type[AbstractFilesystem]]:
-        self._fetch_meta_if_none()
+        self._fetch_meta_if_empty()
         return self._meta["dataset_fs"]
-    
-    def __iter__(self) -> Generator[list[IndexType], None, None]:
-        yield from self._server_connection.get_query_results(self._query_id)
+
+    def _fetch_results_if_none(self) -> None:
+        if self._result_generator is None:
+            self._result_generator = self._server_connection.get_query_results(self._query_id)
+
+    def __iter__(self) -> "RemoteQueryResult":
+        self._fetch_results_if_none()
+        return self
+
+    def __next__(self) -> list[IndexType]:
+        if self._result_generator is None:
+            raise StopIteration
+
+        try:
+            return next(self._result_generator)
+        except StopIteration:
+            self._result_generator = None
+            raise
