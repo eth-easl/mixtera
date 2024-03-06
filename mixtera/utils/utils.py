@@ -55,21 +55,12 @@ def run_async_until_complete(call: Any) -> Any:
 
 
 def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
-    # TODO(MaxiBoether): rewrite this better
     timeout_at = time.time() + timeout
 
     while key not in dictionary and time.time() <= timeout_at:
         time.sleep(0.1)
 
     return key in dictionary
-
-    # end_time = asyncio.get_event_loop().time() + timeout
-    # while True:
-    #    if key in dictionary:
-    #        return True
-    #    if asyncio.get_event_loop().time() >= end_time:
-    #        return False
-    #    await asyncio.sleep(0.1)
 
 
 def numpy_to_native_type(obj: Any) -> Any:

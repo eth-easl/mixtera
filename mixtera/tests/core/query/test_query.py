@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -44,7 +45,7 @@ class TestQueryPlan(unittest.TestCase):
 
 class TestQuery(unittest.TestCase):
     def setUp(self):
-        self.mdc = MixteraDataCollection.from_directory(".")
+        self.mdc = MixteraDataCollection.from_directory(tempfile.gettempdir())
         self.query = Query("training_id", 1, 1)
 
     def test_init(self):
@@ -77,15 +78,18 @@ class TestQuery(unittest.TestCase):
 
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_filesys_by_id")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_file_path_by_id")
     def test_execute_chunksize_one(
         self,
         mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_filesys_by_id: MagicMock,
         mock_get_dataset_type_by_id: MagicMock,
         mock_get_dataset_func_by_id: MagicMock,
     ):
         mock_get_file_path_by_id.return_value = "test_file_path"
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_filesys_by_id.return_value = "test_dataset_filesys"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query("training_id", 1, 1).mockoperator("test")
@@ -94,23 +98,28 @@ class TestQuery(unittest.TestCase):
         gt_meta = {
             "dataset_type": {1: "test_dataset_type"},
             "file_path": {1: "test_file_path"},
+            "filesys": {1: "test_dataset_filesys"},
         }
         print(gt_meta)
         self.assertEqual(res, [[{1: {1: [(1, 2)]}}]])
         self.assertEqual(query_result.dataset_type, gt_meta["dataset_type"])
         self.assertEqual(query_result.file_path, gt_meta["file_path"])
+        self.assertEqual(query_result.dataset_fs, gt_meta["filesys"])
 
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_filesys_by_id")
     @patch("mixtera.core.datacollection.local.LocalDataCollection._get_file_path_by_id")
     def test_execute_chunksize_two(
         self,
         mock_get_file_path_by_id: MagicMock,
         mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_filesys_by_id: MagicMock,
         mock_get_dataset_func_by_id: MagicMock,
     ):
         mock_get_file_path_by_id.return_value = "test_file_path"
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_filesys_by_id.return_value = "test_dataset_filesys"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query.for_training("training_id", 1, 1).mockoperator("test", len_results=2)

@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 
 from mixtera.core.datacollection import MixteraDataCollection
@@ -7,7 +8,7 @@ from mixtera.core.query.query import Query
 
 class TestUnion(unittest.TestCase):
     def setUp(self):
-        self.mdc = MixteraDataCollection.from_directory(".")
+        self.mdc = MixteraDataCollection.from_directory(tempfile.gettempdir())
         self.query_a = Query.for_training("training_id", 1).select(("field1", "==", "value1"))
         self.query_a.root.results = ["result1", "result2", "result3"]
         self.union = Union(self.query_a)

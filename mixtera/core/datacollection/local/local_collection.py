@@ -326,7 +326,7 @@ class LocalDataCollection(MixteraDataCollection):
             raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
 
         if result is None:
-            raise RuntimeError(f"Could not get dataset type by id for did {did}")
+            raise RuntimeError(f"Could not get dataset filesystem by id for did {did}")
 
         result = result[0]
 
