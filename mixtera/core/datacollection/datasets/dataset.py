@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional, Type
 
 from mixtera.core.datacollection import IndexType
-from mixtera.core.datacollection.index import MetadataParser
+from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem.abstract_filesystem import AbstractFilesystem
 from mixtera.server import ServerConnection
 
@@ -36,16 +36,14 @@ class Dataset(ABC):
 
     @staticmethod
     @abstractmethod
-    def build_file_index(loc: Path, filesys_t: Type[AbstractFilesystem], metadata_parser: MetadataParser) -> IndexType:
+    def build_file_index(loc: Path, filesys_t: Type[AbstractFilesystem], metadata_parser: MetadataParser) -> None:
         """
         Build up the file index for the file stored at loc.
 
         Args:
             loc (Path): Path to the file we are building the index for
-            metadata_parser (MetadataParser): Parser class responsible with extracting the metadata
-
-        Returns:
-            The index for the given file.
+            metadata_parser (MetadataParser): Parser class responsible with extracting the metadata.
+                This object is stateful.
         """
         raise NotImplementedError()
 

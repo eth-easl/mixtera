@@ -3,9 +3,10 @@ from typing import Callable, Iterable, Optional, Type
 
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets.dataset import Dataset
-from mixtera.core.datacollection.index import MetadataParser
+from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem import AbstractFilesystem
 from mixtera.server import ServerConnection
+
 
 
 class CrossaintDataset(Dataset):

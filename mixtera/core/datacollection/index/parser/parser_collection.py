@@ -1,10 +1,7 @@
-from enum import Enum
 from typing import Any, Optional
 
 from loguru import logger
-from mixtera.core.datacollection import IndexType
-from mixtera.core.datacollection.index import MetadataParser
-from mixtera.utils import ranges
+from mixtera.core.datacollection.index.parser import MetadataParser
 
 
 class RedPajamaMetadataParser(MetadataParser):
@@ -25,31 +22,10 @@ class RedPajamaMetadataParser(MetadataParser):
             value = metadata[index_field]
             if index_field == "language":
                 for language in value:
-                    self._index[index_field][language["name"]][self.dataset_id][self.file_id].append(line_number)
+                    self._index.append_entry(index_field, language["name"], self.dataset_id, self.file_id, line_number)
             else:
                 # TODO(#11): Support numerical buckets, not just categorical
-                self._index[index_field][value][self.dataset_id][self.file_id].append(line_number)
-
-    def _compress_index(self) -> None:
-        """
-        Compresses the internal index, reducing contiguous line ranges to spans.
-        E.g. [1,2,3,5,6] --> [(1,4), (5,7)]. All modifications are done in place
-        on the index. Note that the lower bound of each range is inclusive, but
-        the upper bound is exclusive.
-        """
-        for _, buckets in self._index.items():
-            for __, bucket_vals in buckets.items():
-                bucket_vals[self.dataset_id][self.file_id] = ranges(bucket_vals[self.dataset_id][self.file_id])
-
-    def get_index(self) -> IndexType:
-        self._compress_index()
-        return self._index
-
-
-class MetadataParserRegistry(Enum):
-    """Each metadata parser is registered with this enum."""
-
-    RED_PAJAMA = RedPajamaMetadataParser
+                self._index.append_entry(index_field, value, self.dataset_id, self.file_id, line_number)
 
 
 class MetadataParserFactory:
