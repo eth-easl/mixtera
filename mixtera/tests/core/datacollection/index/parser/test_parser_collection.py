@@ -115,7 +115,7 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         for line_number, metadata in enumerate(lines):
             red_pajama_metadata_parser.parse(line_number, metadata)
 
-        red_pajama_metadata_parser.mark_complete()
+        red_pajama_metadata_parser.finalize()
         result_index = defaultdict_to_dict(red_pajama_metadata_parser.get_index().get_full_index())
         self.assertEqual(expected, result_index)
 
@@ -140,7 +140,7 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
             "publication_date": {"asd123": {0: {0: [(0, 1), (2, 6), (9, 11)]}}},
         }
 
-        red_pajama_metadata_parser.mark_complete()
+        red_pajama_metadata_parser.finalize()
         self.assertEqual(target_index, red_pajama_metadata_parser.get_index().get_full_index())
 
 

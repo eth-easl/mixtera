@@ -88,7 +88,7 @@ class LocalDataCollection(MixteraDataCollection):
                 return False
             metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
             dtype.build_file_index(file, metadata_parser)
-            metadata_parser.mark_complete()
+            metadata_parser.finalize()
             self._insert_index_into_table(metadata_parser.get_index())
         return True
 

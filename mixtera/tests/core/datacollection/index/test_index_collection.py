@@ -113,8 +113,8 @@ class TestInMemoryDictionaryLineIndex(unittest.TestCase):
         compressed_index = index.compress()
         self.assertIsInstance(compressed_index, InMemoryDictionaryRangeIndex)
         self.assertEqual(target_index, compressed_index.get_full_index())
-        self.assertFalse(index.is_compressed())
-        self.assertTrue(compressed_index.is_compressed())
+        self.assertFalse(index.is_compressed)
+        self.assertTrue(compressed_index.is_compressed)
 
     def test_append_index_entry(self):
         index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)

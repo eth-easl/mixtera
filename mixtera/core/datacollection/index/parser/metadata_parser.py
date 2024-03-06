@@ -27,7 +27,7 @@ class MetadataParser(ABC):
         """
         self.dataset_id: int = dataset_id
         self.file_id: int = file_id
-        self._parsing_complete = False
+        self._finalized = False
         self._index: InMemoryDictionaryIndex = IndexFactory.create_index(index_type)
 
     @abstractmethod
@@ -47,22 +47,24 @@ class MetadataParser(ABC):
         Returns the fully parsed metadata index. This method should only be called
         once the index has been marked as complete.
         """
-        assert self._parsing_complete, (
-            "Retrieving index without first marking parsing as complete. " "Index will be transparently compressed!"
-        )
+        assert (
+            self._finalized
+        ), "Retrieving index without first marking parsing as complete. Index will be transparently compressed!"
         return self._index
 
-    def mark_complete(self) -> None:
+    def finalize(self) -> None:
         """
-        Compresses the underlying index, allowing it to be exposed for reading.
+        Mark the completion of the metadata parsing process and convert the inner index
+        to a row range-based representation.
         """
-        if not self._parsing_complete:
-            self._parsing_complete = True
+        if not self._finalized:
+            self._finalized = True
             self._index = self._index.compress()
 
-    def is_parsing_complete(self) -> bool:
+    @property
+    def is_finalized(self) -> bool:
         """
-        True if the parsing is complete, and the underlying index has been
-        converted to ranges.
+        True if the parsing has been finalized, and the underlying index has
+        been converted to ranges.
         """
-        return self._parsing_complete
+        return self._finalized

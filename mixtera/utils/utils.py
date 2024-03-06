@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 from typing import Any, List, Tuple, Union
 
 import numpy as np
@@ -63,3 +64,18 @@ def numpy_to_native_type(obj: Any) -> Any:
     if hasattr(obj, "item"):
         return obj.item()
     return obj
+
+
+def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Union[list, dict]:
+    """
+    This method either returns the passed object as is, or makes a deep copy
+    of it, and returns that.
+
+    Args:
+      to_return: the object to be returned
+      copy: whether to copy it or not
+
+    Returns:
+      The `to_return` object or a copy of it if `copy` is `True`
+    """
+    return to_return if not copy else deepcopy(to_return)

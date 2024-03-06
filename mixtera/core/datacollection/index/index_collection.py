@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from copy import deepcopy
 from enum import Enum
 from typing import Union
 
@@ -12,26 +11,14 @@ from mixtera.core.datacollection.index import (
     IndexRangeType,
 )
 from mixtera.utils import merge_dicts, ranges
-
-
-def _return_with_copy_or_noop(to_return: Union[list, dict], copy: bool) -> Union[list, dict]:
-    """
-    This method either returns the passed object as is, or makes a deep copy
-    of it, and returns that.
-
-    Args:
-      to_return: the object to be returned
-      copy: whether to copy it or not
-
-    Returns:
-      The `to_return` object or a copy of it if `copy` is `True`
-    """
-    return to_return if not copy else deepcopy(to_return)
+from mixtera.utils.utils import return_with_deepcopy_or_noop
 
 
 class InMemoryDictionaryIndex(Index, ABC):
     """
-    Represents an in memory dictionary class. This index exploits defaultdicts.
+    Represents a base class for in memory dictionary indexes. This class should
+    not be used directly, but rather should act as a type. Concrete indexes
+    should extend this class and implement its abstract methods.
     """
 
     def __init__(self) -> None:
@@ -51,30 +38,37 @@ class InMemoryDictionaryIndex(Index, ABC):
     def compress(self) -> "InMemoryDictionaryRangeIndex":
         """
         Compresses the internal index, reducing contiguous line ranges to spans.
-        E.g. [1,2,3,5,6] --> [(1,4), (5,7)]. All modifications are done in place
-        on the index. Note that the lower bound of each range is inclusive, but
-        the upper bound is exclusive. This converts the index from the
-        `IndexUncompressedType` to the `IndexType`
+        E.g. [1,2,3,5,6] --> [(1,4), (5,7)]. Note that the lower bound of each
+        range is inclusive, but the upper bound is exclusive.
+
+        Returns:
+          An index of the `InMemoryDictionaryRangeIndex` type.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    @property
     def is_compressed(self) -> bool:
         return self._is_compressed
 
     def get_full_index(self, copy: bool = False) -> IndexRangeType:
-        return _return_with_copy_or_noop(self._index, copy)
+        return return_with_deepcopy_or_noop(self._index, copy)
 
     def get_by_feature(self, feature_name: str, copy: bool = False) -> IndexFeatureValueRangeType:
         if feature_name not in self._index:
+            logger.warning(f"Feature {feature_name} was not found in index; returning emtpy dict!")
             return {}
-        return _return_with_copy_or_noop(self._index[feature_name], copy)
+        return return_with_deepcopy_or_noop(self._index[feature_name], copy)
 
     def get_by_feature_value(
         self, feature_name: str, feature_value: Union[str, int, float], copy: bool = False
     ) -> IndexDatasetEntryRangeType:
         if feature_name not in self._index or feature_value not in self._index[feature_name]:
+            logger.warning(
+                f"The feature {feature_name} or the feature value {feature_value} was not "
+                "found in index; returning emtpy dict!"
+            )
             return {}
-        return _return_with_copy_or_noop(self._index[feature_name][feature_value], copy)
+        return return_with_deepcopy_or_noop(self._index[feature_name][feature_value], copy)
 
     def get_all_features(self) -> list[str]:
         return list(self._index.keys())
@@ -101,8 +95,8 @@ class InMemoryDictionaryIndex(Index, ABC):
 
 class InMemoryDictionaryRangeIndex(InMemoryDictionaryIndex):
     """
-    In memory dictionary index that stores lists of ranges at the leaf nodes
-    as opposed to lists of row indices.
+    Concrete in memory dictionary index class that stores lists of ranges at
+    the leaf nodes as opposed to lists of row indices.
     """
 
     def __init__(self) -> None:
@@ -132,8 +126,8 @@ class InMemoryDictionaryRangeIndex(InMemoryDictionaryIndex):
 
 class InMemoryDictionaryLineIndex(InMemoryDictionaryIndex):
     """
-    In memory dictionary index that stores lists of row indices at the leaf
-    nodes as opposed to lists of ranges.
+    Concrete in memory dictionary index that stores lists of row indices at
+    the leaf nodes as opposed to lists of ranges.
     """
 
     def compress(self) -> "InMemoryDictionaryRangeIndex":

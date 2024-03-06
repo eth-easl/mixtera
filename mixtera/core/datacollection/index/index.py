@@ -42,7 +42,6 @@ class Index(ABC):
     }
     """
 
-    # Line-based
     @abstractmethod
     def append_entry(
         self,
@@ -62,11 +61,12 @@ class Index(ABC):
           feature_value: the value of the feature (e.g. 'Italian')
           dataset_id: the id of the dataset
           file_id: the id of the file within the dataset
-          payload: the
+          payload: the element to be added to the index (e.g. row range). The
+            type of this element is ultimately determined by the implementing
+            index class.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    # Common
     @abstractmethod
     def get_full_index(self, copy: bool = False) -> IndexType:
         """
@@ -81,7 +81,6 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    # Common
     @abstractmethod
     def get_by_feature(self, feature_name: str, copy: bool = False) -> "IndexFeatureValueType":
         """
@@ -99,7 +98,6 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    # Common
     @abstractmethod
     def get_by_feature_value(
         self, feature_name: str, feature_value: Union[str, int, float], copy: bool = False
@@ -120,7 +118,6 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    # Common
     @abstractmethod
     def merge(self, other: "Index", copy_other: bool = False) -> None:
         """
@@ -139,7 +136,6 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    # Common
     @abstractmethod
     def get_all_features(self) -> list[str]:
         """
@@ -151,7 +147,6 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    # Common
     @abstractmethod
     def has_feature(self, feature_name: str) -> bool:
         """
@@ -165,7 +160,6 @@ class Index(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    # Common
     @abstractmethod
     def keep_only_feature(self, feature_names: Union[str, list[str]]) -> None:
         """
