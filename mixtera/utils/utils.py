@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 from typing import Any, List, Tuple, Union
 
 import numpy as np
@@ -27,15 +28,15 @@ def ranges(nums: List[int]) -> List[Tuple[int, int]]:
     return [(s, e + 1) for s, e in zip(edges, edges)]
 
 
-def merge_defaultdicts(d1: defaultdict, d2: defaultdict) -> defaultdict:
+def merge_dicts(d1: dict, d2: dict) -> dict:
     """
-    Recursively merges two defaultdict structures. Assumes that the innermost
+    Recursively merges two dict structures. Assumes that the innermost
     dictionaries have unique keys and thus can be merged without concern for collisions.
     """
     for key, value in d2.items():
-        if isinstance(value, defaultdict):
-            node = d1[key]
-            d1[key] = merge_defaultdicts(node, value)
+        if isinstance(value, dict):
+            node = d1[key] if key in d1 else {}
+            d1[key] = merge_dicts(node, value)
         else:
             # We're at the innermost level, which has unique keys, so just add them
             d1[key] = value
@@ -63,3 +64,18 @@ def numpy_to_native_type(obj: Any) -> Any:
     if hasattr(obj, "item"):
         return obj.item()
     return obj
+
+
+def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Union[list, dict]:
+    """
+    This method either returns the passed object as is, or makes a deep copy
+    of it, and returns that.
+
+    Args:
+      to_return: the object to be returned
+      copy: whether to copy it or not
+
+    Returns:
+      The `to_return` object or a copy of it if `copy` is `True`
+    """
+    return to_return if not copy else deepcopy(to_return)
