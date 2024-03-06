@@ -425,5 +425,5 @@ class LocalDataCollection(MixteraDataCollection):
         if not self._index.has_feature(property_name):
             logger.warning(f"Property {property_name} not found in index, returning None.")
             return None
-        self._index.drop_other_features(property_name)
-        return self._index
+        # The type of self._index and the returned value is `InMemoryDictionaryRangeIndex`
+        return self._index.get_index_by_features(property_name)
