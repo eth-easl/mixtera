@@ -1,5 +1,5 @@
+import multiprocessing as mp
 import sqlite3
-import threading
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
@@ -39,7 +39,7 @@ class LocalDataCollection(MixteraDataCollection):
         else:
             self._connection = sqlite3.connect(self._database_path)
 
-        self._queries_lock = threading.Lock()
+        self._queries_lock = mp.Lock()
         self._queries: list[tuple[Query, int]] = []  # (query, num nodes, num workers per node)
         self._training_query_map: dict[str, int] = {}
 
@@ -455,6 +455,5 @@ class LocalDataCollection(MixteraDataCollection):
         return -1
 
     def next_query_result_chunk(self, query_id: int) -> Optional[list[IndexType]]:
-        # TODO(MaxiBoether): also use this method locally? avoid duplication after fork? use mp.Lock instead?
-        with self._queries_lock:
-            return next(self._queries[query_id][0].results, None)
+        # Note that this call is inherently thread-safe
+        return next(self._queries[query_id][0].results, None)

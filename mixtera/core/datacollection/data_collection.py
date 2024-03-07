@@ -169,8 +169,8 @@ class MixteraDataCollection(ABC):
             TODO
         """
         # TODO(MaxiBoether): This might need adjustments after the index PR
-        for index_list in query_result:
-            for index in index_list:
+        for result_chunk in query_result:
+            for index in result_chunk:
                 # TODO(create issue): This currently iterates through it dataset by dataset.
                 # Instead, we want to sample from it uniform at random
                 # It is a bit unclear how to implementing sampling here, since we work with ranges.

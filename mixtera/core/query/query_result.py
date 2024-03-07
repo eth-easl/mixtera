@@ -1,6 +1,8 @@
+import multiprocessing as mp
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Generator, Optional, Type
 
+from loguru import logger
 from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.local import LocalDataCollection
@@ -56,13 +58,23 @@ class LocalQueryResult(QueryResult):
             results (list): The list of results of the query.
             chunk_size (int): The chunk size of the results.
         """
-        self.ldc = ldc
         self.chunk_size = chunk_size
-        self._meta = self._parse_meta(results)
+        self._meta = self._parse_meta(ldc, results)
+        # A process holding a LocalQueryResult might fork (e.g., for dataloaders).
+        # Hence, we need to store the locks etc in shared memory.
+        self._manager = mp.Manager()
+        self._lock = self._manager.Lock()
+        self._index = self._manager.Value("i", 0)
+        # TODO(create issue): This is actually a big problem in case of multiple dataloaders.
+        # Since we create new processes, the memory will get copied.
+        # I tried to use a manager.List() but run into pickling errors.
+        # However, this only affects the setting where we train without a MixteraServer.
+        # It could be that we need defaultdict_to_dict here but I stopped exploring this for now.
         self.results = results
-        self._index = 0
 
-    def _parse_meta(self, indices: list[IndexType]) -> dict:
+        logger.debug(f"Instantiated LocalQueryResult with {len(self.results)} IndexTypes.")
+
+    def _parse_meta(self, ldc: LocalDataCollection, indices: list[IndexType]) -> dict:
         dataset_ids = set()
         file_ids = set()
 
@@ -72,10 +84,10 @@ class LocalQueryResult(QueryResult):
                 file_ids.update(val)
 
         return {
-            "dataset_type": {did: self.ldc._get_dataset_type_by_id(did) for did in dataset_ids},
-            "parsing_func": {did: self.ldc._get_dataset_func_by_id(did) for did in dataset_ids},
-            "file_path": {fid: self.ldc._get_file_path_by_id(fid) for fid in file_ids},
-            "dataset_fs": {did: self.ldc._get_dataset_filesys_by_id(did) for did in dataset_ids},
+            "dataset_type": {did: ldc._get_dataset_type_by_id(did) for did in dataset_ids},
+            "parsing_func": {did: ldc._get_dataset_func_by_id(did) for did in dataset_ids},
+            "file_path": {fid: ldc._get_file_path_by_id(fid) for fid in file_ids},
+            "dataset_fs": {did: ldc._get_dataset_filesys_by_id(did) for did in dataset_ids},
         }
 
     @property
@@ -95,14 +107,20 @@ class LocalQueryResult(QueryResult):
         return self._meta["dataset_fs"]
 
     def __next__(self) -> list[IndexType]:
-        """Iterate over the results of the query with a chunk size.
+        """Iterate over the results of the query with a chunk size thread-safe.
 
         This method is very dummy right now without ensuring the correct mixture.
         """
-        if self._index < len(self.results):
-            next_chunk = self.results[self._index : self._index + self.chunk_size]
-            self._index += self.chunk_size
-            return next_chunk
+        local_index: Optional[int] = None
+        with self._lock:
+            if self._index.value < len(self.results):
+                local_index = self._index.value
+                self._index.value += self.chunk_size
+        # We exit the scope of the lock as early as possible.
+        # For now the actual slicing does not need to be locked.
+
+        if local_index is not None:
+            return self.results[local_index : local_index + self.chunk_size]
 
         raise StopIteration
 
@@ -152,6 +170,12 @@ class RemoteQueryResult(QueryResult):
     def __next__(self) -> list[IndexType]:
         if self._result_generator is None:
             raise StopIteration
+        # This is thread safe in the sense that the server
+        # handles each incoming request in a thread safe way
+        # While worker 1 could send its request before worker 2,
+        # worker 2 reads None, closes its generator, and then worker
+        # 1 gets its data back, this is not a problem since we need
+        # to consume all workers when in a multi data loader worker setting.
 
         try:
             return next(self._result_generator)
