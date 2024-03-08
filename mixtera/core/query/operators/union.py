@@ -21,8 +21,9 @@ class Union(Operator):
         logger.warning(
             "Union operator only supports bag semantics for now, meaning that it will not remove duplicates."
         )
-        self.children[0].results.merge(self.children[1].results)
-        self.results = self.children[0].results
+        if self.children[0].results and self.children[1].results:
+            self.children[0].results.merge(self.children[1].results)
+            self.results = self.children[0].results
 
     def __str__(self) -> str:
         return "union<>()"

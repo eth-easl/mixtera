@@ -23,7 +23,8 @@ class Intersection(Operator):
             "Intersection operator is not implemented properly yet, "
             "returning the intersection of the results of the two queries."
         )
-        self.results = [x for x in self.children[0].results if x in self.children[1].results]
+        if self.children[0].results and self.children[1].results:
+            self.results = [x for x in self.children[0].results if x in self.children[1].results]
 
     def __str__(self) -> str:
         return "intersection<>()"
