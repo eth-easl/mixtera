@@ -19,11 +19,12 @@ class FileSystem(ABC):
         Returns:
             The class that belongs to the type_id.
         """
+        file_path = str(file_path) if isinstance(file_path, Path) else file_path
 
-        from mixtera.core.filesystem import LocalFilesystem  # pylint: disable=import-outside-toplevel
+        from mixtera.core.filesystem import LocalFileSystem  # pylint: disable=import-outside-toplevel
 
         if file_path.startswith("file://") or file_path.startswith("/"):
-            return LocalFilesystem
+            return LocalFileSystem
 
         raise NotImplementedError(f"Cannot infer filesystem from path {file_path}")
 
@@ -41,6 +42,8 @@ class FileSystem(ABC):
                 Mixtera server from which the file is fetched instead. If None, the file is read from the
                 client directly.
         """
+        file_path = str(file_path) if isinstance(file_path, Path) else file_path
+
         yield FileSystem.from_path(file_path).get_file_iterable(file_path, server_connection)
 
     @classmethod
@@ -61,7 +64,6 @@ class FileSystem(ABC):
         raise NotImplementedError()
 
     @classmethod
-    @abstractmethod
     def is_dir(cls, path: str) -> bool:
         """
         Checks whether a given path is a directory or file.
@@ -73,19 +75,22 @@ class FileSystem(ABC):
         Returns:
             An boolean that is True if the path points to a directory.
         """
-        raise NotImplementedError()
+        path = str(path) if isinstance(path, Path) else path
+
+        return FileSystem.from_path(path).is_dir(path)
 
     @classmethod
-    @abstractmethod
-    def get_all_files_with_ext(cls, dir_path: str | Path, extension: str) -> Generator[str, None, None]:
+    def get_all_files_with_ext(cls, dir_path: str, extension: str) -> Generator[str, None, None]:
         """
         Implements a generator that iterates over all files with a specific extension in a given directory.
         Since this is only run from a LocalDataCollection, this does not over a remote server interface.
 
         Args:
-            dir_path (str | Path): The path in which all files checked for the extension.
+            dir_path (str ): The path in which all files checked for the extension.
 
         Returns:
             An iterable over the matching files.
         """
-        raise NotImplementedError()
+        dir_path = str(dir_path) if isinstance(dir_path, Path) else dir_path
+
+        yield from FileSystem.from_path(dir_path).get_all_files_with_ext(dir_path, extension)

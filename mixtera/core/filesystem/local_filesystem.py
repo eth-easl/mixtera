@@ -5,7 +5,7 @@ from mixtera.core.filesystem import FileSystem
 from mixtera.server import ServerConnection
 
 
-class LocalFilesystem(FileSystem):
+class LocalFileSystem(FileSystem):
     @classmethod
     def get_file_iterable(cls, file_path: str, server_connection: Optional[ServerConnection] = None) -> Iterable[str]:
         if server_connection is not None:

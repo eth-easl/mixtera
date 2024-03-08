@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional, Type
 
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.server import ServerConnection
 
 
@@ -35,7 +34,7 @@ class Dataset(ABC):
 
     @staticmethod
     @abstractmethod
-    def build_file_index(loc: Path, filesys_t: Type[FileSystem], metadata_parser: MetadataParser) -> None:
+    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> None:
         """
         Build up the file index for the file stored at loc.
 
@@ -48,14 +47,13 @@ class Dataset(ABC):
 
     @staticmethod
     @abstractmethod
-    def iterate_files(loc: str, filesys_t: Type[FileSystem]) -> Iterable[str]:
+    def iterate_files(loc: str) -> Iterable[str]:
         """
         Returns iterator over all files in the dataset.
         Note that this assumes the dataset to be available on th
 
         Args:
             loc (str): Path where the dataset is stored (can be directory or single file)
-            filesys_t (AbtractFilesystem): Type of the filesystem on on which the dataset is stored.
 
         Returns:
             Iterable over the files.
@@ -66,7 +64,6 @@ class Dataset(ABC):
     @abstractmethod
     def read_ranges_from_files(
         ranges_per_file: dict[str, list[tuple[int, int]]],
-        filesys_t: Type[FileSystem],
         parsing_func: Callable[[str], str],
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
@@ -76,7 +73,6 @@ class Dataset(ABC):
         Args:
             ranges_per_file (dict[str, list[tuple[int, int]]]): Dict that maps file paths as keys to
                 a list of ranges.
-            filesys_t (AbtractFilesystem): Type of the filesystem on on which the dataset is stored.
             parsing_func (Callable[[str], str]): Function applied to each "unit" per file.
                 Exact meaning depends on the dataset type.
                 For the JSONLDataset, this is applied per line, and can parse the actual content out of the line.

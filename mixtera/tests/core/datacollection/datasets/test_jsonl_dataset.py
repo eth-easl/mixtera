@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import mock_open, patch
 
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.filesystem import LocalFilesystem
 
 
 class TestJSONLDataset(unittest.TestCase):
@@ -22,7 +21,7 @@ class TestJSONLDataset(unittest.TestCase):
         jsonl_file_path.touch()
 
         self.assertListEqual(
-            sorted(list(JSONLDataset.iterate_files(str(directory), LocalFilesystem))),
+            sorted(list(JSONLDataset.iterate_files(str(directory)))),
             sorted([str(directory / "temp.jsonl"), str(directory / "temp2.jsonl")]),
         )
 
@@ -31,9 +30,7 @@ class TestJSONLDataset(unittest.TestCase):
         jsonl_file_path = directory / "temp.jsonl"
         jsonl_file_path.touch()
 
-        self.assertListEqual(
-            list(JSONLDataset.iterate_files(jsonl_file_path, LocalFilesystem)), [directory / "temp.jsonl"]
-        )
+        self.assertListEqual(list(JSONLDataset.iterate_files(jsonl_file_path)), [directory / "temp.jsonl"])
 
     def test_build_file_index(self):
         pass  # TODO(#8): actually write a reasonable test when it is not hardcoded anymore.
@@ -42,26 +39,23 @@ class TestJSONLDataset(unittest.TestCase):
         m = mock_open(read_data='{"id": "1"}\n{"id": "2"}\n{"id": "3"}\n')
         with patch("builtins.open", m):
             ranges = [(0, 2), (2, 3)]  # Read first two lines, then the third line
-            result = list(
-                JSONLDataset._read_ranges_from_file(
-                    "dummy_file.json", LocalFilesystem, ranges, lambda x: x.strip(), None
-                )
-            )
+            result = list(JSONLDataset._read_ranges_from_file("dummy_file.json", ranges, lambda x: x.strip(), None))
             expected = ['{"id": "1"}', '{"id": "2"}', '{"id": "3"}']
             self.assertEqual(result, expected)
 
     def test_read_ranges_from_files_mocked(self):
-        file_contents = {"file1.json": '{"id": "1"}\n{"id": "2"}\n', "file2.json": '{"id": "3"}\n{"id": "4"}\n'}
-        ranges_per_file = {"file1.json": [(0, 2)], "file2.json": [(0, 2)]}
+        file_contents = {
+            "file://file1.json": '{"id": "1"}\n{"id": "2"}\n',
+            "file://file2.json": '{"id": "3"}\n{"id": "4"}\n',
+        }
+        ranges_per_file = {"file://file1.json": [(0, 2)], "file://file2.json": [(0, 2)]}
         expected = ['{"id": "1"}', '{"id": "2"}', '{"id": "3"}', '{"id": "4"}']
 
         def side_effect(*args, **kwargs):  # pylint:disable=unused-argument
             return mock_open(read_data=file_contents[args[0]]).return_value
 
         with patch("builtins.open", side_effect=side_effect):
-            result = list(
-                JSONLDataset.read_ranges_from_files(ranges_per_file, LocalFilesystem, lambda x: x.strip(), None)
-            )
+            result = list(JSONLDataset.read_ranges_from_files(ranges_per_file, lambda x: x.strip(), None))
             self.assertEqual(result, expected)
 
     def test_read_ranges_from_files_e2e(self):
@@ -87,5 +81,5 @@ class TestJSONLDataset(unittest.TestCase):
         expected = ['{"id": "1"}', '{"id": "2"}', '{"id": "4"}', '{"id": "5"}', '{"id": "6"}']
 
         # Test
-        result = list(JSONLDataset.read_ranges_from_files(ranges_per_file, LocalFilesystem, lambda x: x.strip(), None))
+        result = list(JSONLDataset.read_ranges_from_files(ranges_per_file, lambda x: x.strip(), None))
         self.assertEqual(result, expected)
