@@ -241,5 +241,4 @@ class QueryResult:
         (except the last chunk).
 
         """
-        for chunk in self.chunks:
-            yield chunk
+        yield from self.chunks
