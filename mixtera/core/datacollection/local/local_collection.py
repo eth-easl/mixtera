@@ -44,7 +44,8 @@ class LocalDataCollection(MixteraDataCollection):
         cur.execute(
             "CREATE TABLE IF NOT EXISTS datasets"
             " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE,"
-            " location TEXT NOT NULL, type INTEGER NOT NULL, parsing_func BLOB NOT NULL);"
+            " location TEXT NOT NULL, type INTEGER NOT NULL,"
+            " parsing_func BLOB NOT NULL);"
         )
 
         cur.execute(
@@ -93,15 +94,23 @@ class LocalDataCollection(MixteraDataCollection):
         return True
 
     def _insert_dataset_into_table(
-        self, identifier: str, loc: str, dtype: Type[Dataset], parsing_func: Callable[[str], str]
+        self,
+        identifier: str,
+        loc: str,
+        dtype: Type[Dataset],
+        parsing_func: Callable[[str], str],
     ) -> int:
+        valid_types = True
         if not issubclass(dtype, Dataset):
             logger.error(f"Invalid dataset type: {dtype}")
-            return -1
+            valid_types = False
 
         type_id = dtype.type_id
         if type_id == 0:
             logger.error("Cannot use generic Dataset class as dtype.")
+            valid_types = False
+
+        if not valid_types:
             return -1
 
         serialized_parsing_func = sqlite3.Binary(dill.dumps(parsing_func))
@@ -362,8 +371,9 @@ class LocalDataCollection(MixteraDataCollection):
             filename_dict = {
                 self._get_file_path_by_id(file_id): file_ranges for file_id, file_ranges in file_dict.items()
             }
+            # Since we are in the LocalCollection, server_connection is always None.
             yield from self._get_dataset_type_by_id(dataset_id).read_ranges_from_files(
-                filename_dict, dataset_parsing_func
+                filename_dict, dataset_parsing_func, None
             )
 
     def add_property(

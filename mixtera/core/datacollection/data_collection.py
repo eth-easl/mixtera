@@ -61,7 +61,7 @@ class MixteraDataCollection(ABC):
             identifier (str): The dataset identifier.
             loc (str): The location where the dataset is stored.
                        For example, a path to a directory of jsonl files.
-            dtype (DatasetTypes): The type of the dataset.
+            dtype (Type[Dataset]): The type of the dataset.
             parsing_func (Callable[[str], str]): A function that given one "base unit"
                 of a file in the data set extracts the actual sample. The meaning depends
                 on the dataset type at hand. For example, for the JSONLDataset, every line
