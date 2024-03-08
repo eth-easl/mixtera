@@ -1,23 +1,24 @@
-import json
 import time
 
+import torch
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.filesystem import LocalFilesystem
 from mixtera.core.query import Query
+from mixtera.torch.mixtera_torch_dataset import MixteraTorchDataset
+
+
+def parsing_func(sample):
+    import json
+    return json.loads(sample)["text"]
 
 
 def main():
-    register_dataset = False # only need to do once
+    register_dataset = True # only need to do once
     TRAINING_ID = str(round(time.time() * 1000)) # Each node should have the same TRAINING_ID, such that they can ask the server for the query_id (can be passed, e.g., via environment variable)
     num_workers_per_node = 1
 
-    def parsing_func(sample):
-        try:
-            return json.loads(sample)["text"]
-        except Exception:
-            logger.error(sample)
 
     ### LOCAL CASE
     ldc = MixteraDataCollection.from_directory("/Users/mboether/phd/mixtera")
@@ -72,17 +73,22 @@ def main():
         raise RuntimeError("Local does not equal remote tunnel result!")
 
 
-    print(f"All had {len(local_result)} samples!")
-    raise RuntimeError("TODO: Torch Dataset")
 
     ### Torch Test
+    TRAINING_ID = str(round(time.time() * 1000)) # Need a new training ID
+    query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML"))
+    torch_ds = MixteraTorchDataset(rdc, query, TRAINING_ID, 2, tunnel_via_server=True)
+    dl = torch.utils.data.DataLoader(torch_ds, batch_size=1, num_workers=8)
 
-    def processing_func(sample: str) -> str:
-        return "processed_" + sample # actually used for tokenization or sth
+    dataset_result = []
+    for batch in dl:
+        dataset_result.extend(batch)
 
-    torch_ds = MixteraTorchDataset(ldc/mdc, processing_func)
+    if local_result != dataset_result:
+        raise RuntimeError("Local does not equal dataset tunnel result!")
 
-    # test torch ds
+    print(f"All had {len(local_result)} samples! (dataset = {len(dataset_result)})")
+
 
 if __name__ == '__main__':
     main()
