@@ -3,11 +3,11 @@ from pathlib import Path
 from typing import Generator, Iterable, Optional
 from unittest.mock import patch
 
-from mixtera.core.filesystem import AbstractFilesystem
+from mixtera.core.filesystem import FileSystem
 from mixtera.server import ServerConnection
 
 
-class DummyFilesystem(AbstractFilesystem):
+class DummyFilesystem(FileSystem):
 
     type_id = 1
 
@@ -34,17 +34,17 @@ class TestAbstractFilesystem(unittest.TestCase):
         # Assuming LocalFilesystem has type_id of 1 in its implementation
         with patch("mixtera.core.filesystem.LocalFilesystem") as mocked_local_filesystem:
             mocked_local_filesystem.type_id = 1
-            filesystem_class = AbstractFilesystem.from_id(1)
+            filesystem_class = FileSystem.from_id(1)
             self.assertIs(filesystem_class, mocked_local_filesystem)
 
     def test_from_id_not_implemented(self):
         # Test an unregistered type_id
         with self.assertRaises(NotImplementedError):
-            AbstractFilesystem.from_id(999)
+            FileSystem.from_id(999)
 
     def test_from_id_invalid(self):
         with self.assertRaises(RuntimeError):
-            AbstractFilesystem.from_id(0)
+            FileSystem.from_id(0)
 
     def test_open_file(self):
         with patch.object(DummyFilesystem, "get_file_iterable") as mocked_get_file_iterable:

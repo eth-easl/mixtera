@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
-from mixtera.core.filesystem import AbstractFilesystem
+from mixtera.core.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ class MixteraDataCollection(ABC):
         identifier: str,
         loc: str,
         dtype: Type[Dataset],
-        filesystem_t: Type[AbstractFilesystem],
+        filesystem_t: Type[FileSystem],
         parsing_func: Callable[[str], str],
         metadata_parser_type: str,
     ) -> bool:

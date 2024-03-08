@@ -6,7 +6,7 @@ from typing import Callable, Iterable, Optional, Type
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.core.filesystem import AbstractFilesystem
+from mixtera.core.filesystem import FileSystem
 from mixtera.server import ServerConnection
 
 
@@ -14,7 +14,7 @@ class JSONLDataset(Dataset):
     type_id = 1
 
     @staticmethod
-    def iterate_files(loc: str, filesys_t: Type[AbstractFilesystem]) -> Iterable[str]:
+    def iterate_files(loc: str, filesys_t: Type[FileSystem]) -> Iterable[str]:
         if not filesys_t.is_dir(loc):
             if not JSONLDataset._is_valid_jsonl(loc, filesys_t):
                 raise RuntimeError(
@@ -26,7 +26,7 @@ class JSONLDataset(Dataset):
         yield from filesys_t.get_all_files_with_ext(loc, "jsonl")
 
     @staticmethod
-    def build_file_index(loc: Path, filesys_t: Type[AbstractFilesystem], metadata_parser: MetadataParser) -> None:
+    def build_file_index(loc: Path, filesys_t: Type[FileSystem], metadata_parser: MetadataParser) -> None:
         with filesys_t.open_file(loc) as fd:
             for line_id, line in enumerate(fd):
                 metadata_parser.parse(line_id, json.loads(line))
@@ -34,7 +34,7 @@ class JSONLDataset(Dataset):
     @staticmethod
     def read_ranges_from_files(
         ranges_per_file: dict[str, list[tuple[int, int]]],
-        filesys_t: Type[AbstractFilesystem],
+        filesys_t: Type[FileSystem],
         parsing_func: Callable[[str], str],
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
@@ -44,7 +44,7 @@ class JSONLDataset(Dataset):
     @staticmethod
     def _read_ranges_from_file(
         file: str,
-        filesys_t: Type[AbstractFilesystem],
+        filesys_t: Type[FileSystem],
         range_list: list[tuple[int, int]],
         parsing_func: Callable[[str], str],
         server_connection: Optional[ServerConnection],
@@ -72,7 +72,7 @@ class JSONLDataset(Dataset):
                 last_line_read = r_end
 
     @staticmethod
-    def _is_valid_jsonl(path: str, filesys_t: Type[AbstractFilesystem]) -> bool:
+    def _is_valid_jsonl(path: str, filesys_t: Type[FileSystem]) -> bool:
         try:
             with filesys_t.open_file(path) as file:
                 for line_number, line in enumerate(file, start=1):

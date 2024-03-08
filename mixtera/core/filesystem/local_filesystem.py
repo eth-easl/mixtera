@@ -1,27 +1,21 @@
 from pathlib import Path
 from typing import Generator, Iterable, Optional
 
-from mixtera.core.filesystem import AbstractFilesystem
+from mixtera.core.filesystem import FileSystem
 from mixtera.server import ServerConnection
 
 
-class LocalFilesystem(AbstractFilesystem):
-    type_id = 1
-
+class LocalFilesystem(FileSystem):
     @classmethod
-    def get_file_iterable(
-        cls, file_path: str | Path, server_connection: Optional[ServerConnection] = None
-    ) -> Iterable[str]:
+    def get_file_iterable(cls, file_path: str, server_connection: Optional[ServerConnection] = None) -> Iterable[str]:
         if server_connection is not None:
-            yield from server_connection.get_file_iterable(
-                cls.type_id, file_path if isinstance(file_path, str) else str(file_path)
-            )
+            yield from server_connection.get_file_iterable(file_path)
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 yield from f
 
     @classmethod
-    def is_dir(cls, path: str | Path) -> bool:
+    def is_dir(cls, path: str) -> bool:
         dir_path = Path(path)
 
         if not dir_path.exists():
@@ -30,12 +24,12 @@ class LocalFilesystem(AbstractFilesystem):
         return dir_path.is_dir()
 
     @classmethod
-    def get_all_files_with_ext(cls, dir_path: str | Path, extension: str) -> Generator[str, None, None]:
+    def get_all_files_with_ext(cls, dir_path: str, extension: str) -> Generator[str, None, None]:
         """
         Implements a generator that iterates over all files with a specific extension in a given directory.
 
         Args:
-            dir_path (str | Path): The path in which all files checked for the extension.
+            dir_path (str): The path in which all files checked for the extension.
 
         Returns:
             An iterable over the matching files.

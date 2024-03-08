@@ -9,7 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import Index
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
-from mixtera.core.filesystem import AbstractFilesystem
+from mixtera.core.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
@@ -77,7 +77,7 @@ class LocalDataCollection(MixteraDataCollection):
         identifier: str,
         loc: str,
         dtype: Type[Dataset],
-        filesystem_t: Type[AbstractFilesystem],
+        filesystem_t: Type[FileSystem],
         parsing_func: Callable[[str], str],
         metadata_parser_type: str,
     ) -> bool:
@@ -100,7 +100,7 @@ class LocalDataCollection(MixteraDataCollection):
         identifier: str,
         loc: str,
         dtype: Type[Dataset],
-        filesystem_t: Type[AbstractFilesystem],
+        filesystem_t: Type[FileSystem],
         parsing_func: Callable[[str], str],
     ) -> int:
         valid_types = True
@@ -108,7 +108,7 @@ class LocalDataCollection(MixteraDataCollection):
             logger.error(f"Invalid dataset type: {dtype}")
             valid_types = False
 
-        if not issubclass(filesystem_t, AbstractFilesystem):
+        if not issubclass(filesystem_t, FileSystem):
             logger.error(f"Invalid filesystem type: {filesystem_t}")
             valid_types = False
 
@@ -360,7 +360,7 @@ class LocalDataCollection(MixteraDataCollection):
 
         return Dataset.from_type_id(result)
 
-    def _get_dataset_filesys_by_id(self, did: int) -> Type[AbstractFilesystem]:
+    def _get_dataset_filesys_by_id(self, did: int) -> Type[FileSystem]:
         try:
             query = "SELECT filesystem_type from datasets WHERE id = ?;"
             cur = self._connection.cursor()
@@ -378,7 +378,7 @@ class LocalDataCollection(MixteraDataCollection):
         if not isinstance(result, int):
             raise RuntimeError(f"Filesystem type {result} for dataset {did} is not an int")
 
-        return AbstractFilesystem.from_type_id(result)
+        return FileSystem.from_type_id(result)
 
     def _get_file_path_by_id(self, fid: int) -> str:
         try:

@@ -6,11 +6,10 @@ from typing import Generator, Iterable, Optional, Type
 from mixtera.server import ServerConnection
 
 
-class AbstractFilesystem(ABC):
-    type_id = 0
+class FileSystem(ABC):
 
     @staticmethod
-    def from_id(type_id: int) -> "Type[AbstractFilesystem]":
+    def from_path(file_path: str) -> "Type[FileSystem]":
         """
         This method instantiates a filesystem from an integer type ID (e.g., stored in a DB).
 
@@ -20,37 +19,33 @@ class AbstractFilesystem(ABC):
         Returns:
             The class that belongs to the type_id.
         """
-        if type_id < 1:
-            raise RuntimeError(f"Invalid type id {type_id}")
 
         from mixtera.core.filesystem import LocalFilesystem  # pylint: disable=import-outside-toplevel
 
-        if type_id == LocalFilesystem.type_id:
+        if file_path.startswith("file://") or file_path.startswith("/"):
             return LocalFilesystem
 
-        raise NotImplementedError(f"type_id {type_id} not yet supported")
+        raise NotImplementedError(f"Cannot infer filesystem from path {file_path}")
 
-    @classmethod
+    @staticmethod
     @contextmanager
     def open_file(
-        cls, file_path: str | Path, server_connection: Optional[ServerConnection] = None
+        file_path: str, server_connection: Optional[ServerConnection] = None
     ) -> Generator[Iterable[str], None, None]:
         """
         Context manager to abstract the opening of files across different file systems.
 
         Args:
-            file_path (str | Path): The path to the file to be opened.
+            file_path (str): The path to the file to be opened.
             server_connection (Optional[ServerConnection]): If not None, an open ServerConnection to the
                 Mixtera server from which the file is fetched instead. If None, the file is read from the
                 client directly.
         """
-        yield cls.get_file_iterable(file_path, server_connection)
+        yield FileSystem.from_path(file_path).get_file_iterable(file_path, server_connection)
 
     @classmethod
     @abstractmethod
-    def get_file_iterable(
-        cls, file_path: str | Path, server_connection: Optional[ServerConnection] = None
-    ) -> Iterable[str]:
+    def get_file_iterable(cls, file_path: str, server_connection: Optional[ServerConnection] = None) -> Iterable[str]:
         """
         Method to get an iterable of lines from a file that is stored on a file system.
 
@@ -67,13 +62,13 @@ class AbstractFilesystem(ABC):
 
     @classmethod
     @abstractmethod
-    def is_dir(cls, path: str | Path) -> bool:
+    def is_dir(cls, path: str) -> bool:
         """
         Checks whether a given path is a directory or file.
         Since this is only run from a LocalDataCollection, this does not over a remote server interface.
 
         Args:
-            path (str | Path): The path to be checked.
+            path (str): The path to be checked.
 
         Returns:
             An boolean that is True if the path points to a directory.
