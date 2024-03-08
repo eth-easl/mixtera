@@ -1,18 +1,14 @@
 from pathlib import Path
-from typing import Generator, Iterable, Optional
+from typing import Generator, Iterable
 
 from mixtera.core.filesystem import FileSystem
-from mixtera.server import ServerConnection
 
 
 class LocalFileSystem(FileSystem):
     @classmethod
-    def get_file_iterable(cls, file_path: str, server_connection: Optional[ServerConnection] = None) -> Iterable[str]:
-        if server_connection is not None:
-            yield from server_connection.get_file_iterable(file_path)
-        else:
-            with open(file_path, "r", encoding="utf-8") as f:
-                yield from f
+    def get_file_iterable(cls, file_path: str) -> Iterable[str]:
+        with open(file_path, "r", encoding="utf-8") as f:
+            yield from f
 
     @classmethod
     def is_dir(cls, path: str) -> bool:

@@ -1,27 +1,13 @@
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import mock_open, patch
 
 from mixtera.core.filesystem import LocalFileSystem
-from mixtera.server import ServerConnection
 
 
 class TestLocalFileSystem(unittest.TestCase):
 
-    def setUp(self):
-        self.mock_server_connection = MagicMock(spec=ServerConnection)
-        self.mock_server_connection.get_file_iterable.return_value = ["server line 1", "server line 2"]
-
-    def tearDown(self):
-        self.mock_server_connection = None
-
-    def test_get_file_iterable_with_server_connection(self):
-        file_path = "testfile.txt"
-        lines = list(LocalFileSystem.get_file_iterable(file_path, self.mock_server_connection))
-        self.assertEqual(lines, ["server line 1", "server line 2"])
-        self.mock_server_connection.get_file_iterable.assert_called_once_with(file_path)
-
-    def test_get_file_iterable_without_server_connection(self):
+    def test_get_file_iterable(self):
         file_path = "testfile.txt"
         mock_file_data = "local line 1\nlocal line 2\n"
         with patch("builtins.open", mock_open(read_data=mock_file_data)) as mock_file:

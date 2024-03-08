@@ -44,11 +44,15 @@ class FileSystem(ABC):
         """
         file_path = str(file_path) if isinstance(file_path, Path) else file_path
 
-        yield FileSystem.from_path(file_path).get_file_iterable(file_path, server_connection)
+        if server_connection is not None:
+            yield server_connection.get_file_iterable(file_path)
+            return
+
+        yield FileSystem.from_path(file_path).get_file_iterable(file_path)
 
     @classmethod
     @abstractmethod
-    def get_file_iterable(cls, file_path: str, server_connection: Optional[ServerConnection] = None) -> Iterable[str]:
+    def get_file_iterable(cls, file_path: str) -> Iterable[str]:
         """
         Method to get an iterable of lines from a file that is stored on a file system.
 
