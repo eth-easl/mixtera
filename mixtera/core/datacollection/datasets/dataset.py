@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Iterable, Type
+from typing import Callable, Iterable, Optional, Type
 
 from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.server import ServerConnection
 
 
 class Dataset(ABC):
@@ -46,22 +47,25 @@ class Dataset(ABC):
 
     @staticmethod
     @abstractmethod
-    def iterate_files(loc: str) -> Iterable[Path]:
+    def iterate_files(loc: str) -> Iterable[str]:
         """
         Returns iterator over all files in the dataset.
+        Note that this assumes the dataset to be available on th
 
         Args:
             loc (str): Path where the dataset is stored (can be directory or single file)
 
         Returns:
-            Iterable over Paths.
+            Iterable over the files.
         """
         raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
     def read_ranges_from_files(
-        ranges_per_file: dict[str, list[tuple[int, int]]], parsing_func: Callable[[str], str]
+        ranges_per_file: dict[str, list[tuple[int, int]]],
+        parsing_func: Callable[[str], str],
+        server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
         """
         Given a list of ranges per file, iterates over the according files and yields all samples in the file.
@@ -72,6 +76,9 @@ class Dataset(ABC):
             parsing_func (Callable[[str], str]): Function applied to each "unit" per file.
                 Exact meaning depends on the dataset type.
                 For the JSONLDataset, this is applied per line, and can parse the actual content out of the line.
+            server_connection (Optional[ServerConnection]): If not None, an open ServerConnection to the
+                Mixtera server from which the file is fetched instead. If None, the file is read from the
+                client directly.
 
         Returns:
             Iterable over the samples.

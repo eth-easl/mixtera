@@ -1,8 +1,9 @@
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 
 from mixtera.core.datacollection.datasets.dataset import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.server import ServerConnection
 
 
 class CrossaintDataset(Dataset):
@@ -13,11 +14,13 @@ class CrossaintDataset(Dataset):
         raise NotImplementedError("CrossaintDataset not yet supported.")
 
     @staticmethod
-    def iterate_files(loc: str) -> Iterable[Path]:
+    def iterate_files(loc: str) -> Iterable[str]:
         raise NotImplementedError("CrossaintDataset not yet supported.")
 
     @staticmethod
     def read_ranges_from_files(
-        ranges_per_file: dict[str, list[tuple[int, int]]], parsing_func: Callable[[str], str]
+        ranges_per_file: dict[str, list[tuple[int, int]]],
+        parsing_func: Callable[[str], str],
+        server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
         raise NotImplementedError()
