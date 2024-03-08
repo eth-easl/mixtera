@@ -66,11 +66,11 @@ class TestQueryE2E(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
-        query = Query.from_datacollection(self.mdc)
-        query.select(("language", "==", "Go"))
+        query = Query.from_datacollection(self.mdc).select(("language", "==", "Go"))
         res = query.execute(chunk_size=1)
         for x in res:
-            self.assertEqual(x, [{1: {self.file1_id: [(0, 2)]}}])
+            self.assertEqual(x._index, {"language": {"Go": {1: {1: [(0, 1)]}}}})
+            break
 
     def test_union(self):
         query_1 = Query.from_datacollection(self.mdc).select(("language", "==", "Go"))
@@ -79,10 +79,19 @@ class TestQueryE2E(unittest.TestCase):
         query_2 = query_2.union(query_1)
         query_result = query_2.execute(chunk_size=1)
         res = list(query_result)
+        res = [x._index for x in res]
+        print(res)
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
         self.assertEqual(
-            res, [[{1: {self.file1_id: [(0, 2)]}}], [{1: {self.file1_id: [(1, 2)], self.file2_id: [(0, 1)]}}]]
+            res,
+            [
+                {"language": {"Go": {1: {1: [(0, 1)]}}}},
+                {"language": {"Go": {1: {1: [(1, 2)]}}}},
+                {"language": {"CSS": {1: {1: [(1, 2)]}}}},
+                {"language": {"CSS": {1: {1: [(1, 2)]}}}},
+                {"language": {"CSS": {1: {2: [(0, 1)]}}}},
+            ],
         )
         # check metadata
         self.assertEqual(query_result.dataset_type, {1: JSONLDataset})

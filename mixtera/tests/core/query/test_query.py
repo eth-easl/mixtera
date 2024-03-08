@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query import Operator, Query, QueryPlan
 
 
@@ -12,10 +13,11 @@ class MockOperator(Operator):
         self.len_results = len_results
 
     def display(self, level):
-        print(" " * level + self.name)
+        print("-" * level + self.name)
 
     def execute(self):
-        self.results = [{1: {1: [(1, 2)]}}] * self.len_results
+        self.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        self.results.append_entry("field", "value", "did", "fid", (0, 2))
 
 
 Query.register(MockOperator)
@@ -88,15 +90,19 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
-        query = Query(self.mdc).mockoperator("test")
+        query = Query.from_datacollection(self.mdc).mockoperator("test")
         query_result = query.execute(chunk_size=1)
         res = list(query_result)
+        res = [x._index for x in res]
         gt_meta = {
-            "dataset_type": {1: "test_dataset_type"},
-            "file_path": {1: "test_file_path"},
+            "dataset_type": {"did": "test_dataset_type"},
+            "file_path": {"fid": "test_file_path"},
         }
-        print(gt_meta)
-        self.assertEqual(res, [[{1: {1: [(1, 2)]}}]])
+
+        self.assertEqual(
+            res, [{"field": {"value": {"did": {"fid": [(0, 1)]}}}}, {"field": {"value": {"did": {"fid": [(1, 2)]}}}}]
+        )
+
         self.assertEqual(query_result.dataset_type, gt_meta["dataset_type"])
         self.assertEqual(query_result.file_path, gt_meta["file_path"])
 
@@ -116,4 +122,5 @@ class TestQuery(unittest.TestCase):
         query = Query(self.mdc).mockoperator("test", len_results=2)
         res = query.execute(chunk_size=2)
         res = list(res)
-        self.assertEqual(res, [[{1: {1: [(1, 2)]}}, {1: {1: [(1, 2)]}}]])
+        res = [x._index for x in res]
+        self.assertEqual(res, [{"field": {"value": {"did": {"fid": [(0, 2)]}}}}])

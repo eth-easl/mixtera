@@ -1,6 +1,7 @@
 import unittest
 
 from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query.operators.union import Union
 from mixtera.core.query.query import Query
 
@@ -9,7 +10,9 @@ class TestUnion(unittest.TestCase):
     def setUp(self):
         self.mdc = MixteraDataCollection.from_directory(".")
         self.query_a = Query.from_datacollection(self.mdc).select(("field1", "==", "value1"))
-        self.query_a.root.results = ["result1", "result2", "result3"]
+        self.query_a.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+
+        self.query_a.root.results.append_entry("field1", "value1", "did", "fid", (0, 2))
         self.union = Union(self.query_a)
 
     def test_init(self):
@@ -18,15 +21,12 @@ class TestUnion(unittest.TestCase):
 
     def test_execute(self):
         query_b = Query.from_datacollection(self.mdc).select(("field1", "==", "value2"))
-        query_b.root.results = ["result3", "result4", "result5"]
+        query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        query_b.root.results.append_entry("field1", "value2", "did", "fid", (0, 2))
+        gt_result = {"field1": {"value1": {"did": {"fid": (0, 2)}}, "value2": {"did": {"fid": (0, 2)}}}}
         self.union.children.append(query_b.root)
         self.union.execute()
-        self.assertEqual(len(self.union.results), 6)
-        self.assertIn("result1", self.union.results)
-        self.assertIn("result2", self.union.results)
-        self.assertIn("result3", self.union.results)
-        self.assertIn("result4", self.union.results)
-        self.assertIn("result5", self.union.results)
+        self.assertTrue(self.union.results._index, gt_result)
 
     def test_repr(self):
         self.assertEqual(str(self.union), "union<>()")

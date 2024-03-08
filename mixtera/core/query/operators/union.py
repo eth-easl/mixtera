@@ -1,6 +1,5 @@
 from loguru import logger
 from mixtera.core.query.query import Query
-from mixtera.utils import flatten
 
 from ._base import Operator
 
@@ -22,7 +21,8 @@ class Union(Operator):
         logger.warning(
             "Union operator only supports bag semantics for now, meaning that it will not remove duplicates."
         )
-        self.results = flatten([x.results for x in self.children])
+        self.children[0].results.merge(self.children[1].results)
+        self.results = self.children[0].results
 
     def __str__(self) -> str:
         return "union<>()"

@@ -1,6 +1,7 @@
 from typing import List, Optional
 
-from mixtera.core.datacollection import IndexType, MixteraDataCollection
+from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection.index import IndexType
 from mixtera.core.query import query
 
 
@@ -17,7 +18,7 @@ class Operator:
 
     def __init__(self) -> None:
         self.children: List[Operator] = []
-        self.results: List[IndexType] = []
+        self.results: IndexType = None
         # for leaf nodes, the data collection needs to be set
         # for other nodes, we don't set the data collection as
         # they will not touch the underlying data collection.

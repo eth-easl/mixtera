@@ -1,8 +1,10 @@
 from collections.abc import Generator
 from typing import Any, Callable, Optional, Type
 
-from mixtera.core.datacollection import IndexType, MixteraDataCollection
+from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
+from mixtera.core.datacollection.index import IndexType
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query.operators._base import Operator
 
 
@@ -33,7 +35,6 @@ class QueryPlan:
 
         Args:
             operator (Operator): The operator to add.
-
         """
         if self.is_empty():
             self.root = operator
@@ -141,7 +142,7 @@ class QueryResult:
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    def __init__(self, mdc: MixteraDataCollection, results: list[IndexType], chunk_size: int = 1) -> None:
+    def __init__(self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1) -> None:
         """
         Args:
             mdc (MixteraDataCollection): The MixteraDataCollection object.
@@ -150,22 +151,27 @@ class QueryResult:
         """
         self.mdc = mdc
         self.chunk_size = chunk_size
-        self._meta = self._parse_meta(results)
         self.results = results
+        self.chunks: list[IndexType] = []
+        self.chunking()
+        self._meta = self._parse_meta()
 
-    def _parse_meta(self, indices: list[IndexType]) -> dict:
+    def _parse_meta(self) -> dict:
         dataset_ids = set()
         file_ids = set()
-
-        for idx in indices:
-            dataset_ids.update(idx.keys())
-            for val in idx.values():
-                file_ids.update(val)
-
+        total_length = 0
+        for prop_name in self.results.get_all_features():
+            for prop_val in self.results.get_dict_index_by_feature(prop_name).values():
+                dataset_ids.update(prop_val.keys())
+                for files in prop_val.values():
+                    file_ids.update(files)
+                    for file_ranges in files.values():
+                        total_length += sum(end - start for start, end in file_ranges)
         return {
             "dataset_type": {did: self.mdc._get_dataset_type_by_id(did) for did in dataset_ids},
             "parsing_func": {did: self.mdc._get_dataset_func_by_id(did) for did in dataset_ids},
             "file_path": {fid: self.mdc._get_file_path_by_id(fid) for fid in file_ids},
+            "total_length": total_length,
         }
 
     @property
@@ -180,10 +186,60 @@ class QueryResult:
     def parsing_func(self) -> dict[str, Callable[[str], str]]:
         return self._meta["parsing_func"]
 
-    def __iter__(self) -> Generator[list[IndexType], None, None]:
-        """Iterate over the results of the query with a chunk size.
+    def chunking(self) -> None:
+        # structure of self.chunks: [index_type, index_type, ...]
+        # each index_type is an index, but contains exactly
+        # chunk_size items, except the last one.
+        chunks: list[dict] = []
+        # here we chunk the self.results from a large index_type
+        # into smaller index_types.
+        current_chunk: IndexType = {}
+        current_chunk_length = 0
+        # this is likely not a good impl, optimize it later.
+        # now just ensure correct chunk_size and each chunk is an index.
+        # pylint: disable-next=too-many-nested-blocks
+        for property_name in self.results.get_all_features():
+            for property_value, property_dict in self.results.get_dict_index_by_feature(property_name).items():
+                for did, files in property_dict.items():
+                    for fid, file_ranges in files.items():
+                        for start, end in file_ranges:
+                            # TODO(create issue): we may want to optimize this later together with mixture.
+                            # for now this is a simple implementaion (for testing)
+                            if end - start <= self.chunk_size - current_chunk_length:
+                                current_chunk[property_name] = {property_value: {did: {fid: [(start, end)]}}}
+                                current_chunk_length += end - start
+                                chunks.append(current_chunk)
+                            else:
+                                if self.chunk_size < current_chunk_length:
+                                    raise RuntimeError("This should not happen.")
+                                if self.chunk_size == current_chunk_length:
+                                    chunks.append(current_chunk)
+                                    current_chunk = {}
+                                    current_chunk_length = 0
+                                if self.chunk_size > current_chunk_length:
+                                    # --> we need to split the range
+                                    # --> and add the first part to the current chunk
+                                    # --> and add the second part to a new chunk
+                                    # let's drop the remainder for now
+                                    num_chunks_needed = (end - start) // self.chunk_size
+                                    for _ in range(num_chunks_needed):
+                                        current_chunk[property_name] = {
+                                            property_value: {did: {fid: [(start, start + self.chunk_size)]}}
+                                        }
+                                        chunks.append(current_chunk)
+                                        current_chunk = {}
+                                        current_chunk_length = 0
+                                        start += self.chunk_size
 
-        This method is very dummy right now without ensuring the correct mixture.
+        for chunk in chunks:
+            chunk_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+            chunk_index._index = chunk
+            self.chunks.append(chunk_index)
+
+    def __iter__(self) -> Generator[IndexType, None, None]:
+        """Iterate over the results of the query with a chunk size
+        (except the last chunk).
+
         """
-        for i in range(0, len(self.results), self.chunk_size):
-            yield self.results[i : i + self.chunk_size]
+        for chunk in self.chunks:
+            yield chunk

@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
+from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
 from mixtera.core.query import Intersection, QueryPlan
 from mixtera.core.query.operators.select import Condition, Select
 
@@ -31,17 +32,23 @@ class TestSelect(unittest.TestCase):
 
     def test_execute_with_no_children(self):
         self.select.mdc = MagicMock()
-        self.select.mdc.get_index.return_value = {"value": "index_value"}
+        returned_index = InMemoryDictionaryRangeIndex()
+        returned_index.append_entry("field", "value", "did", "fid", (0, 2))
+        self.select.mdc.get_index.return_value = returned_index
         self.select.condition.meet = MagicMock(return_value=True)
         self.select.execute()
-        self.assertEqual(self.select.results, ["index_value"])
+        print(self.select.results)
+        self.assertEqual(self.select.results._index, returned_index._index)
 
     def test_execute_with_one_child(self):
         self.select.mdc = MagicMock()
-        self.select.mdc.get_index.return_value = {"value": "index_value"}
+        returned_index = InMemoryDictionaryRangeIndex()
+        returned_index.append_entry("field", "value", "did", "fid", (0, 2))
+        self.select.mdc.get_index.return_value = returned_index
+
         self.select.condition.meet = MagicMock(return_value=True)
         self.select.children = [MagicMock()]
-        self.assertEqual(self.select.results, [])
+        self.assertEqual(self.select.results, None)
 
     def test_chaining_select(self):
         query_plan = QueryPlan()

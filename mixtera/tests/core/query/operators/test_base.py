@@ -11,7 +11,7 @@ class TestOperator(unittest.TestCase):
 
     def test_init(self):
         self.assertEqual(self.operator.children, [])
-        self.assertEqual(self.operator.results, [])
+        self.assertEqual(self.operator.results, None)
         self.assertIsNone(self.operator.mdc)
 
     def test_repr(self):
