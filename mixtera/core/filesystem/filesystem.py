@@ -11,13 +11,16 @@ class FileSystem(ABC):
     @staticmethod
     def from_path(file_path: str) -> "Type[FileSystem]":
         """
-        This method instantiates a filesystem from an integer type ID (e.g., stored in a DB).
+        This method instantiates a filesystem given a path (file or directory).
+
+        The filesystem is inferred from the path prefix. Currently, only the local
+        filesystem via a file:// or / prefix is supported.
 
         Args:
-            type_id (int): Type ID that uniquely identifies the filesystem
+            file_path (str): File path to get the FileSystem for
 
         Returns:
-            The class that belongs to the type_id.
+            The Type[FileSystem] that belongs to the file_path.
         """
         file_path = str(file_path) if isinstance(file_path, Path) else file_path
 
