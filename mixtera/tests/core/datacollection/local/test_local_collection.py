@@ -134,14 +134,22 @@ class TestLocalDataCollection(unittest.TestCase):
         # First time, the dataset registration should succeed.
         self.assertTrue(
             ldc.register_dataset(
-                "test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+                "test",
+                str(directory / "loc"),
+                JSONLDataset,
+                lambda data: f"prefix_{data}",
+                "RED_PAJAMA",
             )
         )
 
         # Second time, the dataset registration should fail (because the dataset already exists).
         self.assertFalse(
             ldc.register_dataset(
-                "test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+                "test",
+                str(directory / "loc"),
+                JSONLDataset,
+                lambda data: f"prefix_{data}",
+                "RED_PAJAMA",
             )
         )
 
@@ -151,7 +159,11 @@ class TestLocalDataCollection(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             ldc.register_dataset(
-                "test", "/non/existent/location", JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+                "test",
+                "/non/existent/location",
+                JSONLDataset,
+                lambda data: f"prefix_{data}",
+                "RED_PAJAMA",
             )
 
     def test_register_dataset_e2e_json(self):
@@ -216,10 +228,16 @@ class TestLocalDataCollection(unittest.TestCase):
         ldc = LocalDataCollection(directory)
 
         # Inserting a new dataset should return 1 (first dataset)
-        self.assertEqual(1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset, lambda data: f"prefix_{data}"))
+        self.assertEqual(
+            1,
+            ldc._insert_dataset_into_table("test", "loc", JSONLDataset, lambda data: f"prefix_{data}"),
+        )
 
         # Inserting an existing dataset should return -1.
-        self.assertEqual(-1, ldc._insert_dataset_into_table("test", "loc", JSONLDataset, lambda data: f"prefix_{data}"))
+        self.assertEqual(
+            -1,
+            ldc._insert_dataset_into_table("test", "loc", JSONLDataset, lambda data: f"prefix_{data}"),
+        )
 
     def test_insert_file_into_table(self):
         directory = Path(self.temp_dir.name)
@@ -236,14 +254,22 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertFalse(ldc.check_dataset_exists("test2"))
         self.assertTrue(
             ldc.register_dataset(
-                "test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+                "test",
+                str(directory / "loc"),
+                JSONLDataset,
+                lambda data: f"prefix_{data}",
+                "RED_PAJAMA",
             )
         )
         self.assertTrue(ldc.check_dataset_exists("test"))
         self.assertFalse(ldc.check_dataset_exists("test2"))
         self.assertTrue(
             ldc.register_dataset(
-                "test2", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+                "test2",
+                str(directory / "loc"),
+                JSONLDataset,
+                lambda data: f"prefix_{data}",
+                "RED_PAJAMA",
             )
         )
         self.assertTrue(ldc.check_dataset_exists("test"))
@@ -257,13 +283,21 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertListEqual([], ldc.list_datasets())
         self.assertTrue(
             ldc.register_dataset(
-                "test", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+                "test",
+                str(directory / "loc"),
+                JSONLDataset,
+                lambda data: f"prefix_{data}",
+                "RED_PAJAMA",
             )
         )
         self.assertListEqual(["test"], ldc.list_datasets())
         self.assertTrue(
             ldc.register_dataset(
-                "test2", str(directory / "loc"), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+                "test2",
+                str(directory / "loc"),
+                JSONLDataset,
+                lambda data: f"prefix_{data}",
+                "RED_PAJAMA",
             )
         )
         self.assertListEqual(["test", "test2"], ldc.list_datasets())
@@ -386,7 +420,11 @@ class TestLocalDataCollection(unittest.TestCase):
                 f.write(json.dumps(item) + "\n")
 
         ldc.register_dataset(
-            "test_dataset", str(dataset_file), JSONLDataset, lambda data: f"prefix_{data}", "RED_PAJAMA"
+            "test_dataset",
+            str(dataset_file),
+            JSONLDataset,
+            lambda data: f"prefix_{data}",
+            "RED_PAJAMA",
         )
         dataset_id = 1
         # Define setup and calculation functions
