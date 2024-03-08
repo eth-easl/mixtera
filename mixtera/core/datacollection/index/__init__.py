@@ -2,7 +2,48 @@
 This submodule contains implementations for Mixtera indexes
 """
 
-from .metadata_parser import MetadataParser  # noqa: F401
-from .parser_collection import MetadataParserFactory, MetadataParserRegistry, RedPajamaMetadataParser  # noqa: F401
+from .index import (
+    Index,
+    IndexCommonType,
+    IndexDatasetEntryLineType,
+    IndexDatasetEntryRangeType,
+    IndexDatasetEntryType,
+    IndexFeatureValueLineType,
+    IndexFeatureValueRangeType,
+    IndexFeatureValueType,
+    IndexFileEntryLineType,
+    IndexFileEntryRangeType,
+    IndexFileEntryType,
+    IndexLineType,
+    IndexRangeType,
+    IndexRowIndicatorsType,
+    IndexRowRangeType,
+    IndexType,
+)
+from .index_collection import InMemoryDictionaryIndex, InMemoryDictionaryLineIndex, InMemoryDictionaryRangeIndex
 
-__all__ = ["MetadataParser", "RedPajamaMetadataParser", "MetadataParserRegistry", "MetadataParserFactory"]
+# The raw index types that are returned by the Index data structures
+
+__all__ = [
+    # Base data types
+    "IndexRowRangeType",
+    "IndexCommonType",
+    "IndexFileEntryType",
+    "IndexDatasetEntryType",
+    "IndexFeatureValueType",
+    "IndexType",
+    "IndexFileEntryRangeType",
+    "IndexDatasetEntryRangeType",
+    "IndexFeatureValueRangeType",
+    "IndexRangeType",
+    "IndexRowIndicatorsType",
+    "IndexFileEntryLineType",
+    "IndexDatasetEntryLineType",
+    "IndexFeatureValueLineType",
+    "IndexLineType",
+    # Index Types
+    "Index",
+    "InMemoryDictionaryIndex",
+    "InMemoryDictionaryLineIndex",
+    "InMemoryDictionaryRangeIndex",
+]

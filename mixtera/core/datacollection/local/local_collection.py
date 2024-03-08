@@ -1,16 +1,17 @@
 import sqlite3
-from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Type
 
 import dill
 from loguru import logger
-from mixtera.core.datacollection import IndexType, MixteraDataCollection, Property, PropertyType
+from mixtera.core.datacollection import MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import MetadataParserFactory
+from mixtera.core.datacollection.index import Index
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
+from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import defaultdict_to_dict, merge_defaultdicts, numpy_to_native_type
+from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -24,9 +25,9 @@ class LocalDataCollection(MixteraDataCollection):
 
         self._properties: list[Property] = []
         self._datasets: list[Dataset] = []
-        # 1st level: Variable 2nd Level: Buckets for that Variable 3rd level: datasets 4th: files -> ranges
-        self._index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
 
+        # Index instantiations and parameters
+        self._index: Index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         self._metadata_factory = MetadataParserFactory()
 
         if not self._database_path.exists():
@@ -86,9 +87,9 @@ class LocalDataCollection(MixteraDataCollection):
                 logger.error(f"Error while inserting file {file}")
                 return False
             metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
-            pre_index = dtype.build_file_index(file, metadata_parser)
-            for property_name in pre_index:
-                self._insert_index_into_table(property_name, pre_index[property_name])
+            dtype.build_file_index(file, metadata_parser)
+            metadata_parser.finalize()
+            self._insert_index_into_table(metadata_parser.get_index())
         return True
 
     def _insert_dataset_into_table(
@@ -143,17 +144,70 @@ class LocalDataCollection(MixteraDataCollection):
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _insert_index_into_table(self, property_name: str, index: IndexType) -> int:
+    def _insert_index_into_table(self, index: InMemoryDictionaryRangeIndex, full_or_fail: bool = False) -> int:
+        """
+        Inserts an `InMemoryDictionaryRangeIndex` into the index table. This
+        method bulk-schedules the insertion of each row.
+
+        Args:
+            index: the index to be inserted
+            full_or_fail: if True, and not all rows are inserted, the method will fail.
+                If False, partial insertion in the DB are allowed and are only reported.
+
+        Returns:
+            The number of inserted rows. If insertion fails -1 will be returned.
+        """
+        cur = self._connection.cursor()
+        query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
+            VALUES (?, ?, ?, ?, ?, ?);"
+
+        # Build a large payload to schedule the execution of many SQL statements
+        query_payload = []
+        raw_index = index.get_full_dict_index()
+        for property_name, property_values in raw_index.items():
+            for property_value, dataset_ids in property_values.items():
+                for dataset_id, file_ids in dataset_ids.items():
+                    for file_id, ranges in file_ids.items():
+                        for range_values in ranges:
+                            query_payload.append(
+                                (
+                                    property_name,
+                                    property_value,
+                                    dataset_id,
+                                    file_id,
+                                    range_values[0],
+                                    range_values[1],
+                                )
+                            )
+
+        # Try to execute statement
+        try:
+            cur.executemany(query, query_payload)
+            self._connection.commit()
+        except sqlite3.Error as err:
+            logger.error(f"An sqlite error occurred when bulk inserting index: {err}")
+            return -1
+
+        # Assert that insertion completed fully or partially
+        if cur.rowcount != len(query_payload):
+            error_message = f"Failed to insert fully: {cur.rowcount} out of {len(query_payload)} rows inserted!"
+            logger.error(error_message)
+            if full_or_fail:
+                raise AssertionError(error_message)
+
+        return cur.rowcount
+
+    def _insert_partial_index_into_table(self, property_name: str, partial_index: Index) -> int:
         query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
             VALUES (?, ?, ?, ?, ?, ?);"
         cur = self._connection.cursor()
-        index = defaultdict_to_dict(index)
-        index = numpy_to_native_type(index)
+        partial_index = defaultdict_to_dict(partial_index)
+        partial_index = numpy_to_native_type(partial_index)
         try:
-            for prediction in index:
-                for dataset_id in index[prediction]:
-                    for file_id in index[prediction][dataset_id]:
-                        for line_id in index[prediction][dataset_id][file_id]:
+            for prediction in partial_index:
+                for dataset_id in partial_index[prediction]:
+                    for file_id in partial_index[prediction][dataset_id]:
+                        for line_id in partial_index[prediction][dataset_id][file_id]:
                             cur.execute(
                                 query,
                                 (
@@ -178,15 +232,15 @@ class LocalDataCollection(MixteraDataCollection):
 
         return -1
 
-    def _reformat_index(self, raw_indices: List) -> IndexType:
+    def _reformat_index(self, raw_indices: List) -> InMemoryDictionaryRangeIndex:
         # received from database: [(property_name, property_value, dataset_id, file_id, line_ids), ...]
         # converts to: {property_name: {property_value: {dataset_id: {file_id: [line_ids]}}}}
-        index: IndexType = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+        index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         for prop_name, prop_val, dataset_id, file_id, line_start, line_end in raw_indices:
-            index[prop_name][prop_val][dataset_id][file_id] = [(line_start, line_end)]
+            index.append_entry(prop_name, prop_val, dataset_id, file_id, (line_start, line_end))
         return index
 
-    def _read_index_from_database(self, property_name: Optional[str] = None) -> IndexType:
+    def _read_index_from_database(self, property_name: Optional[str] = None) -> InMemoryDictionaryRangeIndex:
         cur = self._connection.cursor()
         try:
             query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices"
@@ -196,11 +250,10 @@ class LocalDataCollection(MixteraDataCollection):
             else:
                 query += ";"
                 cur.execute(query)
-            results = cur.fetchall()
+            results = self._reformat_index(cur.fetchall())
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during selection: {err}")
-            results = []
-        results = self._reformat_index(results)
+            results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         return results
 
     def check_dataset_exists(self, identifier: str) -> bool:
@@ -355,9 +408,9 @@ class LocalDataCollection(MixteraDataCollection):
         executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
         executor.load_data(files, data_only_on_primary)
         new_index = executor.run()
-        self._insert_index_into_table(property_name, new_index)
+        self._insert_partial_index_into_table(property_name, new_index)
 
-    def get_index(self, property_name: Optional[str] = None) -> Optional[IndexType]:
+    def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:
         if property_name is None:
             logger.warning(
                 "No property name provided, returning all indices from database. ",
@@ -365,11 +418,12 @@ class LocalDataCollection(MixteraDataCollection):
             )
             self._index = self._read_index_from_database()
             return self._index
-        if property_name not in self._index:
+        if not self._index.has_feature(property_name):
             # If the property is not in the index, it may be in the database, so we check it there
-            # TODO(#43): user may also interested to force refresh the index from database.
-            self._index = merge_defaultdicts(self._index, self._read_index_from_database(property_name))
-        if property_name not in self._index:
+            # TODO(xiaozhe): user may also interested to force refresh the index from database.
+            self._index.merge(self._read_index_from_database(property_name))
+        if not self._index.has_feature(property_name):
             logger.warning(f"Property {property_name} not found in index, returning None.")
             return None
-        return self._index[property_name]
+        # The type of self._index and the returned value is `InMemoryDictionaryRangeIndex`
+        return self._index.get_index_by_features(property_name)

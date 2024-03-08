@@ -1,16 +1,15 @@
 from pathlib import Path
 from typing import Callable, Iterable
 
-from mixtera.core.datacollection import IndexType
 from mixtera.core.datacollection.datasets.dataset import Dataset
-from mixtera.core.datacollection.index import MetadataParser
+from mixtera.core.datacollection.index.parser import MetadataParser
 
 
 class CrossaintDataset(Dataset):
     type_id = 2
 
     @staticmethod
-    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> IndexType:
+    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> None:
         raise NotImplementedError("CrossaintDataset not yet supported.")
 
     @staticmethod
