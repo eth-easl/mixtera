@@ -18,7 +18,7 @@ class Operator:
 
     def __init__(self) -> None:
         self.children: List[Operator] = []
-        self.results: IndexType = None
+        self.results: Optional[IndexType] = None
         # for leaf nodes, the data collection needs to be set
         # for other nodes, we don't set the data collection as
         # they will not touch the underlying data collection.
