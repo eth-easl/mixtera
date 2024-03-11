@@ -1,6 +1,5 @@
 from typing import Any, Union
 
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query.query import QueryPlan
 
 from ._base import Operator
@@ -58,17 +57,10 @@ class Select(Operator):
         # TODO(#42): In a future PR, we may want to only load the
         # index that meets the condition, instead of loading the entire index
         # and then filter the results.
-        # Now there's get_dict_index_by_feature_value, maybe we can extend it
-        # to support not only equal, but also >, <, etc.
         if (index := self.mdc.get_index(self.condition.field)) is None:
             self.results = {}
             return
-        results = index.get_dict_index_by_feature(self.condition.field)
-        # now filter the results based on the condition
-        results = {k: v for k, v in results.items() if self.condition.meet(k)}
-        # to ensure the results are in the same format as the original index
-        self.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
-        self.results._index = {self.condition.field: results}
+        self.results = index.get_index_by_predicate(self.condition.field, self.condition.meet)
 
     def __str__(self) -> str:
         return f"select<{self.mdc}>({self.condition})"
