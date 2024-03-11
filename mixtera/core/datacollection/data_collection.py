@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from mixtera.core.datacollection import PropertyType
     from mixtera.core.datacollection.local import LocalDataCollection
     from mixtera.core.datacollection.remote import RemoteDataCollection
+    from mixtera.core.query.query_result import QueryResult
+    from mixtera.network.connection.server_connection import ServerConnection
 
 
 class MixteraDataCollection(ABC):
@@ -42,8 +44,20 @@ class MixteraDataCollection(ABC):
         raise RuntimeError(f"Directory {dir_path} does not exist.")
 
     @staticmethod
-    def from_remote(endpoint: str) -> "RemoteDataCollection":
-        raise NotImplementedError("Remote datasets are not yet supported.")
+    def from_remote(host: str, port: int) -> "RemoteDataCollection":
+        """
+        Instantiates a RemoteDataCollection from a host address and port.
+        Args:
+            host (str): The host address of the Mixtera server
+            port (int): The port of the Mixtera server
+        Returns:
+            A RemoteDataCollection instance.
+        """
+
+        # Local import to avoid circular dependency
+        from mixtera.core.datacollection.remote import RemoteDataCollection  # pylint: disable=import-outside-toplevel
+
+        return RemoteDataCollection(host, port)
 
     @abstractmethod
     def register_dataset(
@@ -118,20 +132,66 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_samples_from_ranges(
-        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
-    ) -> Iterable[str]:
+    def get_query_result(self, training_id: str) -> "QueryResult":
         """
-        Given a list of ranges for each file in each datasets, returns an Iterable over the samples.
-
+        Given a training ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
-            ranges_per_dataset_and_file (dict[int, dict[int, list[tuple[int, int]]]]): Dict that
-                maps each dataset ID to another dict containing file IDs as keys. This dict then
-                contains the ranges as values.
-
+            training_id (str): The training ID to get the results for.
         Returns:
-            Iterable over the samples.
+            A QueryResult object that can be iterated over, e.g., using the
+            `stream_query_results` function.
         """
+
+        raise NotImplementedError()
+
+    @abstractmethod
+    def stream_query_results(
+        self, query_result: "QueryResult", tunnel_via_server: bool = False
+    ) -> Generator[str, None, None]:
+        """
+        Given a query_results object, iterates over the samples of the query.
+        Args:
+            query_result (QueryResult): The QueryResult object.
+            tunnel_via_server (bool): If True, the sample payloads
+                will be streamed via the Mixtera server. Otherwise,
+                the client will access the files directly. Needs to be False
+                for LocalDataCollection, and defaults to False.
+        Returns:
+            A Generator of samples.
+        """
+        raise NotImplementedError()
+
+    @staticmethod
+    def _stream_query_results(
+        query_result: "QueryResult", server_connection: Optional["ServerConnection"] = None
+    ) -> Generator[str, None, None]:
+        """
+        Internal implementation for streaming query results.
+        Called from the Local/RemoteDataCollection implementations of `stream_query_results`.
+        Args:
+            query_result (QueryResult): The QueryResult object.
+            server_connection (Optional[ServerConnection]): If given,
+                the sample payloads are streamed via this Mixtera server.
+        Returns:
+            A Generator of samples.
+        """
+        for result_chunk in query_result:
+            for index in result_chunk:
+                # TODO(create issue): This currently iterates through it dataset by dataset.
+                # Instead, we want to sample from it uniform at random
+                # It is a bit unclear how to implementing sampling here, since we work with ranges.
+                # In the best case, we would sample line by line u.a.r.
+                for did, file_dict in index.items():
+                    filesystem = query_result.dataset_fs[did]
+                    dtype = query_result.dataset_type[did]
+                    parsing_func = query_result.parsing_func[did]
+                    filename_dict = {
+                        query_result.file_path[file_id]: file_ranges for file_id, file_ranges in file_dict.items()
+                    }
+                    yield from dtype.read_ranges_from_files(filename_dict, filesystem, parsing_func, server_connection)
+
+    @abstractmethod
+    def is_remote(self) -> bool:
         raise NotImplementedError()
 
     @abstractmethod

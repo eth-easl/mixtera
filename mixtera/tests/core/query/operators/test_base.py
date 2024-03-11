@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from mixtera.core.query.operators._base import MixteraDataCollection, Operator
+from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.query import QueryPlan
 
 
@@ -12,15 +12,9 @@ class TestOperator(unittest.TestCase):
     def test_init(self):
         self.assertEqual(self.operator.children, [])
         self.assertEqual(self.operator.results, None)
-        self.assertIsNone(self.operator.mdc)
 
     def test_repr(self):
         self.assertEqual(str(self.operator), "Operator")
-
-    def test_set_datacollection(self):
-        mock_data_collection = MagicMock(spec=MixteraDataCollection)
-        self.operator.datacollection = mock_data_collection
-        self.assertEqual(self.operator.mdc, mock_data_collection)
 
     def test_insert_empty(self):
         mock_operator = MagicMock(spec=Operator)
@@ -41,9 +35,9 @@ class TestOperator(unittest.TestCase):
         mock_operator = Operator()
         # execute should be called only once
         with patch.object(Operator, "execute") as mocked_execute:
-            mock_operator.post_order_traverse()
+            mock_operator.post_order_traverse(None)
             mocked_execute.assert_called_once()
 
     def test_execute_not_implemented(self):
         with self.assertRaises(NotImplementedError):
-            self.operator.execute()
+            self.operator.execute(None)

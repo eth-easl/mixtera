@@ -1,8 +1,10 @@
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
-from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.index import IndexType
-from mixtera.core.query import query
+
+if TYPE_CHECKING:
+    from mixtera.core.datacollection.local import LocalDataCollection
+    from mixtera.core.query.query_plan import QueryPlan
 
 
 class Operator:
@@ -19,23 +21,11 @@ class Operator:
     def __init__(self) -> None:
         self.children: List[Operator] = []
         self.results: Optional[IndexType] = None
-        # for leaf nodes, the data collection needs to be set
-        # for other nodes, we don't set the data collection as
-        # they will not touch the underlying data collection.
-        self.mdc: Optional[MixteraDataCollection] = None
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}"
 
-    @property
-    def datacollection(self) -> Optional[MixteraDataCollection]:
-        return self.mdc
-
-    @datacollection.setter
-    def datacollection(self, value: MixteraDataCollection) -> None:
-        self.mdc = value
-
-    def insert(self, query_plan: "query.QueryPlan") -> "Operator":
+    def insert(self, query_plan: "QueryPlan") -> "Operator":
         """
         For most operators, the insert function (insert this node into the query)
             adds the current root node as a child of this operator.
@@ -86,10 +76,11 @@ class Operator:
             node_string += child.string(level + 1)
         return node_string
 
-    def post_order_traverse(self) -> None:
+    def post_order_traverse(self, ldc: "LocalDataCollection") -> None:
         for child in self.children:
-            child.post_order_traverse()
-        self.execute()
+            child.post_order_traverse(ldc)
+        self.execute(ldc)
 
-    def execute(self) -> None:
+    def execute(self, ldc: "LocalDataCollection") -> None:
+        del ldc
         raise NotImplementedError("execute method must be implemented in the child class")

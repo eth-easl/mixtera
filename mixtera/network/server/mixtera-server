@@ -1,0 +1,3 @@
+#!/bin/bash
+MIXTERAPATH="$(python -c 'import mixtera; print(mixtera.__path__[0])')"
+python -u $MIXTERAPATH/network/server/entrypoint.py "$@"

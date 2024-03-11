@@ -21,6 +21,4 @@ class TestMixteraDataCollection(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             MixteraDataCollection.from_directory(dir_path)
 
-    def test_from_remote(self):
-        with self.assertRaises(NotImplementedError):
-            MixteraDataCollection.from_remote("TODO")
+    # TODO(MaxiBoether): write test for from_local

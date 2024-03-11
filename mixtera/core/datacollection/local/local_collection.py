@@ -1,17 +1,21 @@
+import multiprocessing as mp
 import sqlite3
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
 
 import dill
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import Index
+from mixtera.core.datacollection.index import Index, IndexType
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
+from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type, wait_for_key_in_dict
+
+if TYPE_CHECKING:
+    from mixtera.core.query import LocalQueryResult, Query, QueryResult
 
 
 class LocalDataCollection(MixteraDataCollection):
@@ -34,6 +38,10 @@ class LocalDataCollection(MixteraDataCollection):
             self._connection = self._init_database()
         else:
             self._connection = sqlite3.connect(self._database_path)
+
+        self._queries_lock = mp.Lock()
+        self._queries: list[tuple[Query, int]] = []  # (query, chunk_size)
+        self._training_query_map: dict[str, int] = {}
 
     def _init_database(self) -> sqlite3.Connection:
         assert hasattr(self, "_database_path")
@@ -363,18 +371,16 @@ class LocalDataCollection(MixteraDataCollection):
 
         return result[0]
 
-    def get_samples_from_ranges(
-        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
-    ) -> Iterable[str]:
-        for dataset_id, file_dict in ranges_per_dataset_and_file.items():
-            dataset_parsing_func = self._get_dataset_func_by_id(dataset_id)
-            filename_dict = {
-                self._get_file_path_by_id(file_id): file_ranges for file_id, file_ranges in file_dict.items()
-            }
-            # Since we are in the LocalCollection, server_connection is always None.
-            yield from self._get_dataset_type_by_id(dataset_id).read_ranges_from_files(
-                filename_dict, dataset_parsing_func, None
-            )
+    def is_remote(self) -> bool:
+        return False
+
+    def stream_query_results(
+        self, query_result: "QueryResult", tunnel_via_server: bool = False
+    ) -> Generator[str, None, None]:
+        if tunnel_via_server:
+            raise RuntimeError("Cannot tunnel via server on a LocalDataCollection, can only do this remotely!")
+
+        yield from MixteraDataCollection._stream_query_results(query_result, None)
 
     def add_property(
         self,
@@ -437,3 +443,39 @@ class LocalDataCollection(MixteraDataCollection):
             return None
         # The type of self._index and the returned value is `InMemoryDictionaryRangeIndex`
         return self._index.get_index_by_features(property_name)
+
+    def register_query(self, query: "Query", chunk_size: int) -> int:
+        if query.training_id in self._training_query_map:
+            logger.warning(f"We already have a query for training {query.training_id}!")
+            return -1
+
+        with self._queries_lock:
+            self._queries.append((query, chunk_size))
+            index = len(self._queries) - 1
+            self._training_query_map[query.training_id] = index
+
+        logger.info(
+            f"Registered query {str(query)} with chunk_size {chunk_size}" + f" for training {query.training_id}."
+        )
+
+        return index
+
+    def get_query_result(self, training_id: str) -> "LocalQueryResult":
+        if query_id := self.get_query_id(training_id) < 0:
+            raise RuntimeError(f"Unknown training {training_id}")
+        # Since queries are only registered after they are executed, results is guaranteed to not be None
+
+        return self._queries[query_id][0].results
+
+    def get_query_id(self, training_id: str) -> int:
+        if wait_for_key_in_dict(self._training_query_map, training_id, 120.0):
+            query_id = self._training_query_map[training_id]
+            logger.debug(f"Query ID for training {training_id} is {query_id}")
+            return query_id
+
+        logger.warning(f"Did not find query ID for training {training_id} after 15 seconds.")
+        return -1
+
+    def next_query_result_chunk(self, query_id: int) -> Optional[IndexType]:
+        # Note that this call is inherently thread-safe
+        return next(self._queries[query_id][0].results, None)

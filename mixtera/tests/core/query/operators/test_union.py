@@ -20,12 +20,12 @@ class TestUnion(unittest.TestCase):
         self.assertEqual(self.union.children[0], self.query_a.root)
 
     def test_execute(self):
-        query_b = Query.from_datacollection(self.mdc).select(("field1", "==", "value2"))
+        query_b = Query.for_training("training_id", 1).select(("field1", "==", "value2"))
         query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         query_b.root.results.append_entry("field1", "value2", "did", "fid", (0, 2))
         gt_result = {"field1": {"value1": {"did": {"fid": (0, 2)}}, "value2": {"did": {"fid": (0, 2)}}}}
         self.union.children.append(query_b.root)
-        self.union.execute()
+        self.union.execute(self.mdc)
         self.assertTrue(self.union.results._index, gt_result)
 
     def test_repr(self):
