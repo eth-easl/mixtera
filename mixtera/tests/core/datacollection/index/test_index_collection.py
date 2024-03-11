@@ -39,6 +39,80 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
         self.assertEqual(index.get_dict_index_by_feature("publication_date"), pub_date_sub_dict)
         self.assertEqual(index.get_dict_index_by_feature("non_existent"), {})
 
+    def test_get_dict_index_by_predicate(self):
+        index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
+        target_index = {
+            "property_name": {
+                -1: {0: {0: [0]}},
+                1: {0: {0: [1]}},
+                -10: {0: {0: [2]}},
+                10: {0: {0: [3]}},
+            },
+            "other_property_name": {"val1": {0: {0: [2]}}},
+        }
+        index._index = target_index.copy()
+
+        lt_0 = {
+            -1: {0: {0: [0]}},
+            -10: {0: {0: [2]}},
+        }
+        gt_0 = {
+            1: {0: {0: [1]}},
+            10: {0: {0: [3]}},
+        }
+
+        lt_100 = target_index["property_name"].copy()
+        gt_100 = {}
+
+        self.assertEqual(index.get_dict_index_by_predicate("property_name", lambda x: x < 0), lt_0)
+        self.assertEqual(index.get_dict_index_by_predicate("property_name", lambda x: x > 0), gt_0)
+        self.assertEqual(index.get_dict_index_by_predicate("property_name", lambda x: x > 100), gt_100)
+        self.assertEqual(index.get_dict_index_by_predicate("property_name", lambda x: x < 100), lt_100)
+
+    def test_get_index_by_predicate(self):
+        index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
+        target_index = {
+            "property_name": {
+                -1: {0: {0: [0]}},
+                1: {0: {0: [1]}},
+                -10: {0: {0: [2]}},
+                10: {0: {0: [3]}},
+            },
+            "other_property_name": {"val1": {0: {0: [2]}}},
+        }
+        index._index = target_index.copy()
+
+        lt_0 = {
+            "property_name": {
+                -1: {0: {0: [0]}},
+                -10: {0: {0: [2]}},
+            }
+        }
+        gt_0 = {
+            "property_name": {
+                1: {0: {0: [1]}},
+                10: {0: {0: [3]}},
+            }
+        }
+
+        lt_100 = {"property_name": target_index["property_name"].copy()}
+        gt_100 = {}
+
+        lt_0_res = index.get_index_by_predicate("property_name", lambda x: x < 0)
+        gt_0_res = index.get_index_by_predicate("property_name", lambda x: x > 0)
+        gt_100_res = index.get_index_by_predicate("property_name", lambda x: x > 100)
+        lt_100_res = index.get_index_by_predicate("property_name", lambda x: x < 100)
+
+        self.assertIsInstance(lt_0_res, InMemoryDictionaryLineIndex)
+        self.assertIsInstance(gt_0_res, InMemoryDictionaryLineIndex)
+        self.assertIsInstance(gt_100_res, InMemoryDictionaryLineIndex)
+        self.assertIsInstance(lt_100_res, InMemoryDictionaryLineIndex)
+
+        self.assertEqual(lt_0_res._index, lt_0)
+        self.assertEqual(gt_0_res._index, gt_0)
+        self.assertEqual(gt_100_res._index, gt_100)
+        self.assertEqual(lt_100_res._index, lt_100)
+
     def test_get_by_many_features(self):
         index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
         target_index = {

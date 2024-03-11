@@ -116,7 +116,8 @@ class Index(ABC):
             structure. This is more expensive, and deactivated by default.
 
         Returns:
-            An instance of Index type; if no such feature is found an empty dictionary is returned.
+            An instance of Index type; if no such feature is found an Index
+            with an empty inner index will be returned.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 

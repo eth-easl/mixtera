@@ -77,7 +77,9 @@ class InMemoryDictionaryIndex(Index, ABC):
     def get_index_by_predicate(
         self, feature_name: str, predicate: Callable[[Union[str, int, float]], bool], copy: bool = False
     ) -> Index:
-        result = {feature_name: self.get_dict_index_by_predicate(feature_name, predicate, copy=copy)}
+        result = self.get_dict_index_by_predicate(feature_name, predicate, copy=copy)
+        if result:
+            result = {feature_name: self.get_dict_index_by_predicate(feature_name, predicate, copy=copy)}
         return self._copy_constructor(result)
 
     def get_dict_index_by_many_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> IndexType:
