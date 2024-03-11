@@ -51,10 +51,30 @@ def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
 
 
 def run_async_until_complete(call: Any) -> Any:
-    return asyncio.get_event_loop().run_until_complete(call)
+    """
+    Runs a async coroutine until complete and returns its result
+
+    Args:
+        call (Any): The coroutine to run.
+
+    Returns:
+        Any: The result of the corountine.
+    """
+    return asyncio.run(call)
 
 
 def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
+    """
+    Waits for a key to appear in a dict or timeout is thrown.
+
+    Args:
+        dictionary (dict): The dictionary to check.
+        key (str): The key to search for.
+        timeout (float): How many seconds to wait.
+
+    Returns:
+        bool: Whether the key is in the dictionary after timeout seconds.
+    """
     timeout_at = time.time() + timeout
 
     while key not in dictionary and time.time() <= timeout_at:

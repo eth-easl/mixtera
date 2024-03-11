@@ -4,9 +4,7 @@ from typing import TYPE_CHECKING, Generator, Iterable, Optional
 from loguru import logger
 from mixtera.core.datacollection import IndexType
 from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
-from mixtera.network.server_task import ServerTask
-from mixtera.utils import run_async_until_complete
-from mixtera.utils.network_utils import (
+from mixtera.network.network_utils import (
     read_int,
     read_pickeled_object,
     read_utf8_string,
@@ -14,6 +12,8 @@ from mixtera.utils.network_utils import (
     write_pickeled_object,
     write_utf8_string,
 )
+from mixtera.network.server_task import ServerTask
+from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
     from mixtera.core.query import Query
