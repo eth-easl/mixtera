@@ -15,9 +15,6 @@ from mixtera.network.network_utils import (
 )
 from mixtera.network.server_task import ServerTask
 
-# TODO(#): Use actual query instead of dict of ranges
-QueryType = dict[int, dict[int, list[tuple[int, int]]]]
-
 
 class MixteraServer:
     def __init__(self, directory: Path, host: str, port: int):
