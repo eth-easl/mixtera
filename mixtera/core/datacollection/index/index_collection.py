@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import Union
+from typing import Callable, Union
 
 from loguru import logger
 from mixtera.core.datacollection.index import (
@@ -74,6 +74,14 @@ class InMemoryDictionaryIndex(Index, ABC):
     def get_index_by_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> Index:
         return self._copy_constructor(self.get_dict_index_by_many_features(feature_names, copy=copy))
 
+    def get_index_by_predicate(
+        self, feature_name: str, predicate: Callable[[Union[str, int, float]], bool], copy: bool = False
+    ) -> Index:
+        result = self.get_dict_index_by_predicate(feature_name, predicate, copy=copy)
+        if result:
+            result = {feature_name: self.get_dict_index_by_predicate(feature_name, predicate, copy=copy)}
+        return self._copy_constructor(result)
+
     def get_dict_index_by_many_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> IndexType:
         if isinstance(feature_names, str):
             feature_names = [feature_names]
@@ -102,6 +110,15 @@ class InMemoryDictionaryIndex(Index, ABC):
             )
             return {}
         return return_with_deepcopy_or_noop(self._index[feature_name][feature_value], copy)
+
+    def get_dict_index_by_predicate(
+        self, feature_name: str, predicate: Callable[[Union[str, int, float]], bool], copy: bool = False
+    ) -> IndexFeatureValueType:
+        if feature_name not in self._index:
+            logger.warning(f"The feature {feature_name} was not found in index; returning emtpy dict!")
+            return {}
+        result = {k: v for k, v in self._index[feature_name].items() if predicate(k)}
+        return return_with_deepcopy_or_noop(result, copy)
 
     def get_all_features(self) -> list[str]:
         return list(self._index.keys())
