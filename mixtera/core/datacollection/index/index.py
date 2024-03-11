@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Callable, Union
 
 # Compressed hierarchy (i.e. uses ranges)
 IndexRowRangeType = list[tuple[int, int]]
@@ -100,6 +100,27 @@ class Index(ABC):
         """
 
     @abstractmethod
+    def get_index_by_predicate(
+        self, feature_name: str, predicate: Callable[[Union[str, int, float]], bool], copy: bool = False
+    ) -> "Index":
+        """
+        Retrieves the entries under a certain property that meet the `predicate`, and
+        generates a new Index object from the results. The new index type will be the same
+        as the base object.
+
+        Args:
+            feature_name: the name of the feature
+            predicate: the predicate used for filtering out entries.
+            copy: if True, the returned dictionary is a copy of the internal data,
+            meaning no side-effects can arise by changing the returned data
+            structure. This is more expensive, and deactivated by default.
+
+        Returns:
+            An instance of Index type; if no such feature is found an empty dictionary is returned.
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
+    @abstractmethod
     def get_dict_index_by_many_features(self, feature_names: Union[str, list[str]], copy: bool = False) -> IndexType:
         """
         Returns the index entries of these features in a dictionary form.
@@ -137,7 +158,7 @@ class Index(ABC):
     @abstractmethod
     def get_dict_index_by_feature_value(
         self, feature_name: str, feature_value: Union[str, int, float], copy: bool = False
-    ) -> IndexDatasetEntryType:
+    ) -> IndexFeatureValueType:
         """
         Returns the entries in the index for this feature and its value in a dictionary form.
 
@@ -149,8 +170,27 @@ class Index(ABC):
             structure. This is more expensive, and deactivated by default.
 
         Returns:
-          An instance of IndexDatasetEntryType; if no such feature is found, or no
-          such value exists, an empty dictionary is returned
+          An instance of IndexDatasetEntryType; if no such feature is found, an empty dictionary is returned
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
+    @abstractmethod
+    def get_dict_index_by_predicate(
+        self, feature_name: str, predicate: Callable[[Union[str, int, float]], bool], copy: bool = False
+    ) -> IndexDatasetEntryType:
+        """
+        Retrieves the entries under a certain property that meet the `predicate`
+
+        Args:
+            feature_name: the name of the feature
+            predicate: the predicate used for filtering out entries.
+            copy: if True, the returned dictionary is a copy of the internal data,
+            meaning no side-effects can arise by changing the returned data
+            structure. This is more expensive, and deactivated by default.
+
+        Returns:
+            An instance of IndexDatasetEntryType; if no such feature is found, or no
+            such value exists, an empty dictionary is returned.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
