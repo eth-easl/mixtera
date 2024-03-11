@@ -78,7 +78,7 @@ class MixteraServer:
         logger.debug("Data drained.")
 
     async def _return_next_result_chunk(self, query_id: int, writer: asyncio.StreamWriter) -> None:
-        next_chunk = self._ldc.next_query_result_chunk(query_id)  # This function should be thread safe
+        next_chunk = self._ldc.next_query_result_chunk(query_id)  # This function is thread safe
         await write_pickeled_object(next_chunk, SAMPLE_SIZE_BYTES, writer)
 
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

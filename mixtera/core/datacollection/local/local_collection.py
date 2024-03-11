@@ -40,7 +40,7 @@ class LocalDataCollection(MixteraDataCollection):
             self._connection = sqlite3.connect(self._database_path)
 
         self._queries_lock = mp.Lock()
-        self._queries: list[tuple[Query, int]] = []  # (query, num nodes, num workers per node)
+        self._queries: list[tuple[Query, int]] = []  # (query, chunk_size)
         self._training_query_map: dict[str, int] = {}
 
     def _init_database(self) -> sqlite3.Connection:
@@ -439,9 +439,9 @@ class LocalDataCollection(MixteraDataCollection):
         return index
 
     def get_query_result(self, training_id: str) -> "LocalQueryResult":
-        # What if query has not been executed?
         if query_id := self.get_query_id(training_id) < 0:
             raise RuntimeError(f"Unknown training {training_id}")
+        # Since queries are only registered after they are executed, results is guaranteed to not be None
 
         return self._queries[query_id][0].results
 

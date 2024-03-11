@@ -45,6 +45,17 @@ class MixteraDataCollection(ABC):
 
     @staticmethod
     def from_remote(host: str, port: int) -> "RemoteDataCollection":
+        """
+        Instantiates a RemoteDataCollection from a host address and port.
+
+        Args:
+            host (str): The host address of the Mixtera server
+            port (int): The port of the Mixtera server
+
+        Returns:
+            A RemoteDataCollection instance.
+        """
+
         # Local import to avoid circular dependency
         from mixtera.core.datacollection.remote import RemoteDataCollection  # pylint: disable=import-outside-toplevel
 
@@ -128,13 +139,14 @@ class MixteraDataCollection(ABC):
     @abstractmethod
     def get_query_result(self, training_id: str) -> "QueryResult":
         """
-        TODO
+        Given a training ID, returns the QueryResult object from which the result chunks can be obtained.
 
         Args:
-            TODO
+            training_id (str): The training ID to get the results for.
 
         Returns:
-            TODO
+            A QueryResult object that can be iterated over, e.g., using the
+            `stream_query_results` function.
         """
 
         raise NotImplementedError()
@@ -144,13 +156,17 @@ class MixteraDataCollection(ABC):
         self, query_result: "QueryResult", tunnel_via_server: bool = False
     ) -> Generator[str, None, None]:
         """
-        TODO
+        Given a query_results object, iterates over the samples of the query.
 
         Args:
-            TODO
+            query_result (QueryResult): The QueryResult object.
+            tunnel_via_server (bool): If True, the sample payloads
+                will be streamed via the Mixtera server. Otherwise,
+                the client will access the files directly. Needs to be False
+                for LocalDataCollection, and defaults to False.
 
         Returns:
-            TODO
+            A Generator of samples.
         """
 
         raise NotImplementedError()
@@ -160,15 +176,18 @@ class MixteraDataCollection(ABC):
         query_result: "QueryResult", server_connection: Optional["ServerConnection"] = None
     ) -> Generator[str, None, None]:
         """
-        TODO
+        Internal implementation for streaming query results.
+        Called from the Local/RemoteDataCollection implementations of `stream_query_results`.
 
         Args:
-            TODO
+            query_result (QueryResult): The QueryResult object.
+            server_connection (Optional[ServerConnection]): If given,
+                the sample payloads are streamed via this Mixtera server.
 
         Returns:
-            TODO
+            A Generator of samples.
+
         """
-        # TODO(MaxiBoether): This might need adjustments after the index PR
         for result_chunk in query_result:
             for index in result_chunk:
                 # TODO(create issue): This currently iterates through it dataset by dataset.

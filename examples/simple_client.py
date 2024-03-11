@@ -19,7 +19,6 @@ def main():
     TRAINING_ID = str(round(time.time() * 1000)) # Each node should have the same TRAINING_ID, such that they can ask the server for the query_id (can be passed, e.g., via environment variable)
     num_workers_per_node = 1
 
-
     ### LOCAL CASE
     ldc = MixteraDataCollection.from_directory("/Users/mboether/phd/mixtera")
     if register_dataset:
@@ -29,8 +28,6 @@ def main():
     _ = query.execute(ldc, chunk_size=2) # -> LocalQueryResult
 
     ### FORK ###
-
-    ## TODO: Ensure that we fork here and not duplicate between processes the data. Should be unique.
 
     local_result = []
     query_result = ldc.get_query_result(TRAINING_ID) # -> LocalQueryResult

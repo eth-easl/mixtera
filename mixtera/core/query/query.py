@@ -84,9 +84,10 @@ class Query:
         if mdc.is_remote():
             return mdc.execute_query_at_server(self, chunk_size)
 
-        self.query_id = mdc.register_query(self, chunk_size)
-
         self.root.post_order_traverse(mdc)
         # TODO(#31): Use num_nodes and workers to guarantee correct mixture.
         self.results = LocalQueryResult(mdc, self.root.results, chunk_size=chunk_size)
+        # We first execute the query, and then register it.
+        self.query_id = mdc.register_query(self, chunk_size)
+
         return self.results
