@@ -66,18 +66,18 @@ class TestQueryE2E(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
-        query = Query.from_datacollection(self.mdc).select(("language", "==", "Go"))
-        res = query.execute(chunk_size=1)
+        query = Query.for_training("training_id", 1).select(("language", "==", "Go"))
+        res = query.execute(self.mdc, chunk_size=1)
         for x in res:
             self.assertEqual(x._index, {"language": {"Go": {1: {1: [(0, 1)]}}}})
             break
 
     def test_union(self):
-        query_1 = Query.from_datacollection(self.mdc).select(("language", "==", "Go"))
-        query_2 = Query.from_datacollection(self.mdc)
+        query_1 = Query.for_training("training_id", 1).select(("language", "==", "Go"))
+        query_2 = Query.for_training("training_id", 1)
         query_2.select(("language", "==", "CSS"))
         query_2 = query_2.union(query_1)
-        query_result = query_2.execute(chunk_size=1)
+        query_result = query_2.execute(self.mdc, chunk_size=1)
         res = list(query_result)
         res = [x._index for x in res]
         print(res)

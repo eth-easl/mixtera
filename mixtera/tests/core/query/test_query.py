@@ -91,7 +91,7 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query("training_id", 1, 1).mockoperator("test")
-        query_result = query.execute(chunk_size=1)
+        query_result = query.execute(self.mdc, chunk_size=1)
         res = list(query_result)
         res = [x._index for x in res]
         gt_meta = {
@@ -120,7 +120,7 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query.for_training("training_id", 1, 1).mockoperator("test", len_results=2)
-        res = query.execute(chunk_size=2)
+        res = query.execute(self.mdc, chunk_size=2)
         res = list(res)
         res = [x._index for x in res]
         self.assertEqual(res, [{"field": {"value": {"did": {"fid": [(0, 2)]}}}}])

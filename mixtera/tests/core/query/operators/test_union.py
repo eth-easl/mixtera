@@ -9,7 +9,7 @@ from mixtera.core.query.query import Query
 class TestUnion(unittest.TestCase):
     def setUp(self):
         self.mdc = MixteraDataCollection.from_directory(".")
-        self.query_a = Query.from_datacollection(self.mdc).select(("field1", "==", "value1"))
+        self.query_a = Query.for_training("training_id", 1).select(("field1", "==", "value1"))
         self.query_a.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
 
         self.query_a.root.results.append_entry("field1", "value1", "did", "fid", (0, 2))

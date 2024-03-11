@@ -31,8 +31,6 @@ class Query:
 
         def process_op(self, *args: Any, **kwargs: Any) -> "Query":  # type: ignore[no-untyped-def]
             op: Operator = operator(*args, **kwargs)
-            # (todo: create issue) optimally we only set this if it is a leaf.
-            op.datacollection = self.mdc
             self.query_plan.add(op)
             return self
 

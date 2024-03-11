@@ -80,9 +80,10 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
     @patch("mixtera.network.server.server.write_utf8_string")
     @patch("mixtera.network.server.server.read_utf8_string")
     @patch("mixtera.network.server.server.read_int")
-    async def test_read_file(self, mock_from_id, mock_read_int, mock_read_utf8_string, mock_write_utf8_string):
+    @patch("mixtera.core.filesystem.FileSystem.from_path")
+    async def test_read_file(self, mock_from_path, mock_read_int, mock_read_utf8_string, mock_write_utf8_string):
         filesystem_mock = MagicMock()
-        mock_from_id.return_value = filesystem_mock
+        mock_from_path.return_value = filesystem_mock
         file_path = "/path/to/file"
         file_data = "file_data"
         filesystem_mock.get_file_iterable.return_value = [file_data]
@@ -92,10 +93,9 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         await self.server._read_file(create_mock_reader(b"", file_path.encode()), mock_writer)
 
-        mock_read_int.assert_awaited_once_with(ID_BYTES, ANY)
         mock_read_utf8_string.assert_awaited_once_with(ID_BYTES, ANY)
-        mock_from_id.assert_called_once_with(1)
-        filesystem_mock.get_file_iterable.assert_called_once_with(file_path, None)
+        mock_from_path.assert_called_once_with("/path/to/file")
+        filesystem_mock.get_file_iterable.assert_called_once_with(file_path)
         mock_write_utf8_string.assert_awaited_once_with(file_data, SAMPLE_SIZE_BYTES, mock_writer, drain=False)
         mock_writer.drain.assert_awaited_once()
 

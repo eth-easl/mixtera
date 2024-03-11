@@ -34,7 +34,7 @@ class TestSelect(unittest.TestCase):
         mdc = MagicMock()
         returned_index = InMemoryDictionaryRangeIndex()
         returned_index.append_entry("field", "value", "did", "fid", (0, 2))
-        self.select.mdc.get_index.return_value = returned_index
+        mdc.get_index.return_value = returned_index
         self.select.condition.meet = MagicMock(return_value=True)
         self.select.execute(mdc)
         self.assertEqual(self.select.results._index, returned_index._index)
@@ -42,7 +42,6 @@ class TestSelect(unittest.TestCase):
     def test_execute_with_one_child(self):
         returned_index = InMemoryDictionaryRangeIndex()
         returned_index.append_entry("field", "value", "did", "fid", (0, 2))
-        self.select.mdc.get_index.return_value = returned_index
 
         self.select.condition.meet = MagicMock(return_value=True)
         self.select.children = [MagicMock()]
@@ -59,8 +58,8 @@ class TestSelect(unittest.TestCase):
         self.assertEqual(query_plan.root.children[0], select_1)
         self.assertEqual(query_plan.root.children[1], select_2)
 
-    def test_repr(self):
-        self.assertEqual(repr(self.select), "select<>(field operator value)")
+    def test_str(self):
+        self.assertEqual(str(self.select), "select<>(field operator value)")
 
 
 class TestCondition(unittest.TestCase):

@@ -56,7 +56,7 @@ class MixteraServer:
             return
 
         logger.info(f"Got a _read_file request for file {file_path}")
-        file_data = "".join(FileSystem.get_file_iterable(file_path))
+        file_data = "".join(FileSystem.from_path(file_path).get_file_iterable(file_path))
         logger.debug("File read.")
         await write_utf8_string(file_data, SAMPLE_SIZE_BYTES, writer, drain=False)
         logger.debug("Data written.")
