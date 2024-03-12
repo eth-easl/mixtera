@@ -13,6 +13,7 @@ class TestQueryE2E(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.directory = Path(self.temp_dir.name)
+        print(self.directory)
         ldc = LocalDataCollection(self.directory)
 
         jsonl_file_path1 = self.directory / "temp1.jsonl"
@@ -69,7 +70,7 @@ class TestQueryE2E(unittest.TestCase):
         query = Query.for_training("training_id", 1).select(("language", "==", "Go"))
         res = query.execute(self.mdc, chunk_size=1)
         for x in res:
-            self.assertEqual(x._index, {"language": {"Go": {1: {1: [(0, 1)]}}}})
+            self.assertEqual(x._index, {"language": {"Go": {1: {self.file1_id: [(0, 1)]}}}})
             break
 
     def test_union(self):
@@ -80,16 +81,15 @@ class TestQueryE2E(unittest.TestCase):
         query_result = query_2.execute(self.mdc, chunk_size=1)
         res = list(query_result)
         res = [x._index for x in res]
-        print(res)
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
-        self.assertEqual(
+        self.assertCountEqual(
             res,
             [
-                {"language": {"Go": {1: {1: [(0, 1)]}}}},
-                {"language": {"Go": {1: {1: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {1: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {2: [(0, 1)]}}}},
+                {"language": {"Go": {1: {self.file1_id: [(0, 1)]}}}},
+                {"language": {"Go": {1: {self.file1_id: [(1, 2)]}}}},
+                {"language": {"CSS": {1: {self.file1_id: [(1, 2)]}}}},
+                {"language": {"CSS": {1: {self.file2_id: [(0, 1)]}}}},
             ],
         )
         # check metadata
