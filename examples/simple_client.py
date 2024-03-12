@@ -15,14 +15,14 @@ def parsing_func(sample):
 
 
 def main():
-    register_dataset = False # only need to do once
+    register_dataset = True # only need to do once
     TRAINING_ID = str(round(time.time() * 1000)) # Each node should have the same TRAINING_ID, such that they can ask the server for the query_id (can be passed, e.g., via environment variable)
     num_workers_per_node = 1
 
     ### LOCAL CASE
-    ldc = MixteraDataCollection.from_directory("/home/xiayao/Documents/projects/fmsys/mixtera/tmp/data")
+    ldc = MixteraDataCollection.from_directory("/Users/mboether/phd/mixtera")
     if register_dataset:
-        ldc.register_dataset("test_dataset", "/home/xiayao/Documents/projects/fmsys/mixtera/tmp/data", JSONLDataset, parsing_func, "RED_PAJAMA")
+        ldc.register_dataset("test_dataset", "/Users/mboether/phd/mixtera/test_dataset", JSONLDataset, parsing_func, "RED_PAJAMA")
 
     query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML")) # num_nodes = 1 default
     _ = query.execute(ldc, chunk_size=1000) # -> LocalQueryResult
