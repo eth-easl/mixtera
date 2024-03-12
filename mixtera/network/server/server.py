@@ -29,7 +29,7 @@ class MixteraServer:
         logger.debug(f"chunk_size = {chunk_size}")
         query = await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
-        _ = query.execute(self._ldc)
+        _ = query.execute(self._ldc, chunk_size=chunk_size)
         logger.debug(f"Registered query under ID {query.query_id} in LDC and executed it.")
 
         await write_int(query.query_id, ID_BYTES, writer)
@@ -97,7 +97,6 @@ class MixteraServer:
             logger.exception(e)
         finally:
             try:
-                logger.info("Closing writer...")
                 writer.close()
                 await writer.wait_closed()
             except Exception as e:  # pylint: disable=broad-exception-caught

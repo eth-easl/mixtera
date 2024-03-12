@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
 
-from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType, InMemoryDictionaryRangeIndex
 from mixtera.core.processing import ExecutionMode
@@ -212,9 +211,8 @@ class MixteraDataCollection(ABC):
         Returns:
             A Generator of samples.
         """
-        logger.debug(f"got {result_chunk.values_count} results in chunk")
-        logger.debug(result_chunk._index)
-
+        # TODO(create issue): In case server_connection is used, this is super duper mega slow, since
+        # we restream the entire file each time.
         for _, property_dict in result_chunk._index.items():
             for _, val_dict in property_dict.items():
                 for did, file_dict in val_dict.items():

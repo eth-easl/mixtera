@@ -25,7 +25,7 @@ def main():
         ldc.register_dataset("test_dataset", "/Users/mboether/phd/mixtera/test_dataset", JSONLDataset, parsing_func, "RED_PAJAMA")
 
     query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML")) # num_nodes = 1 default
-    _ = query.execute(ldc, chunk_size=1000) # -> LocalQueryResult
+    _ = query.execute(ldc, chunk_size=100) # -> LocalQueryResult
 
     ### FORK ###
 
@@ -43,12 +43,12 @@ def main():
 
     # Pre-fork on primary node
     query = Query.for_training(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))
-    _ = query.execute(rdc, chunk_size=2) # -> RemoteQueryResult, most likely ignored
+    _ = query.execute(rdc, chunk_size=100) # -> RemoteQueryResult, most likely ignored
 
     ### FORK ###
     remote_non_tunnel_result = []
     query_result = rdc.get_query_result(TRAINING_ID) # -> RemoteQueryResult
-    for sample in rdc.stream_query_results(query_result, tunnel_via_server=False):
+    for sample in tqdm(rdc.stream_query_results(query_result, tunnel_via_server=False)):
         remote_non_tunnel_result.append(sample)
 
     if local_result != remote_non_tunnel_result:
@@ -63,7 +63,7 @@ def main():
     ### FORK ###
     remote_tunnel_result = []
     query_result = rdc.get_query_result(TRAINING_ID) # -> RemoteQueryResult
-    for sample in rdc.stream_query_results(query_result, tunnel_via_server=True):
+    for sample in tqdm(rdc.stream_query_results(query_result, tunnel_via_server=True)):
         remote_tunnel_result.append(sample)
 
     if local_result != remote_tunnel_result:
@@ -74,11 +74,11 @@ def main():
     ### Torch Test
     TRAINING_ID = str(round(time.time() * 1000)) # Need a new training ID
     query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML"))
-    torch_ds = MixteraTorchDataset(rdc, query, TRAINING_ID, 2, tunnel_via_server=True)
+    torch_ds = MixteraTorchDataset(rdc, query, TRAINING_ID, 100, tunnel_via_server=True)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=1, num_workers=8)
 
     dataset_result = []
-    for batch in dl:
+    for batch in tqdm(dl):
         dataset_result.extend(batch)
 
     if local_result != dataset_result:

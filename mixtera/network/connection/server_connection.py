@@ -43,7 +43,6 @@ class ServerConnection:
 
     async def _connect_to_server(self) -> tuple[Optional[asyncio.StreamReader], Optional[asyncio.StreamWriter]]:
         try:
-            logger.debug("Connecting to server.")
             reader, writer = await asyncio.wait_for(asyncio.open_connection(self._host, self._port), timeout=5.0)
         except asyncio.TimeoutError:
             logger.error(f"Connection to {self._host}:{self._port} timed out.")
@@ -51,8 +50,6 @@ class ServerConnection:
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error(f"Failed to connect to {self._host}:{self._port}. Is the server running?: {e}")
             return None, None
-
-        logger.debug("Connected!")
 
         return reader, writer
 
@@ -117,7 +114,6 @@ class ServerConnection:
 
     # TODO(create issue): Use some ResultChunk type
     async def _get_next_result(self, query_id: int) -> Optional[list[IndexType]]:
-        logger.debug(f"Obtaining next result chunk for query_id {query_id}")
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:

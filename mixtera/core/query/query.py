@@ -1,5 +1,6 @@
 from typing import Any, Optional
 
+from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.query_plan import QueryPlan
@@ -78,8 +79,10 @@ class Query:
             res (QueryResult): The results of the query. See :py:class:`QueryResult` for more details.
         """
         if mdc.is_remote():
+            logger.debug(f"Executing query remotely with chunk size {chunk_size}")
             return mdc.execute_query_at_server(self, chunk_size)
 
+        logger.debug(f"Executing query locally with chunk size {chunk_size}")
         self.root.post_order_traverse(mdc)
         # TODO(#31): Use num_nodes and workers to guarantee correct mixture.
         self.results = LocalQueryResult(mdc, self.root.results, chunk_size=chunk_size)
