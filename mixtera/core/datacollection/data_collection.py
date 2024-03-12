@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
 
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
+from mixtera.core.datacollection.index import IndexType, InMemoryDictionaryRangeIndex
 from mixtera.core.processing import ExecutionMode
 
 if TYPE_CHECKING:
@@ -177,20 +177,50 @@ class MixteraDataCollection(ABC):
             A Generator of samples.
         """
         for result_chunk in query_result:
-            # TODO(create issue): This currently iterates through it property by property, dataset by dataset etc.
-            # Instead, we want to sample from a result chunk uniform at random
-            # It is a bit unclear how to implementing sampling here, since we work with ranges.
-            # In the best case, we would sample line by line u.a.r.
-            logger.debug(result_chunk._index)
-            for _, property_dict in result_chunk._index.items():
-                for _, val_dict in property_dict.items():
-                    for did, file_dict in val_dict.items():
-                        dtype = query_result.dataset_type[did]
-                        parsing_func = query_result.parsing_func[did]
-                        filename_dict = {
-                            query_result.file_path[file_id]: file_ranges for file_id, file_ranges in file_dict.items()
-                        }
-                        yield from dtype.read_ranges_from_files(filename_dict, parsing_func, server_connection)
+            yield from MixteraDataCollection._read_result_chunk(
+                result_chunk,
+                query_result.dataset_type,
+                query_result.parsing_func,
+                query_result.file_path,
+                server_connection=server_connection,
+            )
+
+    @staticmethod
+    def _read_result_chunk(
+        result_chunk: IndexType,
+        dataset_type_dict: dict[int, Type[Dataset]],
+        parsing_func_dict: dict[int, Callable[[str], str]],
+        file_path_dict: dict[int, str],
+        server_connection: Optional["ServerConnection"] = None,
+    ) -> Generator[str, None, None]:
+        """
+        Given a result chunk, iterates over the samples.
+
+        TODO(create issue): This currently iterates through it property by property, dataset by dataset etc.
+        Instead, we want to sample from a result chunk uniform at random
+        It is a bit unclear how to implementing sampling here, since we work with ranges.
+        In the best case, we would sample line by line u.a.r.
+
+        Args:
+            result_chunk (IndexType): The result chunk object.
+            dataset_type_dict (dict): A mapping from dataset ID to dataset type.
+            parsing_func_dict (dict): A mapping from dataset ID to parsing function.
+            file_path_dict (dict): A mapping from file ID to file path.
+            server_connection (Optional[ServerConnection]): If given,
+                the sample payloads are streamed via this Mixtera server.
+
+        Returns:
+            A Generator of samples.
+        """
+
+        logger.debug(result_chunk._index)
+        for _, property_dict in result_chunk._index.items():
+            for _, val_dict in property_dict.items():
+                for did, file_dict in val_dict.items():
+                    filename_dict = {file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_dict.items()}
+                    yield from dataset_type_dict[did].read_ranges_from_files(
+                        filename_dict, parsing_func_dict[did], server_connection
+                    )
 
     @abstractmethod
     def is_remote(self) -> bool:
