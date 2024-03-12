@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
+from loguru import logger
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
@@ -176,19 +177,19 @@ class MixteraDataCollection(ABC):
             A Generator of samples.
         """
         for result_chunk in query_result:
-            for index in result_chunk:
-                # TODO(create issue): This currently iterates through it dataset by dataset.
-                # Instead, we want to sample from it uniform at random
-                # It is a bit unclear how to implementing sampling here, since we work with ranges.
-                # In the best case, we would sample line by line u.a.r.
-                for did, file_dict in index.items():
-                    filesystem = query_result.dataset_fs[did]
-                    dtype = query_result.dataset_type[did]
-                    parsing_func = query_result.parsing_func[did]
-                    filename_dict = {
-                        query_result.file_path[file_id]: file_ranges for file_id, file_ranges in file_dict.items()
-                    }
-                    yield from dtype.read_ranges_from_files(filename_dict, filesystem, parsing_func, server_connection)
+            # TODO(create issue): This currently iterates through it property by property, dataset by dataset etc.
+            # Instead, we want to sample from a result chunk uniform at random
+            # It is a bit unclear how to implementing sampling here, since we work with ranges.
+            # In the best case, we would sample line by line u.a.r.
+            for _, property_dict in result_chunk._index.items():
+                for _, val_dict in property_dict.items():
+                    for did, file_dict in val_dict.items():
+                        dtype = query_result.dataset_type[did]
+                        parsing_func = query_result.parsing_func[did]
+                        filename_dict = {
+                            query_result.file_path[file_id]: file_ranges for file_id, file_ranges in file_dict.items()
+                        }
+                        yield from dtype.read_ranges_from_files(filename_dict, parsing_func, server_connection)
 
     @abstractmethod
     def is_remote(self) -> bool:

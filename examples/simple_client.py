@@ -2,9 +2,9 @@ import time
 
 import torch
 from loguru import logger
+from tqdm import tqdm
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.filesystem import LocalFilesystem
 from mixtera.core.query import Query
 from mixtera.torch.mixtera_torch_dataset import MixteraTorchDataset
 
@@ -22,7 +22,7 @@ def main():
     ### LOCAL CASE
     ldc = MixteraDataCollection.from_directory("/Users/mboether/phd/mixtera")
     if register_dataset:
-        ldc.register_dataset("test_dataset", "/Users/mboether/phd/mixtera/test_dataset", JSONLDataset, LocalFilesystem, parsing_func, "RED_PAJAMA")
+        ldc.register_dataset("test_dataset", "/Users/mboether/phd/mixtera/test_dataset", JSONLDataset, parsing_func, "RED_PAJAMA")
 
     query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML")) # num_nodes = 1 default
     _ = query.execute(ldc, chunk_size=2) # -> LocalQueryResult
@@ -31,7 +31,7 @@ def main():
 
     local_result = []
     query_result = ldc.get_query_result(TRAINING_ID) # -> LocalQueryResult
-    for sample in ldc.stream_query_results(query_result):
+    for sample in tqdm(ldc.stream_query_results(query_result)):
         local_result.append(sample)
 
 
