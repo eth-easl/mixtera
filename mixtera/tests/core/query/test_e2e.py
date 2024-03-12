@@ -89,7 +89,6 @@ class TestQueryE2E(unittest.TestCase):
                 {"language": {"Go": {1: {1: [(0, 1)]}}}},
                 {"language": {"Go": {1: {1: [(1, 2)]}}}},
                 {"language": {"CSS": {1: {1: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {1: [(1, 2)]}}}},
                 {"language": {"CSS": {1: {2: [(0, 1)]}}}},
             ],
         )

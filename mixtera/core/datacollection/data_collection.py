@@ -212,8 +212,9 @@ class MixteraDataCollection(ABC):
         Returns:
             A Generator of samples.
         """
-
+        logger.debug(f"got {result_chunk.values_count} results in chunk")
         logger.debug(result_chunk._index)
+
         for _, property_dict in result_chunk._index.items():
             for _, val_dict in property_dict.items():
                 for did, file_dict in val_dict.items():
