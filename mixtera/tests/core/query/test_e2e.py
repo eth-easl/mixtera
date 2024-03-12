@@ -13,7 +13,6 @@ class TestQueryE2E(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.directory = Path(self.temp_dir.name)
-        print(self.directory)
         ldc = LocalDataCollection(self.directory)
 
         jsonl_file_path1 = self.directory / "temp1.jsonl"

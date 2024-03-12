@@ -58,7 +58,7 @@ def main():
     TRAINING_ID = str(round(time.time() * 1000)) # Need a new training ID
     # Pre-fork on primary node
     query = Query.for_training(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))
-    _ = query.execute(rdc, chunk_size=2) # -> RemoteQueryResult, most likely ignored
+    _ = query.execute(rdc, chunk_size=100) # -> RemoteQueryResult, most likely ignored
 
     ### FORK ###
     remote_tunnel_result = []
@@ -69,19 +69,17 @@ def main():
     if local_result != remote_tunnel_result:
         raise RuntimeError("Local does not equal remote tunnel result!")
 
-
-
     ### Torch Test
     TRAINING_ID = str(round(time.time() * 1000)) # Need a new training ID
     query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML"))
-    torch_ds = MixteraTorchDataset(rdc, query, TRAINING_ID, 100, tunnel_via_server=True)
-    dl = torch.utils.data.DataLoader(torch_ds, batch_size=1, num_workers=8)
+    torch_ds = MixteraTorchDataset(rdc, query, TRAINING_ID, 100, tunnel_via_server=False)
+    dl = torch.utils.data.DataLoader(torch_ds, batch_size=1, num_workers=16)
 
     dataset_result = []
     for batch in tqdm(dl):
         dataset_result.extend(batch)
 
-    if local_result != dataset_result:
+    if sorted(local_result) != sorted(dataset_result):
         raise RuntimeError("Local does not equal dataset tunnel result!")
 
     print(f"All had {len(local_result)} samples! (dataset = {len(dataset_result)})")
