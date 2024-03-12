@@ -2,6 +2,7 @@ import multiprocessing as mp
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Generator, Optional, Type
 
+from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
@@ -74,6 +75,9 @@ class LocalQueryResult(QueryResult):
         # I tried to use a manager.List() but run into pickling errors.
         # However, this only affects the setting where we train without a MixteraServer.
         # It could be that we need defaultdict_to_dict here but I stopped exploring this for now.
+        logger.debug(f"Instantiated LocalQueryResult with {len(self._chunks)} chunks.")
+        logger.debug([chunk._index for chunk in self._chunks])
+        logger.debug(self.results._index)
 
     def _parse_meta(self, ldc: LocalDataCollection) -> dict:
         dataset_ids = set()

@@ -2,11 +2,11 @@ import time
 
 import torch
 from loguru import logger
-from tqdm import tqdm
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import Query
 from mixtera.torch.mixtera_torch_dataset import MixteraTorchDataset
+from tqdm import tqdm
 
 
 def parsing_func(sample):
@@ -25,7 +25,7 @@ def main():
         ldc.register_dataset("test_dataset", "/Users/mboether/phd/mixtera/test_dataset", JSONLDataset, parsing_func, "RED_PAJAMA")
 
     query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML")) # num_nodes = 1 default
-    _ = query.execute(ldc, chunk_size=2) # -> LocalQueryResult
+    _ = query.execute(ldc, chunk_size=1000) # -> LocalQueryResult
 
     ### FORK ###
 

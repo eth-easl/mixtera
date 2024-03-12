@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
-from loguru import logger
 
+from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
 from mixtera.core.processing import ExecutionMode
@@ -181,6 +181,7 @@ class MixteraDataCollection(ABC):
             # Instead, we want to sample from a result chunk uniform at random
             # It is a bit unclear how to implementing sampling here, since we work with ranges.
             # In the best case, we would sample line by line u.a.r.
+            logger.debug(result_chunk._index)
             for _, property_dict in result_chunk._index.items():
                 for _, val_dict in property_dict.items():
                     for did, file_dict in val_dict.items():
