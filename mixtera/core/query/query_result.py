@@ -5,9 +5,10 @@ from typing import Any, Callable, Generator, Optional, Type
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, raw_index_dict_instantiator
 from mixtera.core.datacollection.local import LocalDataCollection
 from mixtera.network.connection import ServerConnection
+from mixtera.utils import defaultdict_to_dict
 
 
 class QueryResult(ABC):
@@ -76,8 +77,8 @@ class LocalQueryResult(QueryResult):
         # However, this only affects the setting where we train without a MixteraServer.
         # It could be that we need defaultdict_to_dict here but I stopped exploring this for now.
         logger.debug(f"Instantiated LocalQueryResult with {len(self._chunks)} chunks.")
-        logger.debug([chunk._index for chunk in self._chunks])
-        logger.debug(self.results._index)
+        # logger.debug([chunk._index for chunk in self._chunks])
+        # logger.debug(self.results._index)
 
     def _parse_meta(self, ldc: LocalDataCollection) -> dict:
         dataset_ids = set()
@@ -106,7 +107,7 @@ class LocalQueryResult(QueryResult):
         chunks: list[dict] = []
         # here we chunk the self.results from a large index_type
         # into smaller index_types.
-        current_chunk: IndexType = {}
+        current_chunk: IndexType = raw_index_dict_instantiator()
         current_chunk_length = 0
         # this is likely not a good impl, optimize it later.
         # now just ensure correct chunk_size and each chunk is an index.
@@ -118,35 +119,59 @@ class LocalQueryResult(QueryResult):
                         for start, end in file_ranges:
                             # TODO(create issue): we may want to optimize this later together with mixture.
                             # for now this is a simple implementaion (for testing)
-                            if end - start <= self.chunk_size - current_chunk_length:
-                                current_chunk[property_name] = {property_value: {did: {fid: [(start, end)]}}}
+                            # case 1: the entire range fits into the current chunk, add it to the current chunk
+                            if end - start < self.chunk_size - current_chunk_length:
+                                current_chunk[property_name][property_value][did][fid].append((start, end))
                                 current_chunk_length += end - start
-                                chunks.append(current_chunk)
+                                # chunk is not full yet
+                            # case 2: the entire range does not fit into the current chunk
                             else:
-                                if self.chunk_size < current_chunk_length:
-                                    raise RuntimeError("This should not happen.")
-                                if self.chunk_size == current_chunk_length:
-                                    chunks.append(current_chunk)
-                                    current_chunk = {}
-                                    current_chunk_length = 0
-                                if self.chunk_size > current_chunk_length:
-                                    # --> we need to split the range
-                                    # --> and add the first part to the current chunk
-                                    # --> and add the second part to a new chunk
-                                    # let's drop the remainder for now
-                                    num_chunks_needed = (end - start) // self.chunk_size
-                                    for _ in range(num_chunks_needed):
-                                        current_chunk[property_name] = {
-                                            property_value: {did: {fid: [(start, start + self.chunk_size)]}}
+                                # # step 1: add the first part of the range to the current chunk, to fill it up
+                                current_chunk[property_name][property_value][did][fid].append(
+                                    (start, start + self.chunk_size - current_chunk_length)
+                                )
+                                # this time the chunk is full
+                                chunks.append(current_chunk)
+                                # step 2: calculate how many chunks are needed for the rest of the range
+                                remaining_length = end - (start + self.chunk_size - current_chunk_length)
+                                remaining_chunks = remaining_length // self.chunk_size
+                                if remaining_chunks > 0:
+                                    # step 3: add the remaining chunks
+                                    for i in range(remaining_chunks):
+                                        new_chunk = raw_index_dict_instantiator()
+                                        new_chunk[property_name] = {
+                                            property_value: {
+                                                did: {
+                                                    fid: [
+                                                        (
+                                                            start
+                                                            + self.chunk_size
+                                                            - current_chunk_length
+                                                            + i * self.chunk_size,
+                                                            start
+                                                            + self.chunk_size
+                                                            - current_chunk_length
+                                                            + (i + 1) * self.chunk_size,
+                                                        )
+                                                    ]
+                                                }
+                                            }
                                         }
-                                        chunks.append(current_chunk)
-                                        current_chunk = {}
-                                        current_chunk_length = 0
-                                        start += self.chunk_size
+                                        chunks.append(new_chunk)
+                                remaining_length = remaining_length % self.chunk_size
+                                current_chunk = raw_index_dict_instantiator()
+                                current_chunk_length = 0
+                                start_new = start + remaining_chunks * self.chunk_size
+                                if remaining_length > 0:
+                                    current_chunk[property_name] = {
+                                        property_value: {did: {fid: [(start_new, start_new + remaining_length)]}}
+                                    }
+                                    current_chunk_length += remaining_length
+                        # reset current chunk after this file - we anyway need a new index for the next file
 
         for chunk in chunks:
             chunk_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
-            chunk_index._index = chunk
+            chunk_index._index = defaultdict_to_dict(chunk)
             self._chunks.append(chunk_index)
 
     @property

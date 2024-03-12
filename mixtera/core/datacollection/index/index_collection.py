@@ -173,6 +173,17 @@ class InMemoryDictionaryRangeIndex(InMemoryDictionaryIndex):
         assert isinstance(payload, tuple), "InMemoryDictionaryRangeIndex can only append a range tuple!"
         self._index[feature_name][feature_value][dataset_id][file_id].append(payload)
 
+    @property
+    def values_count(self) -> int:
+        total_count = 0
+        for _, feature_values in self._index.items():
+            for _, dataset_ids in feature_values.items():
+                for _, file_ids in dataset_ids.items():
+                    for _, file_ranges in file_ids.items():
+                        for start, end in file_ranges:
+                            total_count += end - start
+        return total_count
+
 
 class InMemoryDictionaryLineIndex(InMemoryDictionaryIndex):
     """
