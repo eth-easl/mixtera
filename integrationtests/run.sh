@@ -42,6 +42,7 @@ function shutdown_server {
     echo "Killed it."
   fi
   echo "Server shut down."
+  ps aux
 }
 
 function cleanup {
