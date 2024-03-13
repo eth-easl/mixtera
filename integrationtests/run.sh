@@ -33,12 +33,12 @@ function shutdown_server {
     python_pid=$(pgrep -P "$server_pid")
     if [ -n "$python_server_pid" ]; then
       echo "Killing Python server process with PID $python_server_pid"
-      pkill -TERM -P "$python_server_pid"
+      kill -9 -P "$python_server_pid"
       echo "Killed Python server"
     fi
 
     echo "Killing bash script"
-    pkill -9 -P "$server_pid"
+    kill -9 -P "$server_pid"
     echo "Killed it."
   fi
   echo "Server shut down."
