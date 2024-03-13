@@ -125,5 +125,8 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
+      - name: Setup mamba
+        uses: ./.github/actions/mamba
+
       - name: Run integrationtests
-        run: bash integrationtests/run.sh
+        run: micromamba run -n mixtera bash integrationtests/run.sh
