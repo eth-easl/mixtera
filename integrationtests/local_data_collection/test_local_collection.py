@@ -86,21 +86,52 @@ def test_filter_both(ldc: LocalDataCollection, chunk_size: int):
 
 
 def test_filter_license(ldc: LocalDataCollection, chunk_size: int):
-    pass
+    training_id = str(round(time.time() * 1000))
+    query = Query.for_training(training_id, 1).select(("license", "==", "CC"))
+    query_result = query.execute(ldc, chunk_size=chunk_size)
+    result_samples = []
 
+    for sample in ldc.stream_query_results(query_result):
+        result_samples.append(sample)
 
-def test_filter_license_and_html(ldc: LocalDataCollection, chunk_size: int):
-    pass
+    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
+    for sample in result_samples:
+        assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
 def test_filter_unknown_license(ldc: LocalDataCollection, chunk_size: int):
-    pass
+    training_id = str(round(time.time() * 1000))
+    query = Query.for_training(training_id, 1).select(("license", "==", "All rights reserved."))
+    query_result = query.execute(ldc, chunk_size=chunk_size)
+    assert len(list(ldc.stream_query_results(query_result))) == 0, "Got results back for expected empty results."
+
+
+def test_filter_license_and_html(ldc: LocalDataCollection, chunk_size: int):
+    # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
+    training_id = str(round(time.time() * 1000))
+    query = (
+        Query.for_training(training_id, 1)
+        .select(("language", "==", "HTML"))
+        .union(Query.for_training(training_id, 1).select(("license", "==", "CC")))
+    )
+    query_result = query.execute(ldc, chunk_size=chunk_size)
+    result_samples = []
+
+    for sample in ldc.stream_query_results(query_result):
+        result_samples.append(sample)
+
+    assert len(result_samples) == 1500, f"Got {len(result_samples)} samples instead of the expected 1500!"
+    for sample in result_samples:
+        assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
 def test_ldc_chunksize(ldc: LocalDataCollection, chunk_size: int):
     test_filter_javascript(ldc, chunk_size)
     test_filter_html(ldc, chunk_size)
     test_filter_both(ldc, chunk_size)
+    test_filter_license(ldc, chunk_size)
+    test_filter_unknown_license(ldc, chunk_size)
+    test_filter_license_and_html(ldc, chunk_size)
 
 
 def test_ldc(dir: Path) -> None:
