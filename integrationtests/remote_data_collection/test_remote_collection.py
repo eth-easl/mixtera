@@ -47,7 +47,7 @@ def test_filter_both(rdc: RemoteDataCollection, chunk_size: int, tunnel: bool):
     for sample in rdc.stream_query_results(query_result, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
-    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000! chunk_size = {chunk_size}, tunnel = {tunnel}"
+    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of 1000!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
