@@ -25,23 +25,28 @@ if [[ ! "$WORK_DIR" || ! -d "$WORK_DIR" ]]; then
 fi
 
 function shutdown_server {
+  echo "Shutting down server"
   if kill -0 "$server_pid" 2>/dev/null; then
     echo "Server is still running, killing it"
-    pkill -TERM -P "$server_pid"
+    pkill -9 -P "$server_pid"
     echo "Killed it."
   fi
+  echo "Server shut down."
 }
 
 function cleanup {
+  echo "Exiting integration test script, running cleanup."
   rm -rf "$WORK_DIR"
   echo "Deleted temp working directory $WORK_DIR"
-   
+  
   shutdown_server
 
   if [ $script_exit_status -ne 0 ]; then
+    echo "Tests did not run sucessfully, printing server output."
     echo "-- Server Output --"
     cat "$server_output"
     echo "-- Server Output --"
+    echo "Finally exiting."
     exit $script_exit_status
   fi
 }
@@ -73,6 +78,4 @@ python $SCRIPT_DIR/remote_data_collection/test_remote_collection.py || script_ex
 echo "Running mixtera torch dataset tests"
 python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py || script_exit_status=$?
 
-echo "Succesfully ran all integration tests, shutting down server."
-shutdown_server
-echo "Exiting integration test script."
+echo "Succesfully ran all integration tests."
