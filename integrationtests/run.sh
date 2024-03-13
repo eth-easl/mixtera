@@ -28,6 +28,16 @@ function shutdown_server {
   echo "Shutting down server"
   if kill -0 "$server_pid" 2>/dev/null; then
     echo "Server is still running, killing it"
+
+    # We need to get the PID of the Python server, which is a child of the bash script
+    python_pid=$(pgrep -P "$server_pid")
+    if [ -n "$python_server_pid" ]; then
+      echo "Killing Python server process with PID $python_server_pid"
+      pkill -TERM -P "$python_server_pid"
+      echo "Killed Python server"
+    fi
+
+    echo "Killing bash script"
     pkill -9 -P "$server_pid"
     echo "Killed it."
   fi
