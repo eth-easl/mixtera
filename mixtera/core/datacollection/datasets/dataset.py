@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional, Type
 
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class Dataset(ABC):

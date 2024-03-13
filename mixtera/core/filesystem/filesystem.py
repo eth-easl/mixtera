@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator, Iterable, Optional, Type
 
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class FileSystem(ABC):

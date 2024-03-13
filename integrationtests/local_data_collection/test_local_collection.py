@@ -1,11 +1,10 @@
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Optional
 
+from integrationtests.utils import TestMetadataParser, write_jsonl
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.datacollection.local import LocalDataCollection
 from mixtera.core.query import Query
 
@@ -14,29 +13,6 @@ def parsing_func(sample):
     import json
 
     return json.loads(sample)["text"]
-
-
-def write_jsonl(path: Path) -> None:
-    data = ""
-    for i in range(1000):
-        data = (
-            data
-            + '{ "text": "'
-            + str(i)
-            + '", "meta": { "language": "'
-            + ("JavaScript" if i % 2 == 0 else "HTML")
-            + '", "license": "CC"}}\n'
-        )
-
-    with open(path, "w") as text_file:
-        text_file.write(data)
-
-
-class TestMetadataParser(MetadataParser):
-    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
-        metadata = payload["meta"]
-        self._index.append_entry("language", metadata["language"], self.dataset_id, self.file_id, line_number)
-        self._index.append_entry("license", metadata["license"], self.dataset_id, self.file_id, line_number)
 
 
 def test_filter_javascript(ldc: LocalDataCollection, chunk_size: int):
@@ -80,7 +56,7 @@ def test_filter_both(ldc: LocalDataCollection, chunk_size: int):
     for sample in ldc.stream_query_results(query_result):
         result_samples.append(sample)
 
-    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 500!"
+    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
@@ -143,6 +119,8 @@ def test_ldc(dir: Path) -> None:
 
     for chunk_size in [1, 3, 250, 500, 750, 1000, 2000]:
         test_ldc_chunksize(ldc, chunk_size)
+
+    print("Successfully ran LDC test!")
 
 
 def main() -> None:

@@ -7,7 +7,7 @@ from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem import FileSystem
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class JSONLDataset(Dataset):

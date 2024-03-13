@@ -4,7 +4,7 @@ from typing import Generator, Iterable
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.filesystem import FileSystem
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class DummyFileSystem(FileSystem):

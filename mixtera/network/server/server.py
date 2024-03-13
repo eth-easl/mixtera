@@ -55,13 +55,9 @@ class MixteraServer:
             logger.warning("Did not receive file path.")
             return
 
-        logger.info(f"Got a _read_file request for file {file_path}")
         file_data = "".join(FileSystem.from_path(file_path).get_file_iterable(file_path))
-        logger.debug("File read.")
         await write_utf8_string(file_data, SAMPLE_SIZE_BYTES, writer, drain=False)
-        logger.debug("Data written.")
         await writer.drain()
-        logger.debug("Data drained.")
 
     async def _return_next_result_chunk(self, query_id: int, writer: asyncio.StreamWriter) -> None:
         next_chunk = self._ldc.next_query_result_chunk(query_id)  # This function is thread safe
