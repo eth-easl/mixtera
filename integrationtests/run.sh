@@ -47,6 +47,13 @@ function shutdown_server {
     echo "Killing bash script"
     pkill -9 -P "$server_pid"
     echo "Killed it."
+    echo "Server children:"
+    pgrep -P "$server_pid"
+    echo ""
+    echo "Python children:"
+    pgrep -P "$python_pid"
+    echo ""
+
   fi
   echo "Server shut down."
   ps aux
