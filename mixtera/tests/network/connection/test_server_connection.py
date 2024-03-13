@@ -33,7 +33,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_writer = create_mock_writer()
         mock_open_connection.return_value = mock_reader, mock_writer
 
-        reader, writer = await self.server_connection._connect_to_server()
+        reader, writer = await self.server_connection._connect_to_server(max_retries=1)
 
         self.assertEqual(reader, mock_reader)
         self.assertEqual(writer, mock_writer)
@@ -43,7 +43,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
     async def test_connect_to_server_timeout(self, mock_open_connection):
         mock_open_connection.side_effect = asyncio.TimeoutError()
 
-        reader, writer = await self.server_connection._connect_to_server()
+        reader, writer = await self.server_connection._connect_to_server(max_retries=1)
 
         self.assertIsNone(reader)
         self.assertIsNone(writer)
@@ -53,7 +53,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
     async def test_connect_to_server_exception(self, mock_open_connection):
         mock_open_connection.side_effect = Exception("Test exception")
 
-        reader, writer = await self.server_connection._connect_to_server()
+        reader, writer = await self.server_connection._connect_to_server(max_retries=1)
 
         self.assertIsNone(reader)
         self.assertIsNone(writer)

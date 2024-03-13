@@ -41,17 +41,30 @@ class ServerConnection:
 
         yield from lines.split("\n")
 
-    async def _connect_to_server(self) -> tuple[Optional[asyncio.StreamReader], Optional[asyncio.StreamWriter]]:
-        try:
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(self._host, self._port), timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.error(f"Connection to {self._host}:{self._port} timed out.")
-            return None, None
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Failed to connect to {self._host}:{self._port}. Is the server running?: {e}")
-            return None, None
+    async def _connect_to_server(
+        self, max_retries: int = 5, retry_delay: int = 1
+    ) -> tuple[Optional[asyncio.StreamReader], Optional[asyncio.StreamWriter]]:
+        for attempt in range(1, max_retries + 1):
+            try:
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(self._host, self._port), timeout=5.0)
+                return reader, writer
+            except asyncio.TimeoutError:
+                logger.error(f"Connection to {self._host}:{self._port} timed out (attempt {attempt}/{max_retries}).")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error(
+                    "Failed to connect to"
+                    + f"{self._host}:{self._port}. Is the server running? (attempt {attempt}/{max_retries}):{e}"
+                )
 
-        return reader, writer
+            if attempt < max_retries:
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error(
+                    "Maximum number of connection attempts"
+                    + f"({max_retries}) reached. Unable to connect to {self._host}:{self._port}."
+                )
+
+        return None, None
 
     async def _execute_query(self, query: "Query", chunk_size: int) -> int:
         reader, writer = await self._connect_to_server()
