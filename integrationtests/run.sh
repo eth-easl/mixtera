@@ -40,6 +40,8 @@ function shutdown_server {
     pkill -15 -P "$server_pid"
     echo "Killed it."
 
+    killall -9 python
+
   fi
   echo "Server shut down."
   ps aux
