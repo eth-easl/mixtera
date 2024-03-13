@@ -87,6 +87,9 @@ class LocalDataCollection(MixteraDataCollection):
         parsing_func: Callable[[str], str],
         metadata_parser_type: str,
     ) -> bool:
+        if isinstance(loc, Path):
+            loc = str(loc)
+
         if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, parsing_func)) == -1:
             return False
 
