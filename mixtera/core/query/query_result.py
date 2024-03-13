@@ -168,7 +168,8 @@ class LocalQueryResult(QueryResult):
                                     }
                                     current_chunk_length += remaining_length
                         # reset current chunk after this file - we anyway need a new index for the next file
-
+        if current_chunk_length > 0:
+            chunks.append(current_chunk)
         for chunk in chunks:
             chunk_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
             chunk_index._index = defaultdict_to_dict(chunk)
