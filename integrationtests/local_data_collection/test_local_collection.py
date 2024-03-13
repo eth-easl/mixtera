@@ -110,7 +110,7 @@ def test_ldc(dir: Path) -> None:
     ldc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
     ldc.register_dataset("ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER")
 
-    for chunk_size in [1, 250, 500, 750, 1000, 2000]:
+    for chunk_size in [1, 3, 250, 500, 750, 1000, 2000]:
         test_ldc_chunksize(ldc, chunk_size)
 
 
