@@ -6,12 +6,12 @@ echo "Integration tests are located in $SCRIPT_DIR"
 echo "Running as user $USER"
 
 echo "Running local data collection tests"
-python $SCRIPT_DIR/test_local_collection.py
+python $SCRIPT_DIR/local_data_collection/test_local_collection.py
 
 echo "Running remote data collection tests"
-python $SCRIPT_DIR/test_remote_collection.py
+python $SCRIPT_DIR/remote_data_collection/test_remote_collection.py
 
 echo "Running mixtera torch dataset tests"
-python $SCRIPT_DIR/test_torch_dataset.py
+python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py
 
 echo "Successfuly ran all integration tests."
