@@ -30,11 +30,11 @@ function shutdown_server {
     python_server_pid=$(pgrep -P "$server_pid") # Server is child of bash script.
     if [ -n "$python_server_pid" ]; then
       echo "Killing Python server process with PID $python_server_pid"
-      kill -9 "$python_server_pid"
+      pkill -TERM -P "$python_server_pid"
     fi
     if kill -0 "$server_pid" 2>/dev/null; then
       echo "Killing mixtera-server process with PID $server_pid"
-      kill -9 "$server_pid"
+      pkill -TERM -P "$server_pid"
     fi
   fi
 }
@@ -72,6 +72,7 @@ if ! kill -0 "$server_pid" 2>/dev/null; then
 fi
 
 echo "Server started."
+script_exit_status=0
 
 echo "Running remote data collection tests"
 python $SCRIPT_DIR/remote_data_collection/test_remote_collection.py || script_exit_status=$?
