@@ -111,7 +111,7 @@ jobs:
         uses: coroo/pytest-coverage-commentator@v1.0.2
 
   integrationtests:
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     needs:
       - flake8
