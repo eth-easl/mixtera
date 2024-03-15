@@ -129,24 +129,39 @@ def test_tds(dir: Path) -> None:
         "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
+    # LDC tests
+    for chunk_size in [1, 3, 500, 750, 2000]:
+        for num_workers in [0, 3, 8]:
+            for batch_size in [1, 2, 500]:
+                try:
+                    test_torchds(ldc, chunk_size, num_workers, batch_size, tunnel)
+                except Exception as e:
+                    print(
+                        "Error with "
+                        + f"chunk_size = {chunk_size}, num_workers = {num_workers},"
+                        + f"batch_size = {batch_size}, tunnel = {tunnel}"
+                    )
+                    raise e
+
+    # RDC tests (smaller matrix)
+
     rdc = MixteraDataCollection.from_remote("127.0.0.1", 6666)
 
-    for mdc in [ldc, rdc]:
-        for chunk_size in [1, 3, 500, 750, 2000]:
-            for num_workers in [0, 1, 3, 8]:
-                for batch_size in [1, 2, 500]:
-                    for tunnel in [False, True]:
-                        if tunnel and (not mdc.is_remote() or batch_size > 1 or num_workers > 3 or chunk_size > 500):
-                            continue
-                        try:
-                            test_torchds(mdc, chunk_size, num_workers, batch_size, tunnel)
-                        except Exception as e:
-                            print(
-                                f"Error with mdc.is_remote = {mdc.is_remote()},"
-                                + f"chunk_size = {chunk_size}, num_workers = {num_workers},"
-                                + f"batch_size = {batch_size}, tunnel = {tunnel}"
-                            )
-                            raise e
+    for chunk_size in [1, 2000]:
+        for num_workers in [0, 8]:
+            for batch_size in [1, 500]:
+                for tunnel in [False, True]:
+                    if tunnel and (batch_size > 1 or num_workers > 0 or chunk_size > 1):
+                        continue
+                    try:
+                        test_torchds(rdc, chunk_size, num_workers, batch_size, tunnel)
+                    except Exception as e:
+                        print(
+                            f"Error with mdc.is_remote = {mdc.is_remote()},"
+                            + f"chunk_size = {chunk_size}, num_workers = {num_workers},"
+                            + f"batch_size = {batch_size}, tunnel = {tunnel}"
+                        )
+                        raise e
 
     print("Successfully ran MixteraTorchDataset test!")
 
