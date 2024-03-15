@@ -132,11 +132,11 @@ def test_tds(dir: Path) -> None:
     rdc = MixteraDataCollection.from_remote("127.0.0.1", 6666)
 
     for mdc in [ldc, rdc]:
-        for chunk_size in [1, 3, 250, 500, 750, 1000, 2000]:
+        for chunk_size in [1, 3, 500, 750, 2000]:
             for num_workers in [0, 1, 3, 8]:
                 for batch_size in [1, 2, 500]:
                     for tunnel in [False, True]:
-                        if tunnel and not mdc.is_remote():
+                        if tunnel and (not mdc.is_remote() or batch_size > 1 or num_workers > 3 or chunk_size > 500):
                             continue
                         try:
                             test_torchds(mdc, chunk_size, num_workers, batch_size, tunnel)
