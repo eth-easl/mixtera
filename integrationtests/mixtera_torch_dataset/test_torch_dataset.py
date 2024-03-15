@@ -134,12 +134,12 @@ def test_tds(dir: Path) -> None:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
                 try:
-                    test_torchds(ldc, chunk_size, num_workers, batch_size, tunnel)
+                    test_torchds(ldc, chunk_size, num_workers, batch_size, False)
                 except Exception as e:
                     print(
                         "Error with "
                         + f"chunk_size = {chunk_size}, num_workers = {num_workers},"
-                        + f"batch_size = {batch_size}, tunnel = {tunnel}"
+                        + f"batch_size = {batch_size}"
                     )
                     raise e
 
@@ -157,7 +157,7 @@ def test_tds(dir: Path) -> None:
                         test_torchds(rdc, chunk_size, num_workers, batch_size, tunnel)
                     except Exception as e:
                         print(
-                            f"Error with mdc.is_remote = {mdc.is_remote()},"
+                            "Error with "
                             + f"chunk_size = {chunk_size}, num_workers = {num_workers},"
                             + f"batch_size = {batch_size}, tunnel = {tunnel}"
                         )
