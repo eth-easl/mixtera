@@ -1,5 +1,6 @@
 from typing import Any, Generator
 
+from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.query import Query
 from torch.utils.data import IterableDataset
@@ -25,6 +26,7 @@ class MixteraTorchDataset(IterableDataset):
         self._tunnel_via_server = tunnel_via_server
 
         if self._node_id == 0:
+            logger.info("Since this is node 0, executing query!")
             # Execute query on primary node pre-fork, to share the results among all forked workers
             self._query.execute(self._mdc, self._chunk_size)
 

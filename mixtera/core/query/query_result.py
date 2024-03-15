@@ -2,6 +2,7 @@ import multiprocessing as mp
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Generator, Optional, Type
 
+import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
@@ -77,8 +78,6 @@ class LocalQueryResult(QueryResult):
         # However, this only affects the setting where we train without a MixteraServer.
         # It could be that we need defaultdict_to_dict here but I stopped exploring this for now.
         logger.debug(f"Instantiated LocalQueryResult with {len(self._chunks)} chunks.")
-        # logger.debug([chunk._index for chunk in self._chunks])
-        # logger.debug(self.results._index)
 
     def _parse_meta(self, ldc: LocalDataCollection) -> dict:
         dataset_ids = set()
@@ -203,6 +202,23 @@ class LocalQueryResult(QueryResult):
             return self._chunks[local_index]
 
         raise StopIteration
+
+    def __getstate__(self) -> dict:
+        # _meta is not pickable using the default pickler (used by torch),
+        # so we have to rely on dill here
+        state = self.__dict__.copy()
+        meta_pickled = dill.dumps(state["_meta"])
+        del state["_meta"]
+        # Also, we cannot pickle the manager, but also don't need it in the subclasses.
+        if "_manager" in state:
+            del state["_manager"]
+
+        # Return a dictionary with the pickled attribute and other picklable attributes
+        return {"other": state, "meta_pickled": meta_pickled}
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__ = state["other"]
+        self._meta = dill.loads(state["meta_pickled"])
 
 
 class RemoteQueryResult(QueryResult):

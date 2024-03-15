@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import Callable, Union
+from typing import Any, Callable, Union
 
 from loguru import logger
 from mixtera.core.datacollection.index import (
@@ -18,8 +18,24 @@ from mixtera.utils.utils import return_with_deepcopy_or_noop
 def raw_index_dict_instantiator() -> IndexType:
     """
     Instantiates and returns a raw index dict of `IndexType`.
+
+    Note that this cannot be nested lambdas since they cannot be pickled
+    when using 'spawn' in multiprocessing.
     """
-    return defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+
+    def create_inner_dict() -> defaultdict[Any, list]:
+        return defaultdict(list)
+
+    def create_mid_dict() -> defaultdict[Any, defaultdict]:
+        return defaultdict(create_inner_dict)
+
+    def create_outer_dict() -> defaultdict[Any, defaultdict]:
+        return defaultdict(create_mid_dict)
+
+    def create_top_dict() -> IndexType:
+        return defaultdict(create_outer_dict)
+
+    return create_top_dict()
 
 
 class InMemoryDictionaryIndex(Index, ABC):

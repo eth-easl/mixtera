@@ -39,8 +39,6 @@ def main():
     ## Remote case (without streaming)
     rdc = MixteraDataCollection.from_remote("127.0.0.1", 8888)
 
-    # TODO(create issue): There is something off. The index only has results for 2 lines of HTML but there are many more.
-
     # Pre-fork on primary node
     query = Query.for_training(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))
     _ = query.execute(rdc, chunk_size=100) # -> RemoteQueryResult, most likely ignored
@@ -73,7 +71,7 @@ def main():
     TRAINING_ID = str(round(time.time() * 1000)) # Need a new training ID
     query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML"))
     torch_ds = MixteraTorchDataset(rdc, query, TRAINING_ID, 100, tunnel_via_server=False)
-    dl = torch.utils.data.DataLoader(torch_ds, batch_size=1, num_workers=16)
+    dl = torch.utils.data.DataLoader(torch_ds, batch_size=2, num_workers=16)
 
     dataset_result = []
     for batch in tqdm(dl):
