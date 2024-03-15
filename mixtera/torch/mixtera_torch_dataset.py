@@ -3,7 +3,7 @@ from typing import Any, Generator
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.query import Query
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset  # pylint: disable=import-error,no-name-in-module
 
 
 class MixteraTorchDataset(IterableDataset):
