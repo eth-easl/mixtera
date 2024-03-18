@@ -16,9 +16,7 @@ def sample_parsing_func(sample):
     return json.loads(sample)["text"]
 
 
-def test_filter_javascript(
-    mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
-):
+def test_filter_javascript(mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("language", "==", "JavaScript"))
     torch_ds = MixteraTorchDataset(mdc, query, training_id, chunk_size, tunnel_via_server=tunnel)
@@ -78,9 +76,7 @@ def test_filter_license(mdc: MixteraClient, chunk_size: int, num_workers: int, b
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_filter_unknown_license(
-    mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
-):
+def test_filter_unknown_license(mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("license", "==", "All rights reserved."))
     torch_ds = MixteraTorchDataset(mdc, query, training_id, chunk_size, tunnel_via_server=tunnel)
@@ -91,9 +87,7 @@ def test_filter_unknown_license(
     assert len(result_samples) == 0, "Got results back for expected empty results."
 
 
-def test_filter_license_and_html(
-    mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
-):
+def test_filter_license_and_html(mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
     # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
     training_id = str(round(time.time() * 1000))
     query = (

@@ -1,8 +1,7 @@
 import asyncio
-from typing import TYPE_CHECKING, Callable, Generator, Iterable, Optional, Type
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional
 
 from loguru import logger
-from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
 from mixtera.network.network_utils import (
@@ -71,7 +70,7 @@ class ServerConnection:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
-            return -1
+            return False
 
         # Announce we want to register a query
         await write_int(int(ServerTask.REGISTER_QUERY), ID_BYTES, writer)
@@ -90,7 +89,6 @@ class ServerConnection:
         success = run_async_until_complete(self._execute_query(query, chunk_size))
         return success
 
-
     async def _get_query_result_meta(self, training_id: str) -> Optional[dict]:
         reader, writer = await self._connect_to_server()
 
@@ -105,9 +103,6 @@ class ServerConnection:
 
         # Get meta object
         return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
-
-    def _get_query_result_meta(self, training_id: str) -> Optional[dict]:
-        return run_async_until_complete(self._get_query_result_meta(training_id))
 
     # TODO(create issue): Use some ResultChunk type
     async def _get_next_result(self, training_id: str) -> Optional[IndexType]:
@@ -129,9 +124,11 @@ class ServerConnection:
         # TODO(create issue): We might want to prefetch here
         while (next_result := run_async_until_complete(self._get_next_result(training_id))) is not None:
             yield next_result
-            
-    def _get_result_metadata(self, training_id: str) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
-        if (meta := self._get_query_result_meta(training_id)) is None:
+
+    def _get_result_metadata(
+        self, training_id: str
+    ) -> tuple[dict[int, Any], dict[int, Callable[[str], str]], dict[int, str]]:
+        if (meta := run_async_until_complete(self._get_query_result_meta(training_id))) is None:
             raise RuntimeError("Error while fetching meta results")
 
         return meta["dataset_type"], meta["parsing_func"], meta["file_path"]

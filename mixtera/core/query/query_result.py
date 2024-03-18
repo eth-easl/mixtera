@@ -3,10 +3,10 @@ from typing import Callable, Optional, Type
 
 import dill
 from loguru import logger
+from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, raw_index_dict_instantiator
-from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.utils import defaultdict_to_dict
 
 
@@ -145,6 +145,9 @@ class QueryResult:
     def parsing_func(self) -> dict[int, Callable[[str], str]]:
         return self._meta["parsing_func"]
 
+    def __iter__(self) -> "QueryResult":
+        return self
+
     def __next__(self) -> IndexType:
         """Iterate over the results of the query with a chunk size thread-safe.
         This method is very dummy right now without ensuring the correct mixture.
@@ -178,4 +181,3 @@ class QueryResult:
     def __setstate__(self, state: dict) -> None:
         self.__dict__ = state["other"]
         self._meta = dill.loads(state["meta_pickled"])
-

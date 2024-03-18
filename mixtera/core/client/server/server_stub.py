@@ -1,15 +1,13 @@
-from typing import TYPE_CHECKING, Callable, Generator, Optional, Type
+from typing import Callable, Generator, Type
 
 from loguru import logger
-from mixtera.core.datacollection import MixteraClient
+from mixtera.core.client import MixteraClient
+from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.core.processing.execution_mode import ExecutionMode
-from mixtera.core.query import RemoteQueryResult
+from mixtera.core.query import Query
 from mixtera.network.connection import ServerConnection
-from mixtera.core.datacollection import PropertyType
-from mixtera.core.query import Query, QueryResult
-
 
 
 class ServerStub(MixteraClient):
@@ -28,7 +26,7 @@ class ServerStub(MixteraClient):
         metadata_parser_type: str,
     ) -> bool:
         raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
-    
+
     def check_dataset_exists(self, identifier: str) -> bool:
         raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
 
@@ -42,7 +40,7 @@ class ServerStub(MixteraClient):
         if not self._server_connection.execute_query(query, chunk_size):
             logger.error("Could not register query at server!")
             return False
-        
+
         logger.info(f"Registered query for training {query.training_id} at server!")
 
         return True
@@ -50,7 +48,9 @@ class ServerStub(MixteraClient):
     def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
         yield from self._server_connection._stream_result_chunks(training_id)
 
-    def _get_result_metadata(self, training_id: str) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
+    def _get_result_metadata(
+        self, training_id: str
+    ) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
         return self._server_connection._get_result_metadata(training_id)
 
     def is_remote(self) -> bool:

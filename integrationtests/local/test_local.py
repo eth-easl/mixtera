@@ -3,9 +3,8 @@ import time
 from pathlib import Path
 
 from integrationtests.utils import TestMetadataParser, write_jsonl
-from mixtera.core.datacollection import MixteraClient
+from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.client.local import MixteraDataCollection
 from mixtera.core.query import Query
 
 
@@ -15,13 +14,12 @@ def parsing_func(sample):
     return json.loads(sample)["text"]
 
 
-def test_filter_javascript(ldc: MixteraDataCollection, chunk_size: int):
+def test_filter_javascript(client: MixteraClient, chunk_size: int):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("language", "==", "JavaScript"))
-    query_result = query.execute(ldc, chunk_size=chunk_size)
+    client.execute_query(query, chunk_size)
     result_samples = []
-
-    for sample in ldc.stream_query_results(query_result):
+    for sample in client.stream_results(training_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -29,13 +27,13 @@ def test_filter_javascript(ldc: MixteraDataCollection, chunk_size: int):
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
-def test_filter_html(ldc: MixteraDataCollection, chunk_size: int):
+def test_filter_html(client: MixteraClient, chunk_size: int):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("language", "==", "HTML"))
-    query_result = query.execute(ldc, chunk_size=chunk_size)
+    client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in ldc.stream_query_results(query_result):
+    for sample in client.stream_results(training_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -43,17 +41,17 @@ def test_filter_html(ldc: MixteraDataCollection, chunk_size: int):
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
-def test_filter_both(ldc: MixteraDataCollection, chunk_size: int):
+def test_filter_both(client: MixteraClient, chunk_size: int):
     training_id = str(round(time.time() * 1000))
     query = (
         Query.for_training(training_id, 1)
         .select(("language", "==", "HTML"))
         .union(Query.for_training(training_id, 1).select(("language", "==", "JavaScript")))
     )
-    query_result = query.execute(ldc, chunk_size=chunk_size)
+    client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in ldc.stream_query_results(query_result):
+    for sample in client.stream_results(training_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -61,13 +59,13 @@ def test_filter_both(ldc: MixteraDataCollection, chunk_size: int):
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_filter_license(ldc: MixteraDataCollection, chunk_size: int):
+def test_filter_license(client: MixteraClient, chunk_size: int):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("license", "==", "CC"))
-    query_result = query.execute(ldc, chunk_size=chunk_size)
+    client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in ldc.stream_query_results(query_result):
+    for sample in client.stream_results(training_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -75,14 +73,14 @@ def test_filter_license(ldc: MixteraDataCollection, chunk_size: int):
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_filter_unknown_license(ldc: MixteraDataCollection, chunk_size: int):
+def test_filter_unknown_license(client: MixteraClient, chunk_size: int):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("license", "==", "All rights reserved."))
-    query_result = query.execute(ldc, chunk_size=chunk_size)
-    assert len(list(ldc.stream_query_results(query_result))) == 0, "Got results back for expected empty results."
+    client.execute_query(query, chunk_size)
+    assert len(list(client.stream_results(training_id, False))) == 0, "Got results back for expected empty results."
 
 
-def test_filter_license_and_html(ldc: MixteraDataCollection, chunk_size: int):
+def test_filter_license_and_html(client: MixteraClient, chunk_size: int):
     # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
     training_id = str(round(time.time() * 1000))
     query = (
@@ -90,10 +88,10 @@ def test_filter_license_and_html(ldc: MixteraDataCollection, chunk_size: int):
         .select(("language", "==", "HTML"))
         .union(Query.for_training(training_id, 1).select(("license", "==", "CC")))
     )
-    query_result = query.execute(ldc, chunk_size=chunk_size)
+    client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in ldc.stream_query_results(query_result):
+    for sample in client.stream_results(training_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 1500, f"Got {len(result_samples)} samples instead of the expected 1500!"
@@ -101,31 +99,33 @@ def test_filter_license_and_html(ldc: MixteraDataCollection, chunk_size: int):
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_ldc_chunksize(ldc: MixteraDataCollection, chunk_size: int):
-    test_filter_javascript(ldc, chunk_size)
-    test_filter_html(ldc, chunk_size)
-    test_filter_both(ldc, chunk_size)
-    test_filter_license(ldc, chunk_size)
-    test_filter_unknown_license(ldc, chunk_size)
-    test_filter_license_and_html(ldc, chunk_size)
+def test_client_chunksize(client: MixteraClient, chunk_size: int):
+    test_filter_javascript(client, chunk_size)
+    test_filter_html(client, chunk_size)
+    test_filter_both(client, chunk_size)
+    test_filter_license(client, chunk_size)
+    test_filter_unknown_license(client, chunk_size)
+    test_filter_license_and_html(client, chunk_size)
 
 
-def test_ldc(dir: Path) -> None:
+def test_client(dir: Path) -> None:
     write_jsonl(dir / "testd.jsonl")
-    ldc = MixteraClient.from_directory(dir)
-    # TODO(create issue): We might want to offer this on the MDC?
-    ldc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
-    ldc.register_dataset("ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER")
+    client = MixteraClient.from_directory(dir)
+    # TODO(create issue): We should offer this on the MDC?
+    client._mdc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
+    client.register_dataset(
+        "client_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
+    )
 
     for chunk_size in [1, 3, 250, 500, 750, 1000, 2000]:
-        test_ldc_chunksize(ldc, chunk_size)
+        test_client_chunksize(client, chunk_size)
 
-    print("Successfully ran LDC test!")
+    print("Successfully ran client test!")
 
 
 def main() -> None:
     with tempfile.TemporaryDirectory() as directory:
-        test_ldc(Path(directory))
+        test_client(Path(directory))
 
 
 if __name__ == "__main__":

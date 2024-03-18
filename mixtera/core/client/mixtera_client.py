@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Generator,  Type
+from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
+from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
-from mixtera.core.datacollection import PropertyType
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 class MixteraClient(ABC):
 
-    def __new__(cls, *args):
+    def __new__(cls, *args: Any) -> Any:
         """
         Meta-function to dispatch calls to the constructor of MixteraClient to the ServerStub
         or LocalStub.
@@ -28,16 +28,16 @@ class MixteraClient(ABC):
             param = args[0]
             if isinstance(param, str):
                 return super().__new__(LocalStub)
-            elif isinstance(param, Path):
+            if isinstance(param, Path):
                 return super().__new__(LocalStub)
-            elif isinstance(param, tuple):
+            if isinstance(param, tuple):
                 if len(args[0]) == 2:
                     return super().__new__(ServerStub)
-        elif len(args) == 2:
-            return super().__new__(ServerStub)
-            
-        raise ValueError("Invalid parameter type(s). Please use from_directory/from_server functions.")
 
+        if len(args) == 2:
+            return super().__new__(ServerStub)
+
+        raise ValueError("Invalid parameter type(s). Please use from_directory/from_server functions.")
 
     @staticmethod
     def from_directory(directory: Path | str) -> "LocalStub":
@@ -55,8 +55,8 @@ class MixteraClient(ABC):
         """
         # Local import to avoid circular dependency
         from mixtera.core.client.local import LocalStub  # pylint: disable=import-outside-toplevel
+
         return LocalStub(directory)
-    
 
     @staticmethod
     def from_remote(host: str, port: int) -> "ServerStub":
@@ -73,6 +73,7 @@ class MixteraClient(ABC):
 
         # Local import to avoid circular dependency
         from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+
         return ServerStub(host, port)
 
     @abstractmethod
@@ -164,7 +165,6 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-
     def stream_results(self, training_id: str, tunnel_via_server: bool) -> Generator[str, None, None]:
         """
         Given a training ID, returns the QueryResult object from which the result chunks can be obtained.
@@ -179,8 +179,9 @@ class MixteraClient(ABC):
         """
         result_metadata = self._get_result_metadata(training_id)
         for result_chunk in self._stream_result_chunks(training_id):
-            # TODO(): When implementing the new sampling on the ResultChunk, the ResultChunk class should offer an iterator instead.
-            yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server) 
+            # TODO(): When implementing the new sampling on the ResultChunk,
+            # the ResultChunk class should offer an iterator instead.
+            yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
 
     @abstractmethod
     def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
@@ -198,7 +199,9 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_result_metadata(self, training_id: str) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
+    def _get_result_metadata(
+        self, training_id: str
+    ) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
         """
         Given a training ID, get metadata for the query result.
 
@@ -218,7 +221,7 @@ class MixteraClient(ABC):
         dataset_type_dict: dict[int, Type[Dataset]],
         parsing_func_dict: dict[int, Callable[[str], str]],
         file_path_dict: dict[int, str],
-        tunnel_via_server: bool = False
+        tunnel_via_server: bool = False,
     ) -> Generator[str, None, None]:
         """
         Given a result chunk, iterates over the samples.
@@ -233,16 +236,20 @@ class MixteraClient(ABC):
         Returns:
             A Generator of samples.
         """
-        #TODO(create issue): Currently, the result chunks are IndexType, but they should offer their own class with an iterator over samples.
-        #This should sample correctly from the chunk. Then, there is no need for this function anymore.
+        # TODO(create issue): Currently, the result chunks are IndexType,
+        # but they should offer their own class with an iterator over samples.
+        # This should sample correctly from the chunk. Then, there is no need for this function anymore.
 
         from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+
         server_connection = None
         if tunnel_via_server:
             if isinstance(self, ServerStub):
                 server_connection = self._server_connection
             else:
-                raise RuntimeError("Currently, tunneling samples via the server is only supported when using a ServerStub.")
+                raise RuntimeError(
+                    "Currently, tunneling samples via the server is only supported when using a ServerStub."
+                )
 
         for _, property_dict in result_chunk._index.items():
             for _, val_dict in property_dict.items():
@@ -251,8 +258,6 @@ class MixteraClient(ABC):
                     yield from dataset_type_dict[did].read_ranges_from_files(
                         filename_dict, parsing_func_dict[did], server_connection
                     )
-
-
 
     @abstractmethod
     def is_remote(self) -> bool:

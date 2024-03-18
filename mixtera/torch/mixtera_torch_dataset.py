@@ -1,7 +1,7 @@
 from typing import Any, Generator
 
 from loguru import logger
-from mixtera.core.datacollection import MixteraClient
+from mixtera.core.client import MixteraClient
 from mixtera.core.query import Query
 from torch.utils.data import IterableDataset  # pylint: disable=import-error,no-name-in-module
 
@@ -9,7 +9,7 @@ from torch.utils.data import IterableDataset  # pylint: disable=import-error,no-
 class MixteraTorchDataset(IterableDataset):
     def __init__(
         self,
-        mdc: MixteraClient,
+        client: MixteraClient,
         query: Query,
         training_id: str,
         chunk_size: int,
@@ -18,7 +18,7 @@ class MixteraTorchDataset(IterableDataset):
     ):
         # TODO(create issue): This needs to be passed information on transformation, e.g., tokenization functions etc.
         # Alternative: Let people inherit from this.
-        self._mdc = mdc
+        self._client = client
         self._query = query
         self._training_id = training_id
         self._node_id = node_id
@@ -28,11 +28,10 @@ class MixteraTorchDataset(IterableDataset):
         if self._node_id == 0:
             logger.info("Since this is node 0, executing query!")
             # Execute query on primary node pre-fork, to share the results among all forked workers
-            self._query.execute(self._mdc, self._chunk_size)
+            self._client.execute_query(query, self._chunk_size)
 
     def __getitem__(self, index: int) -> Any:
         raise NotImplementedError("This is just overwritten to satify pylint.")
 
     def __iter__(self) -> Generator[str, None, None]:
-        query_result = self._mdc.get_query_result(self._training_id)
-        yield from self._mdc.stream_query_results(query_result, self._tunnel_via_server)
+        yield from self._client.stream_results(self._training_id, self._tunnel_via_server)

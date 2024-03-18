@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
+from mixtera.core.client.local import MixteraDataCollection
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
-from mixtera.core.client.local import MixteraDataCollection
 from mixtera.core.processing import ExecutionMode
 from mixtera.utils import defaultdict_to_dict
 

@@ -1,7 +1,7 @@
 import time
 
-from mixtera.core.datacollection import MixteraClient
 from mixtera.core.client.server import ServerStub
+from mixtera.core.datacollection import MixteraClient
 from mixtera.core.query import Query
 
 

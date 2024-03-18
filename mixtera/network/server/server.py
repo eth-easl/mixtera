@@ -1,10 +1,10 @@
 import asyncio
+import multiprocessing as mp
 from pathlib import Path
-
-from torch import Generator
+from typing import Generator
 
 from loguru import logger
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.client.local import LocalStub
 from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
 from mixtera.network.network_utils import (
@@ -16,8 +16,7 @@ from mixtera.network.network_utils import (
     write_utf8_string,
 )
 from mixtera.network.server_task import ServerTask
-from mixtera.core.client.local  import LocalStub
-import multiprocessing as mp
+
 
 class MixteraServer:
     def __init__(self, directory: Path, host: str, port: int):
@@ -53,10 +52,10 @@ class MixteraServer:
     async def _return_next_result_chunk(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         training_id = await read_utf8_string(ID_BYTES, reader)
         with self._result_chunk_generator_map_lock:
-            if training_id not in self._result_chunk_generator_map_lock:
-                self._result_chunk_generator_map_lock[training_id] = self._local_stub._get_query_result(training_id)
+            if training_id not in self._result_chunk_generator_map:
+                self._result_chunk_generator_map[training_id] = self._local_stub._get_query_result(training_id)
 
-        next_chunk = next(self._result_chunk_generator_map_lock[training_id], None)
+        next_chunk = next(self._result_chunk_generator_map[training_id], None)
         await write_pickeled_object(next_chunk, SAMPLE_SIZE_BYTES, writer)
 
     async def _return_result_metadata(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -69,7 +68,6 @@ class MixteraServer:
             "file_path": file_path_dict,
         }
         await write_pickeled_object(meta, SAMPLE_SIZE_BYTES, writer)
-
 
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:

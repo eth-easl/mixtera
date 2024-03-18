@@ -4,13 +4,13 @@ from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.query_plan import QueryPlan
-from mixtera.core.query.query_result import LocalQueryResult, QueryResult
+from mixtera.core.query.query_result import QueryResult
 
 
 class Query:
     def __init__(self, training_id: str, num_workers_per_node: int, num_nodes: int) -> None:
         self.query_plan = QueryPlan()
-        self.results: Optional[LocalQueryResult] = None
+        self.results: Optional[QueryResult] = None
         self.training_id = training_id
         self.num_workers_per_node = num_workers_per_node
         self.num_nodes = num_nodes

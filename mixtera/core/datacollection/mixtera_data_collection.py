@@ -1,14 +1,15 @@
 import sqlite3
 from pathlib import Path
-from typing import  Callable,  List, Optional, Type
+from typing import Callable, List, Optional, Type
 
 import dill
 from loguru import logger
-from mixtera.core.datacollection import  Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import Index
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
+from mixtera.core.datacollection.property import Property
+from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
@@ -34,7 +35,6 @@ class MixteraDataCollection:
             self._connection = self._init_database()
         else:
             self._connection = sqlite3.connect(self._database_path)
-
 
     def __getstate__(self) -> dict:
         # We cannot pickle the sqlite connection.
@@ -445,4 +445,3 @@ class MixteraDataCollection:
             return None
         # The type of self._index and the returned value is `InMemoryDictionaryRangeIndex`
         return self._index.get_index_by_features(property_name)
-

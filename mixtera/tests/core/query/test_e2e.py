@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.client.local import MixteraDataCollection
+from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.query import Query
 
 

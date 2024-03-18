@@ -6,7 +6,7 @@ from mixtera.core.query.operators.union import Union
 from .operators._base import Operator
 from .query import Query
 from .query_plan import QueryPlan
-from .query_result import LocalQueryResult, QueryResult, RemoteQueryResult
+from .query_result import QueryResult
 
 Query.register(Select)
 Query.register(Union)
@@ -19,8 +19,6 @@ __all__ = [
     "Select",
     "Union",
     "Materialize",
-    "LocalQueryResult",
     "Intersection",
-    "RemoteQueryResult",
     "QueryResult",
 ]
