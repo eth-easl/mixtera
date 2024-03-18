@@ -15,7 +15,7 @@ else
 fi
 
 echo "Running local tests"
-#python $SCRIPT_DIR/local/test_local.py
+python $SCRIPT_DIR/local/test_local.py
 
 echo "Starting Mixtera Server"
 WORK_DIR=`mktemp -d -p "$DIR"`
@@ -83,7 +83,7 @@ echo "Server started."
 script_exit_status=0
 
 echo "Running server tests"
-#python $SCRIPT_DIR/server/test_server.py || script_exit_status=$?
+python $SCRIPT_DIR/server/test_server.py || script_exit_status=$?
 
 echo "Running mixtera torch dataset tests"
 python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py || script_exit_status=$?
