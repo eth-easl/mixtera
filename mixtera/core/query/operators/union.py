@@ -5,7 +5,7 @@ from loguru import logger
 from ._base import Operator
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection.local import LocalDataCollection
+    from mixtera.core.client.local import MixteraDataCollection
     from mixtera.core.query.query import Query
 
 
@@ -21,7 +21,7 @@ class Union(Operator):
         super().__init__()
         self.children.append(query_a.root)
 
-    def execute(self, ldc: "LocalDataCollection") -> None:
+    def execute(self, ldc: "MixteraDataCollection") -> None:
         del ldc
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
         logger.warning(

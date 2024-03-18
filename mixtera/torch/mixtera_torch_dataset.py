@@ -1,7 +1,7 @@
 from typing import Any, Generator
 
 from loguru import logger
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import MixteraClient
 from mixtera.core.query import Query
 from torch.utils.data import IterableDataset  # pylint: disable=import-error,no-name-in-module
 
@@ -9,7 +9,7 @@ from torch.utils.data import IterableDataset  # pylint: disable=import-error,no-
 class MixteraTorchDataset(IterableDataset):
     def __init__(
         self,
-        mdc: MixteraDataCollection,
+        mdc: MixteraClient,
         query: Query,
         training_id: str,
         chunk_size: int,

@@ -174,7 +174,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_get_next_result.side_effect = [[1, 2, 3], [4, 5, 6], None]
         query_id = 42
 
-        results = self.server_connection.get_query_results(query_id)
+        results = self.server_connection._stream_result_chunks(query_id)
         result_list = list(results)
 
         self.assertEqual(result_list, [[1, 2, 3], [4, 5, 6]])

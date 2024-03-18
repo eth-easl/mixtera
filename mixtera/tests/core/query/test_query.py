@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query import Operator, Query, QueryPlan
 
@@ -46,7 +46,7 @@ class TestQueryPlan(unittest.TestCase):
 
 class TestQuery(unittest.TestCase):
     def setUp(self):
-        self.mdc = MixteraDataCollection.from_directory(".")
+        self.mdc = MixteraClient.from_directory(".")
         self.query = Query("training_id", 1, 1)
 
     def test_init(self):

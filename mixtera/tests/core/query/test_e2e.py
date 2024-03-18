@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-from mixtera.core.datacollection.local import LocalDataCollection
+from mixtera.core.client.local import MixteraDataCollection
 from mixtera.core.query import Query
 
 
@@ -13,7 +13,7 @@ class TestQueryE2E(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(self.directory)
+        ldc = MixteraDataCollection(self.directory)
 
         jsonl_file_path1 = self.directory / "temp1.jsonl"
         with open(jsonl_file_path1, "w", encoding="utf-8") as f:

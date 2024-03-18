@@ -4,7 +4,7 @@ from pathlib import Path
 
 import torch
 from integrationtests.utils import TestMetadataParser, write_jsonl
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import Query
 from mixtera.torch import MixteraTorchDataset
@@ -17,7 +17,7 @@ def sample_parsing_func(sample):
 
 
 def test_filter_javascript(
-    mdc: MixteraDataCollection, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
+    mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
 ):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("language", "==", "JavaScript"))
@@ -32,7 +32,7 @@ def test_filter_javascript(
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
-def test_filter_html(mdc: MixteraDataCollection, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
+def test_filter_html(mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("language", "==", "HTML"))
     torch_ds = MixteraTorchDataset(mdc, query, training_id, chunk_size, tunnel_via_server=tunnel)
@@ -46,7 +46,7 @@ def test_filter_html(mdc: MixteraDataCollection, chunk_size: int, num_workers: i
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
-def test_filter_both(mdc: MixteraDataCollection, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
+def test_filter_both(mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
     query = (
         Query.for_training(training_id, 1)
@@ -64,7 +64,7 @@ def test_filter_both(mdc: MixteraDataCollection, chunk_size: int, num_workers: i
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_filter_license(mdc: MixteraDataCollection, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
+def test_filter_license(mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("license", "==", "CC"))
     torch_ds = MixteraTorchDataset(mdc, query, training_id, chunk_size, tunnel_via_server=tunnel)
@@ -79,7 +79,7 @@ def test_filter_license(mdc: MixteraDataCollection, chunk_size: int, num_workers
 
 
 def test_filter_unknown_license(
-    mdc: MixteraDataCollection, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
+    mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
 ):
     training_id = str(round(time.time() * 1000))
     query = Query.for_training(training_id, 1).select(("license", "==", "All rights reserved."))
@@ -92,7 +92,7 @@ def test_filter_unknown_license(
 
 
 def test_filter_license_and_html(
-    mdc: MixteraDataCollection, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
+    mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
 ):
     # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
     training_id = str(round(time.time() * 1000))
@@ -112,7 +112,7 @@ def test_filter_license_and_html(
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_torchds(mdc: MixteraDataCollection, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
+def test_torchds(mdc: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
     test_filter_javascript(mdc, chunk_size, num_workers, batch_size, tunnel)
     test_filter_html(mdc, chunk_size, num_workers, batch_size, tunnel)
     test_filter_both(mdc, chunk_size, num_workers, batch_size, tunnel)
@@ -123,7 +123,7 @@ def test_torchds(mdc: MixteraDataCollection, chunk_size: int, num_workers: int, 
 
 def test_tds(dir: Path) -> None:
     write_jsonl(dir / "testd.jsonl")
-    ldc = MixteraDataCollection.from_directory(dir)
+    ldc = MixteraClient.from_directory(dir)
     ldc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
     ldc.register_dataset(
         "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
@@ -145,7 +145,7 @@ def test_tds(dir: Path) -> None:
 
     # RDC tests (smaller matrix)
 
-    rdc = MixteraDataCollection.from_remote("127.0.0.1", 6666)
+    rdc = MixteraClient.from_remote("127.0.0.1", 6666)
 
     for chunk_size in [1, 2000]:
         for num_workers in [0, 8]:

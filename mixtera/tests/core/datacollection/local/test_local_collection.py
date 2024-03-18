@@ -8,7 +8,7 @@ from unittest.mock import ANY, MagicMock, patch
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
-from mixtera.core.datacollection.local import LocalDataCollection
+from mixtera.core.client.local import MixteraDataCollection
 from mixtera.core.processing import ExecutionMode
 from mixtera.utils import defaultdict_to_dict
 
@@ -29,7 +29,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_connect.return_value = mock_connection
 
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         mock_init_database.assert_called_once()
         mock_connect.assert_not_called()
@@ -44,7 +44,7 @@ class TestLocalDataCollection(unittest.TestCase):
         directory = Path(self.temp_dir.name)
         (directory / "mixtera.sqlite").touch()
         self.assertTrue((directory / "mixtera.sqlite").exists())
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         mock_connect.assert_called_once_with(directory / "mixtera.sqlite")
         mock_init_database.assert_not_called()
@@ -53,10 +53,10 @@ class TestLocalDataCollection(unittest.TestCase):
     @patch("sqlite3.connect")
     def test_init_database_with_mocked_sqlite(self, mock_connect):
         directory = Path(self.temp_dir.name)
-        original_init_database = LocalDataCollection._init_database
-        LocalDataCollection._init_database = lambda self: None
-        ldc = LocalDataCollection(directory)
-        LocalDataCollection._init_database = original_init_database
+        original_init_database = MixteraDataCollection._init_database
+        MixteraDataCollection._init_database = lambda self: None
+        ldc = MixteraDataCollection(directory)
+        MixteraDataCollection._init_database = original_init_database
 
         mock_connection = MagicMock()
         mock_connect.return_value = mock_connection
@@ -74,10 +74,10 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_init_database_without_mocked_sqlite(self):
         directory = Path(self.temp_dir.name)
-        original_init_database = LocalDataCollection._init_database
-        LocalDataCollection._init_database = lambda self: None
-        ldc = LocalDataCollection(directory)
-        LocalDataCollection._init_database = original_init_database
+        original_init_database = MixteraDataCollection._init_database
+        MixteraDataCollection._init_database = lambda self: None
+        ldc = MixteraDataCollection(directory)
+        MixteraDataCollection._init_database = original_init_database
 
         ldc._database_path = directory / "mixtera.sqlite"
 
@@ -111,7 +111,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_insert_dataset_into_table.return_value = dataset_id
 
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         mocked_dtype = MagicMock()
         mocked_dtype.iterate_files = MagicMock()
@@ -128,7 +128,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_register_dataset_with_existing_dataset(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
         (directory / "loc").touch()
 
         # First time, the dataset registration should succeed.
@@ -155,7 +155,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_register_dataset_with_non_existent_location(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         with self.assertRaises(RuntimeError):
             ldc.register_dataset(
@@ -168,7 +168,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_register_dataset_e2e_json(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         jsonl_file_path1 = directory / "temp1.jsonl"
         with open(jsonl_file_path1, "w", encoding="utf-8") as f:
@@ -225,7 +225,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_insert_dataset_into_table(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         # Inserting a new dataset should return 1 (first dataset)
         self.assertEqual(
@@ -241,13 +241,13 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_insert_file_into_table(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         self.assertTrue(ldc._insert_file_into_table(0, "file_path"))
 
     def test_check_dataset_exists(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
         (directory / "loc").touch()
 
         self.assertFalse(ldc.check_dataset_exists("test"))
@@ -277,7 +277,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_list_datasets(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
         (directory / "loc").touch()
 
         self.assertListEqual([], ldc.list_datasets())
@@ -304,7 +304,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test__get_all_files(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         temp_dir = directory / "temp_dir"
         temp_dir.mkdir()
@@ -324,7 +324,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test__get_dataset_func_by_id(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         did = ldc._insert_dataset_into_table(
             "test_dataset", str(directory), JSONLDataset, lambda data: f"prefix_{data}"
@@ -335,7 +335,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test__get_dataset_type_by_id(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         did = ldc._insert_dataset_into_table(
             "test_dataset", str(directory), JSONLDataset, lambda data: f"prefix_{data}"
@@ -345,7 +345,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test__get_file_path_by_id(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         temp_dir = directory / "temp_dir"
         temp_dir.mkdir()
@@ -365,7 +365,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_get_all_files,
     ):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
         (directory / "loc").touch()
 
         # Set up the mocks
@@ -407,7 +407,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
     def test_add_property_end_to_end(self):
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         # Create test dataset
         data = [
@@ -462,7 +462,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value = mock_cursor
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
         index = {"prediction1": {"dataset1": {"file1": [(1, 2)]}}}
         # Test successful insertion
         mock_cursor.lastrowid = 1
@@ -486,7 +486,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value = mock_cursor
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
 
         # 8 rows
         index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
@@ -519,7 +519,7 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertRaises(AssertionError, ldc._insert_index_into_table, index, full_or_fail=True)
 
     def test_reformat_index(self):
-        ldc = LocalDataCollection(Path(self.temp_dir.name))
+        ldc = MixteraDataCollection(Path(self.temp_dir.name))
 
         # Test with empty list
         raw_indices = []
@@ -555,7 +555,7 @@ class TestLocalDataCollection(unittest.TestCase):
             ("property_name", "property_value", "dataset_id", "file_id", 1, 2)
         ]
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
         ldc._connection = mock_connection
 
         result = ldc._read_index_from_database("property_name")
@@ -578,7 +578,7 @@ class TestLocalDataCollection(unittest.TestCase):
         ]
 
         directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(directory)
+        ldc = MixteraDataCollection(directory)
         ldc._connection = mock_connection
 
         result = ldc._read_index_from_database()
@@ -593,7 +593,7 @@ class TestLocalDataCollection(unittest.TestCase):
         target_index._index = {"property1": "value1", "property2": "value2"}
 
         mock_read_index_from_database.return_value = target_index
-        ldc = LocalDataCollection(Path(self.temp_dir.name))
+        ldc = MixteraDataCollection(Path(self.temp_dir.name))
         result = ldc.get_index()
         mock_read_index_from_database.assert_called_once()
         self.assertEqual(result.get_full_dict_index(), {"property1": "value1", "property2": "value2"})

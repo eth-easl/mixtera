@@ -6,7 +6,7 @@ from mixtera.core.query.query_plan import QueryPlan
 from ._base import Operator
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection.local import LocalDataCollection
+    from mixtera.core.client.local import MixteraDataCollection
 
 
 class Intersection(Operator):
@@ -20,7 +20,7 @@ class Intersection(Operator):
         super().__init__()
         self.children.append(query_a.root)
 
-    def execute(self, ldc: "LocalDataCollection") -> None:
+    def execute(self, ldc: "MixteraDataCollection") -> None:
         del ldc
         assert len(self.children) == 2, f"Intersection operator must have 2 children, got {len(self.children)}"
         # TODO(#39): This is a dummy implementation, we need to implement the real intersection logic.

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, List, Optional
 from mixtera.core.datacollection.index import IndexType
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection.local import LocalDataCollection
+    from mixtera.core.client.local import MixteraDataCollection
     from mixtera.core.query.query_plan import QueryPlan
 
 
@@ -76,11 +76,11 @@ class Operator:
             node_string += child.string(level + 1)
         return node_string
 
-    def post_order_traverse(self, ldc: "LocalDataCollection") -> None:
+    def post_order_traverse(self, ldc: "MixteraDataCollection") -> None:
         for child in self.children:
             child.post_order_traverse(ldc)
         self.execute(ldc)
 
-    def execute(self, ldc: "LocalDataCollection") -> None:
+    def execute(self, ldc: "MixteraDataCollection") -> None:
         del ldc
         raise NotImplementedError("execute method must be implemented in the child class")

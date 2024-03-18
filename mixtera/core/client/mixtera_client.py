@@ -1,63 +1,79 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Generator, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Generator,  Type
 
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType, InMemoryDictionaryRangeIndex
+from mixtera.core.datacollection.index import IndexType
 from mixtera.core.processing import ExecutionMode
+from mixtera.core.query import Query
+from mixtera.core.datacollection import PropertyType
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection import PropertyType
-    from mixtera.core.datacollection.local import LocalDataCollection
-    from mixtera.core.datacollection.remote import RemoteDataCollection
-    from mixtera.core.query.query_result import QueryResult
-    from mixtera.network.connection.server_connection import ServerConnection
+    from mixtera.core.client.local import LocalStub
+    from mixtera.core.client.server import ServerStub
 
 
-class MixteraDataCollection(ABC):
+class MixteraClient(ABC):
+
+    def __new__(cls, *args):
+        """
+        Meta-function to dispatch calls to the constructor of MixteraClient to the ServerStub
+        or LocalStub.
+        """
+
+        from mixtera.core.client.local import LocalStub  # pylint: disable=import-outside-toplevel
+        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+
+        if len(args) == 1:
+            param = args[0]
+            if isinstance(param, str):
+                return super().__new__(LocalStub)
+            elif isinstance(param, Path):
+                return super().__new__(LocalStub)
+            elif isinstance(param, tuple):
+                if len(args[0]) == 2:
+                    return super().__new__(ServerStub)
+        elif len(args) == 2:
+            return super().__new__(ServerStub)
+            
+        raise ValueError("Invalid parameter type(s). Please use from_directory/from_server functions.")
+
 
     @staticmethod
-    def from_directory(directory: Path | str) -> "LocalDataCollection":
+    def from_directory(directory: Path | str) -> "LocalStub":
         """
-        Instantiates a LocalCollection from a directory.
+        Instantiates a LocalStub from a directory.
         In this directory, Mixtera might create arbitrary files to manage metadata (e.g., a sqlite database).
         Information is persisted across instantiations in this database.
         New datasets can be added using the `register_dataset` function.
 
         Args:
-            directory (Path): The directory where Mixtera stores its metadata files
+            directory (Path or str): The directory where Mixtera stores its metadata files
 
         Returns:
-            A LocalDataCollection instance.
+            A LocalStub instance.
         """
         # Local import to avoid circular dependency
-        from mixtera.core.datacollection.local import LocalDataCollection  # pylint: disable=import-outside-toplevel
-
-        if isinstance(directory, str):
-            dir_path = Path(directory)
-        else:
-            dir_path = directory
-
-        if dir_path.exists():
-            return LocalDataCollection(dir_path)
-
-        raise RuntimeError(f"Directory {dir_path} does not exist.")
+        from mixtera.core.client.local import LocalStub  # pylint: disable=import-outside-toplevel
+        return LocalStub(directory)
+    
 
     @staticmethod
-    def from_remote(host: str, port: int) -> "RemoteDataCollection":
+    def from_remote(host: str, port: int) -> "ServerStub":
         """
-        Instantiates a RemoteDataCollection from a host address and port.
+        Instantiates a ServerStub from a host address and port.
+
         Args:
             host (str): The host address of the Mixtera server
             port (int): The port of the Mixtera server
+
         Returns:
             A RemoteDataCollection instance.
         """
 
         # Local import to avoid circular dependency
-        from mixtera.core.datacollection.remote import RemoteDataCollection  # pylint: disable=import-outside-toplevel
-
-        return RemoteDataCollection(host, port)
+        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+        return ServerStub(host, port)
 
     @abstractmethod
     def register_dataset(
@@ -69,7 +85,7 @@ class MixteraDataCollection(ABC):
         metadata_parser_type: str,
     ) -> bool:
         """
-        This method registers a dataset in the MixteraDataCollection.
+        This method registers a dataset in Mixtera.
 
         Args:
             identifier (str): The dataset identifier.
@@ -92,7 +108,7 @@ class MixteraDataCollection(ABC):
     @abstractmethod
     def check_dataset_exists(self, identifier: str) -> bool:
         """
-        Checks whether a dataset exists in the MixteraDataCollection
+        Check whether dataset is registered in Mixtera.
 
         Args:
             identifier (str): The identifier of the dataset
@@ -104,9 +120,9 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def list_datasets(self) -> List[str]:
+    def list_datasets(self) -> list[str]:
         """
-        Lists all datasets that are part of the MixteraDataCollection
+        Lists all registered datasets.
 
         Args:
             identifier (str): The identifier of the (sub)dataset
@@ -120,7 +136,7 @@ class MixteraDataCollection(ABC):
     @abstractmethod
     def remove_dataset(self, identifier: str) -> bool:
         """
-        Removes a dataset from the MixteraDataCollection
+        Removes (unregisters) a dataset from the Mixtera
 
         Args:
             identifier (str): The identifier of the dataset
@@ -132,87 +148,102 @@ class MixteraDataCollection(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_query_result(self, training_id: str) -> "QueryResult":
+    def execute_query(self, query: Query, chunk_size: int) -> bool:
+        """
+        Executes the query on the MixteraClient. Afterwards, result can be obtained using `stream_results`.
+
+        Args:
+            query (Query): The query to execute.
+            chunk_size (int): chunk_size is used to set the size of `subresults` in the QueryResult object.
+                Defaults to 1. When iterating over a :py:class:`QueryResult`
+                object, the results are yielded in chunks of size `chunk_size`. Relevant for throughput
+                optimization.
+        Returns:
+            bool indicating success
+        """
+
+        raise NotImplementedError()
+
+
+    def stream_results(self, training_id: str, tunnel_via_server: bool) -> Generator[str, None, None]:
         """
         Given a training ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
             training_id (str): The training ID to get the results for.
+            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server.
         Returns:
-            A QueryResult object that can be iterated over, e.g., using the
-            `stream_query_results` function.
-        """
+            A Generator over string samples.
 
+        Raises:
+            RuntimeError if query has not been executed. # TODO (MaxiBoether): dont forget this!
+        """
+        result_metadata = self._get_result_metadata(training_id)
+        for result_chunk in self._stream_result_chunks(training_id):
+            # TODO(): When implementing the new sampling on the ResultChunk, the ResultChunk class should offer an iterator instead.
+            yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server) 
+
+    @abstractmethod
+    def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
+        """
+        Given a training ID, iterates over the result chunks.
+
+        Args:
+            training_id (str): The training ID to get the results for.
+        Returns:
+            A Generator over result chunks.
+
+        Raises:
+            RuntimeError if query has not been executed. # TODO (MaxiBoether): dont forget this!
+        """
         raise NotImplementedError()
 
     @abstractmethod
-    def stream_query_results(
-        self, query_result: "QueryResult", tunnel_via_server: bool = False
-    ) -> Generator[str, None, None]:
+    def _get_result_metadata(self, training_id: str) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
         """
-        Given a query_results object, iterates over the samples of the query.
+        Given a training ID, get metadata for the query result.
+
         Args:
-            query_result (QueryResult): The QueryResult object.
-            tunnel_via_server (bool): If True, the sample payloads
-                will be streamed via the Mixtera server. Otherwise,
-                the client will access the files directly. Needs to be False
-                for LocalDataCollection, and defaults to False.
+            training_id (str): The training ID to get the results for.
         Returns:
-            A Generator of samples.
+            A tuple containing mappings to parse the results (dataset_type_dict, parsing_func_dict, file_path_dict)
+
+        Raises:
+            RuntimeError if query has not been executed. # TODO (MaxiBoether): dont forget this!
         """
         raise NotImplementedError()
 
-    @staticmethod
-    def _stream_query_results(
-        query_result: "QueryResult", server_connection: Optional["ServerConnection"] = None
-    ) -> Generator[str, None, None]:
-        """
-        Internal implementation for streaming query results.
-        Called from the Local/RemoteDataCollection implementations of `stream_query_results`.
-        Args:
-            query_result (QueryResult): The QueryResult object.
-            server_connection (Optional[ServerConnection]): If given,
-                the sample payloads are streamed via this Mixtera server.
-        Returns:
-            A Generator of samples.
-        """
-        for result_chunk in query_result:
-            yield from MixteraDataCollection._read_result_chunk(
-                result_chunk,
-                query_result.dataset_type,
-                query_result.parsing_func,
-                query_result.file_path,
-                server_connection=server_connection,
-            )
-
-    @staticmethod
-    def _read_result_chunk(
+    def _iterate_result_chunk(
+        self,
         result_chunk: IndexType,
         dataset_type_dict: dict[int, Type[Dataset]],
         parsing_func_dict: dict[int, Callable[[str], str]],
         file_path_dict: dict[int, str],
-        server_connection: Optional["ServerConnection"] = None,
+        tunnel_via_server: bool = False
     ) -> Generator[str, None, None]:
         """
         Given a result chunk, iterates over the samples.
-
-        TODO(create issue): This currently iterates through it property by property, dataset by dataset etc.
-        Instead, we want to sample from a result chunk uniform at random
-        It is a bit unclear how to implementing sampling here, since we work with ranges.
-        In the best case, we would sample line by line u.a.r.
 
         Args:
             result_chunk (IndexType): The result chunk object.
             dataset_type_dict (dict): A mapping from dataset ID to dataset type.
             parsing_func_dict (dict): A mapping from dataset ID to parsing function.
             file_path_dict (dict): A mapping from file ID to file path.
-            server_connection (Optional[ServerConnection]): If given,
-                the sample payloads are streamed via this Mixtera server.
+            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server.
 
         Returns:
             A Generator of samples.
         """
-        # TODO(create issue): In case server_connection is used, this is super duper mega slow, since
-        # we restream the entire file each time.
+        #TODO(create issue): Currently, the result chunks are IndexType, but they should offer their own class with an iterator over samples.
+        #This should sample correctly from the chunk. Then, there is no need for this function anymore.
+
+        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+        server_connection = None
+        if tunnel_via_server:
+            if isinstance(self, ServerStub):
+                server_connection = self._server_connection
+            else:
+                raise RuntimeError("Currently, tunneling samples via the server is only supported when using a ServerStub.")
+
         for _, property_dict in result_chunk._index.items():
             for _, val_dict in property_dict.items():
                 for did, file_dict in val_dict.items():
@@ -221,8 +252,16 @@ class MixteraDataCollection(ABC):
                         filename_dict, parsing_func_dict[did], server_connection
                     )
 
+
+
     @abstractmethod
     def is_remote(self) -> bool:
+        """
+        Checks whether the Mixtera client object at hand uses a server or local MDC.
+
+        Returns:
+            A bool that is true if connected to a server.
+        """
         raise NotImplementedError()
 
     @abstractmethod
@@ -241,7 +280,7 @@ class MixteraDataCollection(ABC):
         data_only_on_primary: bool = True,
     ) -> None:
         """
-        This function extends the index with a new property that is calculated per sample in the collection.
+        This function extends the Mixtera index with a new property that is calculated per sample in the collection.
 
         This can, for example, be some classification result (e.g., toxicity score or a language classifier).
         We can then use this new property in subsequent queries to the data.
@@ -264,19 +303,4 @@ class MixteraDataCollection(ABC):
                                          have access to the same paths as the primary.
         """
 
-        raise NotImplementedError()
-
-    @abstractmethod
-    def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:
-        """
-        This function returns the index of the MixteraDataCollection.
-
-        Args:
-            property_name (Optional[str], optional): The name of the property to query.
-                If not provided, all properties are returned.
-
-        Returns:
-            An `InMemoryDictionaryRangeIndex` object or None if a `property_name`
-            is specified, but is not present in the index.
-        """
         raise NotImplementedError()

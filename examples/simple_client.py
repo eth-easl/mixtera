@@ -2,7 +2,7 @@ import time
 
 import torch
 from loguru import logger
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import Query
 from mixtera.torch.mixtera_torch_dataset import MixteraTorchDataset
@@ -20,7 +20,7 @@ def main():
     num_workers_per_node = 1
 
     ### LOCAL CASE
-    ldc = MixteraDataCollection.from_directory("/Users/mboether/phd/mixtera")
+    ldc = MixteraClient.from_directory("/Users/mboether/phd/mixtera")
     if register_dataset:
         ldc.register_dataset("test_dataset", "/Users/mboether/phd/mixtera/test_dataset", JSONLDataset, parsing_func, "RED_PAJAMA")
 
@@ -37,7 +37,7 @@ def main():
 
     print("\n\nRemote\n\n")
     ## Remote case (without streaming)
-    rdc = MixteraDataCollection.from_remote("127.0.0.1", 8888)
+    rdc = MixteraClient.from_remote("127.0.0.1", 8888)
 
     # Pre-fork on primary node
     query = Query.for_training(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))

@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.datacollection import MixteraClient
 
 
 class TestMixteraDataCollection(unittest.TestCase):
@@ -12,13 +12,13 @@ class TestMixteraDataCollection(unittest.TestCase):
         mock_local_data_collection.return_value = MagicMock()
 
         dir_path = Path(".")
-        result = MixteraDataCollection.from_directory(dir_path)
+        result = MixteraClient.from_directory(dir_path)
         mock_local_data_collection.assert_called_once_with(dir_path)
         self.assertIsInstance(result, MagicMock)
 
     def test_from_directory_with_non_existing_dir(self):
         dir_path = Path("/non/existing/directory")
         with self.assertRaises(RuntimeError):
-            MixteraDataCollection.from_directory(dir_path)
+            MixteraClient.from_directory(dir_path)
 
     # TODO(MaxiBoether): write test for from_local

@@ -1,7 +1,8 @@
 import asyncio
-from typing import TYPE_CHECKING, Generator, Iterable, Optional
+from typing import TYPE_CHECKING, Callable, Generator, Iterable, Optional, Type
 
 from loguru import logger
+from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
 from mixtera.network.network_utils import (
@@ -66,7 +67,7 @@ class ServerConnection:
 
         return None, None
 
-    async def _execute_query(self, query: "Query", chunk_size: int) -> int:
+    async def _execute_query(self, query: "Query", chunk_size: int) -> bool:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -81,33 +82,16 @@ class ServerConnection:
         # Announce query
         await write_pickeled_object(query, SAMPLE_SIZE_BYTES, writer)
 
-        query_id = await read_int(ID_BYTES, reader)
-        logger.debug(f"Got query id {query_id} from server.")
-        return query_id
+        success = bool(await read_int(ID_BYTES, reader))
+        logger.debug(f"Got success = {success} from server.")
+        return success
 
-    def execute_query(self, query: "Query", chunk_size: int) -> int:
-        query_id = run_async_until_complete(self._execute_query(query, chunk_size))
-        return query_id
+    def execute_query(self, query: "Query", chunk_size: int) -> bool:
+        success = run_async_until_complete(self._execute_query(query, chunk_size))
+        return success
 
-    async def _get_query_id(self, training_id: str) -> int:
-        reader, writer = await self._connect_to_server()
 
-        if reader is None or writer is None:
-            return -1
-
-        # Announce we want to get the query id
-        await write_int(int(ServerTask.GET_QUERY_ID), ID_BYTES, writer)
-
-        # Announce training ID
-        await write_utf8_string(training_id, SAMPLE_SIZE_BYTES, writer)
-        query_id = await read_int(ID_BYTES, reader, timeout=500)
-        logger.debug(f"Got query id {query_id} from server.")
-        return query_id
-
-    def get_query_id(self, training_id: str) -> int:
-        return run_async_until_complete(self._get_query_id(training_id))
-
-    async def _get_query_result_meta(self, query_id: int) -> Optional[dict]:
+    async def _get_query_result_meta(self, training_id: str) -> Optional[dict]:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -116,17 +100,17 @@ class ServerConnection:
         # Announce we want to get the query meta result
         await write_int(int(ServerTask.GET_META_RESULT), ID_BYTES, writer)
 
-        # Announce query ID
-        await write_int(query_id, ID_BYTES, writer)
+        # Announce training ID
+        await write_utf8_string(training_id, ID_BYTES, writer)
 
         # Get meta object
         return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
 
-    def get_query_result_meta(self, query_id: int) -> Optional[dict]:
-        return run_async_until_complete(self._get_query_result_meta(query_id))
+    def _get_query_result_meta(self, training_id: str) -> Optional[dict]:
+        return run_async_until_complete(self._get_query_result_meta(training_id))
 
     # TODO(create issue): Use some ResultChunk type
-    async def _get_next_result(self, query_id: int) -> Optional[list[IndexType]]:
+    async def _get_next_result(self, training_id: str) -> Optional[IndexType]:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -135,15 +119,19 @@ class ServerConnection:
         # Announce we want to get a result chunk
         await write_int(int(ServerTask.GET_NEXT_RESULT_CHUNK), ID_BYTES, writer)
 
-        # Announce query ID
-        await write_int(query_id, ID_BYTES, writer)
+        # Announce training ID
+        await write_utf8_string(training_id, ID_BYTES, writer)
 
         # Get meta object
         return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
 
-    def get_query_results(self, query_id: int) -> Generator[list[IndexType], None, None]:
+    def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
         # TODO(create issue): We might want to prefetch here
-        while (next_result := run_async_until_complete(self._get_next_result(query_id))) is not None:
+        while (next_result := run_async_until_complete(self._get_next_result(training_id))) is not None:
             yield next_result
+            
+    def _get_result_metadata(self, training_id: str) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
+        if (meta := self._get_query_result_meta(training_id)) is None:
+            raise RuntimeError("Error while fetching meta results")
 
-        logger.debug("End of query results stream.")
+        return meta["dataset_type"], meta["parsing_func"], meta["file_path"]

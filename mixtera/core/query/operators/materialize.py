@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from ._base import Operator
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection.local import LocalDataCollection
+    from mixtera.core.client.local import MixteraDataCollection
 
 
 class Materialize(Operator):
@@ -19,7 +19,7 @@ class Materialize(Operator):
         super().__init__()
         self.streaming = streaming
 
-    def execute(self, ldc: "LocalDataCollection") -> None:
+    def execute(self, ldc: "MixteraDataCollection") -> None:
         assert len(self.children) == 1, f"Materialize operator must have 1 child, got {len(self.children)}"
         self.results = self.children[0].results
         # TODO(#44): It is still unsure if/when we need to have materialize in the query plan.

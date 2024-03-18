@@ -1,18 +1,16 @@
 import multiprocessing as mp
-from abc import ABC, abstractmethod
-from typing import Any, Callable, Generator, Optional, Type
+from typing import Callable, Optional, Type
 
 import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, raw_index_dict_instantiator
-from mixtera.core.datacollection.local import LocalDataCollection
-from mixtera.network.connection import ServerConnection
+from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.utils import defaultdict_to_dict
 
 
-class QueryResult(ABC):
+class QueryResult:
     """QueryResult is a class that represents the results of a query.
     The QueryResult object is iterable and yields the results in chunks of size `chunk_size`.
 
@@ -21,41 +19,7 @@ class QueryResult(ABC):
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    @abstractmethod
-    def __next__(self) -> IndexType:
-        raise NotImplementedError()
-
-    def __iter__(self) -> "QueryResult":
-        return self
-
-    @property
-    @abstractmethod
-    def dataset_type(self) -> dict[int, Type[Dataset]]:
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def file_path(self) -> dict[int, str]:
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def parsing_func(self) -> dict[int, Callable[[str], str]]:
-        raise NotImplementedError()
-
-
-class LocalQueryResult(QueryResult):
-    """LocalQueryResult is a class that represents the results of a query
-    at the local machine.
-    When constructing, it takes a list of indices (from the root of
-    the query plan), a chunk size and a LocalDataCollection object.
-    The LocalQueryResult object is iterable and yields the results in chunks of size `chunk_size`.
-    The LocalQueryResult object also has three meta properties: `dataset_type`,
-    `file_path` and `parsing_func`, each of which is a dictionary that maps
-    dataset/file ids to their respective types, paths and parsing functions.
-    """
-
-    def __init__(self, ldc: LocalDataCollection, results: IndexType, chunk_size: int = 1) -> None:
+    def __init__(self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1) -> None:
         """
         Args:
             mdc (LocalDataCollection): The LocalDataCollection object.
@@ -64,22 +28,17 @@ class LocalQueryResult(QueryResult):
         """
         self.chunk_size = chunk_size
         self.results = results
-        self._meta = self._parse_meta(ldc)
+        self._meta = self._parse_meta(mdc)
         self._chunks: list[IndexType] = []
         self.chunking()
-        # A process holding a LocalQueryResult might fork (e.g., for dataloaders).
+        # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
         self._manager = mp.Manager()
         self._lock = self._manager.Lock()
         self._index = self._manager.Value("i", 0)
-        # TODO(create issue): This is actually a big problem in case of multiple dataloaders.
-        # Since we create new processes, the memory will get copied.
-        # I tried to use a manager.List() but run into pickling errors.
-        # However, this only affects the setting where we train without a MixteraServer.
-        # It could be that we need defaultdict_to_dict here but I stopped exploring this for now.
-        logger.debug(f"Instantiated LocalQueryResult with {len(self._chunks)} chunks.")
+        logger.debug(f"Instantiated QueryResult with {len(self._chunks)} chunks.")
 
-    def _parse_meta(self, ldc: LocalDataCollection) -> dict:
+    def _parse_meta(self, ldc: MixteraDataCollection) -> dict:
         dataset_ids = set()
         file_ids = set()
 
@@ -220,56 +179,3 @@ class LocalQueryResult(QueryResult):
         self.__dict__ = state["other"]
         self._meta = dill.loads(state["meta_pickled"])
 
-
-class RemoteQueryResult(QueryResult):
-    def __init__(self, server_connection: ServerConnection, query_id: int):
-        self._server_connection = server_connection
-        self._query_id = query_id
-        self._meta: dict[str, Any] = {}
-        self._result_generator: Optional[Generator[IndexType, None, None]] = None
-
-    def _fetch_meta_if_empty(self) -> None:
-        if not self._meta:
-            if (meta := self._server_connection.get_query_result_meta(self._query_id)) is None:
-                raise RuntimeError("Error while fetching meta results")
-
-            self._meta = meta
-
-    @property
-    def dataset_type(self) -> dict[int, Type[Dataset]]:
-        self._fetch_meta_if_empty()
-        return self._meta["dataset_type"]
-
-    @property
-    def file_path(self) -> dict[int, str]:
-        self._fetch_meta_if_empty()
-        return self._meta["file_path"]
-
-    @property
-    def parsing_func(self) -> dict[int, Callable[[str], str]]:
-        self._fetch_meta_if_empty()
-        return self._meta["parsing_func"]
-
-    def _fetch_results_if_none(self) -> None:
-        if self._result_generator is None:
-            self._result_generator = self._server_connection.get_query_results(self._query_id)
-
-    def __iter__(self) -> "RemoteQueryResult":
-        self._fetch_results_if_none()
-        return self
-
-    def __next__(self) -> IndexType:
-        if self._result_generator is None:
-            raise StopIteration
-        # This is thread safe in the sense that the server
-        # handles each incoming request in a thread safe way
-        # While worker 1 could send its request before worker 2,
-        # worker 2 reads None, closes its generator, and then worker
-        # 1 gets its data back, this is not a problem since we need
-        # to consume all workers when in a multi data loader worker setting.
-
-        try:
-            return next(self._result_generator)
-        except StopIteration:
-            self._result_generator = None
-            raise
