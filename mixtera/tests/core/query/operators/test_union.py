@@ -1,6 +1,6 @@
 import unittest
 
-from mixtera.core.datacollection import MixteraClient
+from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query.operators.union import Union
 from mixtera.core.query.query import Query
@@ -8,7 +8,7 @@ from mixtera.core.query.query import Query
 
 class TestUnion(unittest.TestCase):
     def setUp(self):
-        self.mdc = MixteraClient.from_directory(".")
+        self.client = MixteraClient.from_directory(".")
         self.query_a = Query.for_training("training_id", 1).select(("field1", "==", "value1"))
         self.query_a.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
 
@@ -25,7 +25,7 @@ class TestUnion(unittest.TestCase):
         query_b.root.results.append_entry("field1", "value2", "did", "fid", (0, 2))
         gt_result = {"field1": {"value1": {"did": {"fid": (0, 2)}}, "value2": {"did": {"fid": (0, 2)}}}}
         self.union.children.append(query_b.root)
-        self.union.execute(self.mdc)
+        self.union.execute(self.client)
         self.assertTrue(self.union.results._index, gt_result)
 
     def test_repr(self):

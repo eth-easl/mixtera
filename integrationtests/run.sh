@@ -14,8 +14,8 @@ else
   exit 1
 fi
 
-echo "Running local data collection tests"
-python $SCRIPT_DIR/local_data_collection/test_local_collection.py
+echo "Running local tests"
+python $SCRIPT_DIR/local/test_local.py
 
 echo "Starting Mixtera Server"
 WORK_DIR=`mktemp -d -p "$DIR"`
@@ -82,8 +82,8 @@ fi
 echo "Server started."
 script_exit_status=0
 
-echo "Running remote data collection tests"
-python $SCRIPT_DIR/remote_data_collection/test_remote_collection.py || script_exit_status=$?
+echo "Running server tests"
+python $SCRIPT_DIR/server/test_server.py || script_exit_status=$?
 
 echo "Running mixtera torch dataset tests"
 python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py || script_exit_status=$?

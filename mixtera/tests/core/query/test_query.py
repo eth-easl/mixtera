@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from mixtera.core.datacollection import MixteraClient
+from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query import Operator, Query, QueryPlan
 
@@ -46,7 +46,7 @@ class TestQueryPlan(unittest.TestCase):
 
 class TestQuery(unittest.TestCase):
     def setUp(self):
-        self.mdc = MixteraClient.from_directory(".")
+        self.client = MixteraClient.from_directory(".")
         self.query = Query("training_id", 1, 1)
 
     def test_init(self):
@@ -77,9 +77,9 @@ class TestQuery(unittest.TestCase):
             self.query.display()
             mock_print.assert_called_once_with("test_operator")
 
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_func_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_type_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_file_path_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
     def test_execute_chunksize_one(
         self,
         mock_get_file_path_by_id: MagicMock,
@@ -91,7 +91,8 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query("training_id", 1, 1).mockoperator("test")
-        query_result = query.execute(self.mdc, chunk_size=1)
+        assert self.client.execute_query(query, 1)
+        query_result = query.results
         res = list(query_result)
         res = [x._index for x in res]
         gt_meta = {
@@ -106,9 +107,9 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(query_result.dataset_type, gt_meta["dataset_type"])
         self.assertEqual(query_result.file_path, gt_meta["file_path"])
 
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_func_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_type_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_file_path_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
     def test_execute_chunksize_two(
         self,
         mock_get_file_path_by_id: MagicMock,
@@ -120,7 +121,7 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query.for_training("training_id", 1, 1).mockoperator("test", len_results=2)
-        res = query.execute(self.mdc, chunk_size=2)
-        res = list(res)
+        assert self.client.execute_query(query, 2)
+        res = list(query.results)
         res = [x._index for x in res]
         self.assertEqual(res, [{"field": {"value": {"did": {"fid": [(0, 2)]}}}}])

@@ -5,8 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
-from mixtera.core.client.local import MixteraDataCollection
-from mixtera.core.datacollection import PropertyType
+from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.processing import ExecutionMode
@@ -22,7 +21,7 @@ class TestLocalDataCollection(unittest.TestCase):
         self.temp_dir.cleanup()
 
     @patch("sqlite3.connect")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._init_database")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._init_database")
     def test_init_with_non_existing_database(self, mock_init_database: MagicMock, mock_connect: MagicMock):
         mock_connection = MagicMock()
         mock_init_database.return_value = mock_connection
@@ -36,7 +35,7 @@ class TestLocalDataCollection(unittest.TestCase):
         self.assertEqual(ldc._connection, mock_connection)
 
     @patch("sqlite3.connect")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._init_database")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._init_database")
     def test_init_with_existing_database(self, mock_init_database: MagicMock, mock_connect: MagicMock):
         mock_connection = MagicMock()
         mock_connect.return_value = mock_connection
@@ -101,8 +100,8 @@ class TestLocalDataCollection(unittest.TestCase):
         conn.close()
 
     @patch("sqlite3.connect")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_dataset_into_table")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._insert_file_into_table")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._insert_dataset_into_table")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._insert_file_into_table")
     def test_register_dataset(self, mock_insert_file_into_table, mock_insert_dataset_into_table, mock_connect):
         dataset_id = 42
         mock_connection = MagicMock()
@@ -357,7 +356,7 @@ class TestLocalDataCollection(unittest.TestCase):
 
         self.assertEqual(ldc._get_file_path_by_id(1), str(temp_dir / "temp1.jsonl"))
 
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_all_files")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_all_files")
     @patch("mixtera.core.processing.property_calculation.PropertyCalculationExecutor.from_mode")
     def test_add_property_with_mocks(
         self,
@@ -587,7 +586,7 @@ class TestLocalDataCollection(unittest.TestCase):
             result.get_full_dict_index(), {"property_name": {"property_value": {"dataset_id": {"file_id": [(1, 2)]}}}}
         )
 
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._read_index_from_database")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._read_index_from_database")
     def test_get_index(self, mock_read_index_from_database: MagicMock):
         target_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
         target_index._index = {"property1": "value1", "property2": "value2"}

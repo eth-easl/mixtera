@@ -3,6 +3,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Generator
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
@@ -25,7 +26,7 @@ def create_mock_writer():
 
 class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.directory_obj = tempfile.TemporaryDirectory()
+        self.directory_obj = tempfile.TemporaryDirectory()  # pylint: disable = consider-using-with
         self.directory = Path(self.directory_obj.name)
         self.host = "localhost"
         self.port = 12345
@@ -41,7 +42,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
     async def test_register_query(self, mock_read_int, mock_read_pickeled_object, mock_write_int):
         mock_read_int.return_value = AsyncMock(return_value=4)
         query_mock = MagicMock()
-        query_mock.query_id = 42
+        query_mock.training_id = "cool_training_id"
         mock_read_pickeled_object.return_value = query_mock
         mock_writer = create_mock_writer()
 
@@ -49,33 +50,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         mock_read_int.assert_awaited_once_with(ID_BYTES, ANY)
         mock_read_pickeled_object.assert_awaited_once_with(SAMPLE_SIZE_BYTES, ANY)
-        mock_write_int.assert_awaited_once_with(query_mock.query_id, ID_BYTES, mock_writer)
-
-    @patch("mixtera.network.server.server.read_int")
-    async def test_parse_ids(self, mock_read_int):
-        mock_read_int.side_effect = [1, 2, 3]
-        mock_reader = create_mock_reader()
-
-        node_id, worker_id, query_id = await self.server._parse_ids(mock_reader)
-
-        self.assertEqual(query_id, 1)
-        self.assertEqual(node_id, 2)
-        self.assertEqual(worker_id, 3)
-        mock_read_int.assert_has_calls([call(ID_BYTES, mock_reader)] * 3)
-
-    @patch("mixtera.network.server.server.read_utf8_string")
-    async def test_get_query_id(self, mock_read_utf8_string):
-        training_id = "test_training_id"
-        expected_query_id = 42
-        self.server._ldc.get_query_id.return_value = expected_query_id
-        mock_read_utf8_string.return_value = training_id
-        mock_reader = create_mock_reader()
-
-        query_id = await self.server._get_query_id(mock_reader)
-
-        self.assertEqual(query_id, expected_query_id)
-        mock_read_utf8_string.assert_awaited_once_with(SAMPLE_SIZE_BYTES, mock_reader)
-        self.server._ldc.get_query_id.assert_called_once_with(training_id)
+        mock_write_int.assert_awaited_once_with(True, ID_BYTES, mock_writer)
 
     @patch("mixtera.network.server.server.write_utf8_string")
     @patch("mixtera.network.server.server.read_utf8_string")
@@ -101,29 +76,57 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
     @patch("mixtera.network.server.server.write_pickeled_object")
     @patch("mixtera.network.server.server.read_int")
-    async def test_get_meta_result(self, mock_read_int, mock_write_pickeled_object):
-        query_id = 42
-        meta_result = MagicMock()
-        self.server._ldc._queries = {query_id: [MagicMock(results=MagicMock(_meta=meta_result))]}
-        mock_read_int.side_effect = [int(ServerTask.GET_META_RESULT), query_id]
+    @patch("mixtera.network.server.server.read_utf8_string")
+    @patch("mixtera.core.client.local.LocalStub._get_result_metadata")
+    async def test_get_meta_result(
+        self, mock_get_result_metadata, mock_read_utf8_string, mock_read_int, mock_write_pickeled_object
+    ):
+        training_id = "training_id"
+        mock_get_result_metadata.return_value = (1, 2, 3)
+        mock_read_int.return_value = int(ServerTask.GET_META_RESULT)
+        mock_read_utf8_string.return_value = training_id
         mock_writer = create_mock_writer()
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
-        mock_write_pickeled_object.assert_awaited_once_with(meta_result, SAMPLE_SIZE_BYTES, mock_writer)
+        mock_write_pickeled_object.assert_awaited_once_with(
+            {
+                "dataset_type": 1,
+                "parsing_func": 2,
+                "file_path": 3,
+            },
+            SAMPLE_SIZE_BYTES,
+            mock_writer,
+        )
 
     @patch("mixtera.network.server.server.write_pickeled_object")
     @patch("mixtera.network.server.server.read_int")
-    async def test_get_next_result_chunk(self, mock_read_int, mock_write_pickeled_object):
-        query_id = 42
-        result_chunk = MagicMock()
-        self.server._ldc.next_query_result_chunk.return_value = result_chunk
-        mock_read_int.side_effect = [int(ServerTask.GET_NEXT_RESULT_CHUNK), query_id]
+    @patch("mixtera.network.server.server.read_utf8_string")
+    @patch("mixtera.core.client.local.LocalStub._get_query_result")
+    async def test_get_next_result_chunk(
+        self, mock_get_query_result, mock_read_utf8_string, mock_read_int, mock_write_pickeled_object
+    ):
+        def sample_generator() -> Generator[int, None, None]:
+            yield 1
+            yield 2
+
+        training_id = "itsamemario"
+        mock_read_int.return_value = int(ServerTask.GET_NEXT_RESULT_CHUNK)
+        mock_read_utf8_string.return_value = training_id
+        mock_get_query_result.return_value = sample_generator()
         mock_writer = create_mock_writer()
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
+        mock_get_query_result.assert_called_once_with(training_id)
+        mock_write_pickeled_object.assert_awaited_once_with(1, SAMPLE_SIZE_BYTES, mock_writer)
 
-        self.server._ldc.next_query_result_chunk.assert_called_once_with(query_id)
-        mock_write_pickeled_object.assert_awaited_once_with(result_chunk, SAMPLE_SIZE_BYTES, mock_writer)
+        await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
+        mock_get_query_result.assert_called_once_with(training_id)
+        expected_calls = [
+            call(1, SAMPLE_SIZE_BYTES, mock_writer),  # The first call
+            call(2, SAMPLE_SIZE_BYTES, mock_writer),  # The second call
+        ]
+        mock_write_pickeled_object.assert_has_calls(expected_calls)
+        assert mock_write_pickeled_object.await_count == 2
 
     @patch("mixtera.network.server.server.MixteraServer._dispatch_client")
     async def test_run_async(self, mock_dispatch_client):

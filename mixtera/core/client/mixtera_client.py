@@ -15,10 +15,13 @@ if TYPE_CHECKING:
 
 class MixteraClient(ABC):
 
-    def __new__(cls, *args: Any) -> Any:
+    def __new__(cls, *args: Any) -> "MixteraClient":
         """
         Meta-function to dispatch calls to the constructor of MixteraClient to the ServerStub
         or LocalStub.
+
+        If you are facing pylint issues due to instantiation of abstract classes, consider using
+        from_directory/from_remote instead.
         """
 
         from mixtera.core.client.local import LocalStub  # pylint: disable=import-outside-toplevel
@@ -26,16 +29,14 @@ class MixteraClient(ABC):
 
         if len(args) == 1:
             param = args[0]
-            if isinstance(param, str):
-                return super().__new__(LocalStub)
-            if isinstance(param, Path):
-                return super().__new__(LocalStub)
+            if isinstance(param, (str, Path)):
+                return object.__new__(LocalStub)
             if isinstance(param, tuple):
-                if len(args[0]) == 2:
-                    return super().__new__(ServerStub)
+                if len(param) == 2:
+                    return object.__new__(ServerStub)
 
         if len(args) == 2:
-            return super().__new__(ServerStub)
+            return object.__new__(ServerStub)
 
         raise ValueError("Invalid parameter type(s). Please use from_directory/from_server functions.")
 

@@ -2,7 +2,6 @@ import asyncio
 from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional
 
 from loguru import logger
-from mixtera.core.datacollection.index import IndexType
 from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
 from mixtera.network.network_utils import (
     read_int,
@@ -16,6 +15,7 @@ from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
+    from mixtera.core.datacollection.index import IndexType
     from mixtera.core.query import Query
 
 
@@ -105,7 +105,7 @@ class ServerConnection:
         return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
 
     # TODO(create issue): Use some ResultChunk type
-    async def _get_next_result(self, training_id: str) -> Optional[IndexType]:
+    async def _get_next_result(self, training_id: str) -> Optional["IndexType"]:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -120,7 +120,7 @@ class ServerConnection:
         # Get meta object
         return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
 
-    def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
+    def _stream_result_chunks(self, training_id: str) -> Generator["IndexType", None, None]:
         # TODO(create issue): We might want to prefetch here
         while (next_result := run_async_until_complete(self._get_next_result(training_id))) is not None:
             yield next_result
