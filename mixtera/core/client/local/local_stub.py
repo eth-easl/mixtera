@@ -82,8 +82,7 @@ class LocalStub(MixteraClient):
 
     def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
         query_result = self._get_query_result(training_id)
-        for result_chunk in query_result:
-            yield result_chunk
+        yield from query_result
 
     def _get_result_metadata(
         self, training_id: str
