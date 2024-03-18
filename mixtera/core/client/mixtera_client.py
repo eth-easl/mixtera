@@ -1,3 +1,4 @@
+import multiprocessing as mp
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
@@ -23,6 +24,11 @@ class MixteraClient(ABC):
         If you are facing pylint issues due to instantiation of abstract classes, consider using
         from_directory/from_remote instead.
         """
+        if not args and mp.current_process().name != "MainProcess":
+            # We are in a spawned child process, so we might be unpickling
+            # Allow creation without args to support the unpickling process
+            # Leads to runtime errors on macOS/Windows otherwise.
+            return object.__new__(cls)
 
         from mixtera.core.client.local import LocalStub  # pylint: disable=import-outside-toplevel
         from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
@@ -38,7 +44,7 @@ class MixteraClient(ABC):
         if len(args) == 2:
             return object.__new__(ServerStub)
 
-        raise ValueError("Invalid parameter type(s). Please use from_directory/from_server functions.")
+        raise ValueError(f"Invalid parameter type(s): {args}. Please use from_directory/from_server functions.")
 
     @staticmethod
     def from_directory(directory: Path | str) -> "LocalStub":

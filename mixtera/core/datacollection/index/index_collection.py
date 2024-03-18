@@ -14,27 +14,30 @@ from mixtera.core.datacollection.index import (
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
 
+# Note that these functions cannot be nested lambdas or nested functions since they cannot be pickled
+# when using 'spawn' in multiprocessing.
+
+
+def create_inner_dict() -> defaultdict[Any, list]:
+    return defaultdict(list)
+
+
+def create_mid_dict() -> defaultdict[Any, defaultdict]:
+    return defaultdict(create_inner_dict)
+
+
+def create_outer_dict() -> defaultdict[Any, defaultdict]:
+    return defaultdict(create_mid_dict)
+
+
+def create_top_dict() -> IndexType:
+    return defaultdict(create_outer_dict)
+
 
 def raw_index_dict_instantiator() -> IndexType:
     """
     Instantiates and returns a raw index dict of `IndexType`.
-
-    Note that this cannot be nested lambdas since they cannot be pickled
-    when using 'spawn' in multiprocessing.
     """
-
-    def create_inner_dict() -> defaultdict[Any, list]:
-        return defaultdict(list)
-
-    def create_mid_dict() -> defaultdict[Any, defaultdict]:
-        return defaultdict(create_inner_dict)
-
-    def create_outer_dict() -> defaultdict[Any, defaultdict]:
-        return defaultdict(create_mid_dict)
-
-    def create_top_dict() -> IndexType:
-        return defaultdict(create_outer_dict)
-
     return create_top_dict()
 
 
