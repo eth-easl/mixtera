@@ -13,9 +13,9 @@ from mixtera.core.query import Query, QueryResult
 class TestLocalStub(unittest.TestCase):
 
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir = tempfile.TemporaryDirectory()  # pylint:disable=consider-using-with
         self.directory = Path(self.temp_dir.name)
-        self.local_stub = MixteraClient(self.directory)
+        self.local_stub = MixteraClient.from_directory(self.directory)
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -25,7 +25,7 @@ class TestLocalStub(unittest.TestCase):
 
     def test_init_with_invalid_directory(self):
         with self.assertRaises(RuntimeError):
-            MixteraClient("/non/existent/directory/path")
+            MixteraClient.from_directory("/non/existent/directory/path")
 
     @patch("mixtera.core.datacollection.MixteraDataCollection.register_dataset")
     def test_register_dataset(self, mock_register):
@@ -105,6 +105,7 @@ class TestLocalStub(unittest.TestCase):
 
     @patch("mixtera.core.datacollection.MixteraDataCollection")
     def test_stream_result_chunks(self, mock_mdc):
+        del mock_mdc
         job_id = "test_job_id"
         query_result = MagicMock(spec=QueryResult)
         self.local_stub._get_query_result = MagicMock(return_value=query_result)
@@ -114,6 +115,7 @@ class TestLocalStub(unittest.TestCase):
 
     @patch("mixtera.core.datacollection.MixteraDataCollection")
     def test_get_result_metadata(self, mock_mdc):
+        del mock_mdc
         job_id = "test_job_id"
         dataset_type = {0: Dataset}
         parsing_func = {0: MagicMock()}
@@ -149,6 +151,7 @@ class TestLocalStub(unittest.TestCase):
 
     @patch("mixtera.core.client.local.local_stub.wait_for_key_in_dict", return_value=False)
     def test_get_query_result_timeout(self, mock_wait_for_key):
+        del mock_wait_for_key
         with self.assertRaises(RuntimeError):
             self.local_stub._get_query_result("non_existent_job_id")
 

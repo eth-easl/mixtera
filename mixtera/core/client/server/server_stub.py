@@ -1,4 +1,4 @@
-from typing import Callable, Generator, Type
+from typing import Any, Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
@@ -12,10 +12,23 @@ from mixtera.network.connection import ServerConnection
 
 class ServerStub(MixteraClient):
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        if len(args) == 1 and isinstance(args[0], tuple):
+            host, port = args[0]
+        elif len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], int):
+            host, port = args
+        elif "host" in kwargs and "port" in kwargs:
+            host = kwargs["host"]
+            port = kwargs["port"]
+        else:
+            raise ValueError(
+                "Invalid arguments. Please provide a tuple (host, port), separate host and port arguments,"
+                " or keyword arguments 'host' and 'port'."
+            )
+
         self._server_connection = ServerConnection(host, port)
-        self._host = host
-        self._port = port
+        self._host: str = host
+        self._port: int = port
 
     def register_dataset(
         self,

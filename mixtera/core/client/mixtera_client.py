@@ -30,18 +30,17 @@ class MixteraClient(ABC):
             # Leads to runtime errors on macOS/Windows otherwise.
             return object.__new__(cls)
 
-        from mixtera.core.client.local import LocalStub  # pylint: disable=import-outside-toplevel
-        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+        if len(args) == 1 and isinstance(args[0], tuple):
+            args = args[0]
 
-        if len(args) == 1:
-            param = args[0]
-            if isinstance(param, (str, Path)):
-                return object.__new__(LocalStub)
-            if isinstance(param, tuple):
-                if len(param) == 2:
-                    return object.__new__(ServerStub)
+        if len(args) == 1 and isinstance(args[0], (str, Path)):
+            from mixtera.core.client.local import LocalStub  # pylint:disable=import-outside-toplevel
 
-        if len(args) == 2:
+            return object.__new__(LocalStub)
+
+        if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], int):
+            from mixtera.core.client.server import ServerStub  # pylint:disable=import-outside-toplevel
+
             return object.__new__(ServerStub)
 
         raise ValueError(f"Invalid parameter type(s): {args}. Please use from_directory/from_server functions.")

@@ -16,7 +16,7 @@ class TestServerStub(unittest.TestCase):
     def setUp(self):
         self.host = "localhost"
         self.port = 8080
-        self.server_stub = MixteraClient(self.host, self.port)
+        self.server_stub = MixteraClient.from_remote(self.host, self.port)
 
     def test_init(self):
         self.assertEqual(self.server_stub._host, "localhost")
