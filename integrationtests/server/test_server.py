@@ -7,7 +7,7 @@ from mixtera.core.query import Query
 
 def test_filter_javascript(client: ServerStub, chunk_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id, 1).select(("language", "==", "JavaScript"))
+    query = Query.for_training(training_id).select(("language", "==", "JavaScript"))
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
@@ -21,7 +21,7 @@ def test_filter_javascript(client: ServerStub, chunk_size: int, tunnel: bool):
 
 def test_filter_html(client: ServerStub, chunk_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id, 1).select(("language", "==", "HTML"))
+    query = Query.for_training(training_id).select(("language", "==", "HTML"))
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
@@ -36,9 +36,9 @@ def test_filter_html(client: ServerStub, chunk_size: int, tunnel: bool):
 def test_filter_both(client: ServerStub, chunk_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id, 1)
+        Query.for_training(training_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id, 1).select(("language", "==", "JavaScript")))
+        .union(Query.for_training(training_id).select(("language", "==", "JavaScript")))
     )
     assert client.execute_query(query, chunk_size)
     result_samples = []
@@ -53,7 +53,7 @@ def test_filter_both(client: ServerStub, chunk_size: int, tunnel: bool):
 
 def test_filter_license(client: ServerStub, chunk_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id, 1).select(("license", "==", "CC"))
+    query = Query.for_training(training_id).select(("license", "==", "CC"))
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
@@ -67,7 +67,7 @@ def test_filter_license(client: ServerStub, chunk_size: int, tunnel: bool):
 
 def test_filter_unknown_license(client: ServerStub, chunk_size: int, tunnel: bool):
     training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id, 1).select(("license", "==", "All rights reserved."))
+    query = Query.for_training(training_id).select(("license", "==", "All rights reserved."))
     assert client.execute_query(query, chunk_size)
     assert (
         len(list(client.stream_results(training_id, tunnel_via_server=tunnel))) == 0
@@ -78,9 +78,9 @@ def test_filter_license_and_html(client: ServerStub, chunk_size: int, tunnel: bo
     # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
     training_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id, 1)
+        Query.for_training(training_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id, 1).select(("license", "==", "CC")))
+        .union(Query.for_training(training_id).select(("license", "==", "CC")))
     )
     assert client.execute_query(query, chunk_size)
     result_samples = []
