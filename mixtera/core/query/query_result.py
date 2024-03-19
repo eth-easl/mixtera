@@ -75,7 +75,7 @@ class QueryResult:
                 for did, files in property_dict.items():
                     for fid, file_ranges in files.items():
                         for start, end in file_ranges:
-                            # TODO(create issue): we may want to optimize this later together with mixture.
+                            # TODO(#35): we may want to optimize this later together with mixture.
                             # for now this is a simple implementaion (for testing)
                             # case 1: the entire range fits into the current chunk, add it to the current chunk
                             if end - start < self.chunk_size - current_chunk_length:

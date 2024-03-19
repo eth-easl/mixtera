@@ -16,7 +16,7 @@ class MixteraTorchDataset(IterableDataset):
         node_id: int = 0,
         tunnel_via_server: bool = False,
     ):
-        # TODO(create issue): This needs to be passed information on transformation, e.g., tokenization functions etc.
+        # TODO(#63): This needs to be passed information on transformation, e.g., tokenization functions etc.
         # Alternative: Let people inherit from this.
         self._client = client
         self._query = query

@@ -143,7 +143,7 @@ class MixteraDataCollection:
         return -1
 
     def _insert_file_into_table(self, dataset_id: int, loc: Path) -> int:
-        # TODO(create issue): Potentially batch inserts of multiple files if this is too slow.
+        # TODO(#61): Potentially batch inserts of multiple files if this is too slow.
         query = "INSERT INTO files (dataset_id, location) VALUES (?, ?);"
         cur = self._connection.cursor()
         logger.info(f"Inserting file at {loc} for dataset id = {dataset_id}")

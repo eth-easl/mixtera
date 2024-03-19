@@ -242,7 +242,7 @@ class MixteraClient(ABC):
         Returns:
             A Generator of samples.
         """
-        # TODO(create issue): Currently, the result chunks are IndexType,
+        # TODO(#35): Currently, the result chunks are IndexType,
         # but they should offer their own class with an iterator over samples.
         # This should sample correctly from the chunk. Then, there is no need for this function anymore.
 

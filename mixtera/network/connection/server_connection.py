@@ -177,7 +177,7 @@ class ServerConnection:
         # Get meta object
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
-    # TODO(create issue): Use some ResultChunk type
+    # TODO(#35): Use some ResultChunk type
     async def _get_next_result(self, job_id: str) -> Optional["IndexType"]:
         """
         Asynchronously retrieves the next result chunk of a query from the server.
@@ -213,7 +213,7 @@ class ServerConnection:
         Yields:
             IndexType objects, each representing a chunk of the query results.
         """
-        # TODO(create issue): We might want to prefetch here
+        # TODO(#62): We might want to prefetch here
         while (next_result := run_async_until_complete(self._get_next_result(job_id))) is not None:
             yield next_result
 
