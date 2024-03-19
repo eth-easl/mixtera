@@ -172,12 +172,12 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, job_id: str, tunnel_via_server: bool) -> Generator[str, None, None]:
+    def stream_results(self, job_id: str, tunnel_via_server: bool = False) -> Generator[str, None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
             job_id (str): The job ID to get the results for.
-            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server.
+            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server. Defaults to False.
         Returns:
             A Generator over string samples.
 
