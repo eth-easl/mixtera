@@ -3,7 +3,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
-from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
+from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.connection.server_connection import ServerConnection
 from mixtera.network.server_task import ServerTask
 
@@ -78,11 +78,11 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_connect_to_server.assert_awaited_once()
         mock_write_int.assert_has_calls(
             [
-                call(int(ServerTask.READ_FILE), ID_BYTES, mock_writer),
+                call(int(ServerTask.READ_FILE), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
             ]
         )
-        mock_write_utf8_string.assert_awaited_once_with(file_path, ID_BYTES, mock_writer)
-        mock_read_utf8_string.assert_awaited_once_with(SAMPLE_SIZE_BYTES, mock_reader)
+        mock_write_utf8_string.assert_awaited_once_with(file_path, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+        mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._fetch_file")
     def test_get_file_iterable_sync(self, mock_fetch_file):
@@ -114,10 +114,13 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
         mock_write_int.assert_has_calls(
-            [call(int(ServerTask.REGISTER_QUERY), ID_BYTES, mock_writer), call(chunk_size, ID_BYTES, mock_writer)]
+            [
+                call(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(chunk_size, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ]
         )
-        mock_write_pickeled_object.assert_awaited_once_with(query_mock, SAMPLE_SIZE_BYTES, mock_writer)
-        mock_read_int.assert_awaited_once_with(ID_BYTES, mock_reader)
+        mock_write_pickeled_object.assert_awaited_once_with(query_mock, NUM_BYTES_FOR_SIZES, mock_writer)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     @patch("mixtera.network.connection.server_connection.read_pickeled_object")
@@ -136,10 +139,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(meta_result, {"meta": "data"})
         mock_connect_to_server.assert_awaited_once()
-        mock_write_int.assert_has_calls([call(int(ServerTask.GET_META_RESULT), ID_BYTES, mock_writer)])
-        mock_write_string.assert_has_calls([call(job_id, ID_BYTES, mock_writer)])
+        mock_write_int.assert_has_calls([call(int(ServerTask.GET_META_RESULT), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
 
-        mock_read_pickeled_object.assert_awaited_once_with(SAMPLE_SIZE_BYTES, mock_reader)
+        mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._get_next_result")
     def test_get_query_results_sync(self, mock_get_next_result):
@@ -169,6 +172,8 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result_chunk, [1, 2, 3])
         mock_connect_to_server.assert_awaited_once()
-        mock_write_int.assert_has_calls([call(int(ServerTask.GET_NEXT_RESULT_CHUNK), ID_BYTES, mock_writer)])
-        mock_write_string.assert_has_calls([call(job_id, ID_BYTES, mock_writer)])
-        mock_read_pickeled_object.assert_awaited_once_with(SAMPLE_SIZE_BYTES, mock_reader)
+        mock_write_int.assert_has_calls(
+            [call(int(ServerTask.GET_NEXT_RESULT_CHUNK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
+        )
+        mock_write_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)

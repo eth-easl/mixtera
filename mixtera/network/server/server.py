@@ -6,7 +6,7 @@ from typing import Generator
 from loguru import logger
 from mixtera.core.client.local import LocalStub
 from mixtera.core.filesystem.filesystem import FileSystem
-from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
+from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
     read_int,
     read_pickeled_object,
@@ -29,37 +29,37 @@ class MixteraServer:
 
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         logger.debug("Received register query request")
-        chunk_size = await read_int(ID_BYTES, reader)
+        chunk_size = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         logger.debug(f"chunk_size = {chunk_size}")
-        query = await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
+        query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
         success = self._local_stub.execute_query(query, chunk_size)
         logger.debug(f"Registered query with success = {success} and executed it.")
 
-        await write_int(int(success), ID_BYTES, writer)
+        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
     async def _read_file(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        file_path = await read_utf8_string(ID_BYTES, reader)
+        file_path = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
         if file_path is None or file_path == "":
             logger.warning("Did not receive file path.")
             return
 
         file_data = "".join(FileSystem.from_path(file_path).get_file_iterable(file_path))
-        await write_utf8_string(file_data, SAMPLE_SIZE_BYTES, writer, drain=False)
+        await write_utf8_string(file_data, NUM_BYTES_FOR_SIZES, writer, drain=False)
         await writer.drain()
 
     async def _return_next_result_chunk(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        job_id = await read_utf8_string(ID_BYTES, reader)
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         with self._result_chunk_generator_map_lock:
             if job_id not in self._result_chunk_generator_map:
                 self._result_chunk_generator_map[job_id] = self._local_stub._get_query_result(job_id)
 
         next_chunk = next(self._result_chunk_generator_map[job_id], None)
-        await write_pickeled_object(next_chunk, SAMPLE_SIZE_BYTES, writer)
+        await write_pickeled_object(next_chunk, NUM_BYTES_FOR_SIZES, writer)
 
     async def _return_result_metadata(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        job_id = await read_utf8_string(ID_BYTES, reader)
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         dataset_dict, parsing_dict, file_path_dict = self._local_stub._get_result_metadata(job_id)
 
         meta = {
@@ -67,11 +67,11 @@ class MixteraServer:
             "parsing_func": parsing_dict,
             "file_path": file_path_dict,
         }
-        await write_pickeled_object(meta, SAMPLE_SIZE_BYTES, writer)
+        await write_pickeled_object(meta, NUM_BYTES_FOR_SIZES, writer)
 
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            if (task_int := await read_int(ID_BYTES, reader)) not in ServerTask.__members__.values():
+            if (task_int := await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)) not in ServerTask.__members__.values():
                 raise RuntimeError(f"Unknown task id: {task_int}")
 
             task = ServerTask(task_int)

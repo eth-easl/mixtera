@@ -2,7 +2,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional
 
 from loguru import logger
-from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
+from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
     read_int,
     read_pickeled_object,
@@ -30,10 +30,10 @@ class ServerConnection:
         if reader is None or writer is None:
             return None
 
-        await write_int(int(ServerTask.READ_FILE), ID_BYTES, writer)
-        await write_utf8_string(file_path, ID_BYTES, writer)
+        await write_int(int(ServerTask.READ_FILE), NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_utf8_string(file_path, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        return await read_utf8_string(SAMPLE_SIZE_BYTES, reader)
+        return await read_utf8_string(NUM_BYTES_FOR_SIZES, reader)
 
     def get_file_iterable(self, file_path: str) -> Iterable[str]:
         if (lines := run_async_until_complete(self._fetch_file(file_path))) is None:
@@ -73,15 +73,15 @@ class ServerConnection:
             return False
 
         # Announce we want to register a query
-        await write_int(int(ServerTask.REGISTER_QUERY), ID_BYTES, writer)
+        await write_int(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce metadata
-        await write_int(chunk_size, ID_BYTES, writer)
+        await write_int(chunk_size, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce query
-        await write_pickeled_object(query, SAMPLE_SIZE_BYTES, writer)
+        await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
 
-        success = bool(await read_int(ID_BYTES, reader))
+        success = bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
         logger.debug(f"Got success = {success} from server.")
         return success
 
@@ -96,13 +96,13 @@ class ServerConnection:
             return None
 
         # Announce we want to get the query meta result
-        await write_int(int(ServerTask.GET_META_RESULT), ID_BYTES, writer)
+        await write_int(int(ServerTask.GET_META_RESULT), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce job ID
-        await write_utf8_string(job_id, ID_BYTES, writer)
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Get meta object
-        return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
+        return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
     # TODO(create issue): Use some ResultChunk type
     async def _get_next_result(self, job_id: str) -> Optional["IndexType"]:
@@ -112,13 +112,13 @@ class ServerConnection:
             return None
 
         # Announce we want to get a result chunk
-        await write_int(int(ServerTask.GET_NEXT_RESULT_CHUNK), ID_BYTES, writer)
+        await write_int(int(ServerTask.GET_NEXT_RESULT_CHUNK), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce job ID
-        await write_utf8_string(job_id, ID_BYTES, writer)
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Get meta object
-        return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
+        return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
     def _stream_result_chunks(self, job_id: str) -> Generator["IndexType", None, None]:
         # TODO(create issue): We might want to prefetch here

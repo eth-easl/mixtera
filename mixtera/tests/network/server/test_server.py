@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Generator
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
-from mixtera.network import ID_BYTES, SAMPLE_SIZE_BYTES
+from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.server import MixteraServer
 from mixtera.network.server_task import ServerTask
 
@@ -48,9 +48,9 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         await self.server._register_query(create_mock_reader(b""), mock_writer)
 
-        mock_read_int.assert_awaited_once_with(ID_BYTES, ANY)
-        mock_read_pickeled_object.assert_awaited_once_with(SAMPLE_SIZE_BYTES, ANY)
-        mock_write_int.assert_awaited_once_with(True, ID_BYTES, mock_writer)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, ANY)
+        mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, ANY)
+        mock_write_int.assert_awaited_once_with(True, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
 
     @patch("mixtera.network.server.server.write_utf8_string")
     @patch("mixtera.network.server.server.read_utf8_string")
@@ -68,10 +68,10 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         await self.server._read_file(create_mock_reader(b"", file_path.encode()), mock_writer)
 
-        mock_read_utf8_string.assert_awaited_once_with(ID_BYTES, ANY)
+        mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, ANY)
         mock_from_path.assert_called_once_with("/path/to/file")
         filesystem_mock.get_file_iterable.assert_called_once_with(file_path)
-        mock_write_utf8_string.assert_awaited_once_with(file_data, SAMPLE_SIZE_BYTES, mock_writer, drain=False)
+        mock_write_utf8_string.assert_awaited_once_with(file_data, NUM_BYTES_FOR_SIZES, mock_writer, drain=False)
         mock_writer.drain.assert_awaited_once()
 
     @patch("mixtera.network.server.server.write_pickeled_object")
@@ -94,7 +94,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
                 "parsing_func": 2,
                 "file_path": 3,
             },
-            SAMPLE_SIZE_BYTES,
+            NUM_BYTES_FOR_SIZES,
             mock_writer,
         )
 
@@ -117,13 +117,13 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
         mock_get_query_result.assert_called_once_with(job_id)
-        mock_write_pickeled_object.assert_awaited_once_with(1, SAMPLE_SIZE_BYTES, mock_writer)
+        mock_write_pickeled_object.assert_awaited_once_with(1, NUM_BYTES_FOR_SIZES, mock_writer)
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
         mock_get_query_result.assert_called_once_with(job_id)
         expected_calls = [
-            call(1, SAMPLE_SIZE_BYTES, mock_writer),  # The first call
-            call(2, SAMPLE_SIZE_BYTES, mock_writer),  # The second call
+            call(1, NUM_BYTES_FOR_SIZES, mock_writer),  # The first call
+            call(2, NUM_BYTES_FOR_SIZES, mock_writer),  # The second call
         ]
         mock_write_pickeled_object.assert_has_calls(expected_calls)
         assert mock_write_pickeled_object.await_count == 2
