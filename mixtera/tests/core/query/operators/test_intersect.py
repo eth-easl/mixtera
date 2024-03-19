@@ -13,8 +13,8 @@ class MockOperator(Operator):
     def display(self, level):
         print(" " * level + self.name)
 
-    def execute(self, ldc):
-        del ldc
+    def execute(self, mdc):
+        del mdc
 
 
 class TestIntersection(unittest.TestCase):

@@ -15,8 +15,8 @@ class MockOperator(Operator):
     def display(self, level):
         print("-" * level + self.name)
 
-    def execute(self, ldc):
-        del ldc
+    def execute(self, mdc):
+        del mdc
         self.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         self.results.append_entry("field", "value", "did", "fid", (0, 2))
 
@@ -54,8 +54,8 @@ class TestQuery(unittest.TestCase):
 
     def test_register(self):
         class TestOperator(Operator):
-            def execute(self, ldc) -> None:
-                del ldc
+            def execute(self, mdc) -> None:
+                del mdc
                 self.results = ["test"]
 
         Query.register(TestOperator)

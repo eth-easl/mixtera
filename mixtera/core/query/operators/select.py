@@ -55,12 +55,12 @@ class Select(Operator):
         else:
             raise RuntimeError(f"Invalid condition: {condition}, must be a Condition or a tuple of length 3")
 
-    def execute(self, ldc: "MixteraDataCollection") -> None:
+    def execute(self, mdc: "MixteraDataCollection") -> None:
         assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
         # TODO(#42): In a future PR, we may want to only load the
         # index that meets the condition, instead of loading the entire index
         # and then filter the results.
-        if (index := ldc.get_index(self.condition.field)) is None:
+        if (index := mdc.get_index(self.condition.field)) is None:
             self.results = {}
             return
         self.results = index.get_index_by_predicate(self.condition.field, self.condition.meet)

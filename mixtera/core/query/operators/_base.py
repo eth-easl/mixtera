@@ -76,11 +76,11 @@ class Operator:
             node_string += child.string(level + 1)
         return node_string
 
-    def post_order_traverse(self, ldc: "MixteraDataCollection") -> None:
+    def post_order_traverse(self, mdc: "MixteraDataCollection") -> None:
         for child in self.children:
-            child.post_order_traverse(ldc)
-        self.execute(ldc)
+            child.post_order_traverse(mdc)
+        self.execute(mdc)
 
-    def execute(self, ldc: "MixteraDataCollection") -> None:
-        del ldc
+    def execute(self, mdc: "MixteraDataCollection") -> None:
+        del mdc
         raise NotImplementedError("execute method must be implemented in the child class")

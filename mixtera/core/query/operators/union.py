@@ -21,8 +21,8 @@ class Union(Operator):
         super().__init__()
         self.children.append(query_a.root)
 
-    def execute(self, ldc: "MixteraDataCollection") -> None:
-        del ldc
+    def execute(self, mdc: "MixteraDataCollection") -> None:
+        del mdc
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
         logger.warning(
             "Union operator only supports bag semantics for now, meaning that it will not remove duplicates."

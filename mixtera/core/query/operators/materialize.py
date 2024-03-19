@@ -19,13 +19,13 @@ class Materialize(Operator):
         super().__init__()
         self.streaming = streaming
 
-    def execute(self, ldc: "MixteraDataCollection") -> None:
+    def execute(self, mdc: "MixteraDataCollection") -> None:
         assert len(self.children) == 1, f"Materialize operator must have 1 child, got {len(self.children)}"
         self.results = self.children[0].results
         # TODO(#44): It is still unsure if/when we need to have materialize in the query plan.
         # Leave also the streaming logic for future.
         if self.results is not None:
-            self.results = list(ldc.get_samples_from_ranges(res) for res in self.results)
+            self.results = list(mdc.get_samples_from_ranges(res) for res in self.results)
 
     def __str__(self) -> str:
         return "materialize<>"

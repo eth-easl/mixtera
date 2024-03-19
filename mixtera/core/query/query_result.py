@@ -38,7 +38,7 @@ class QueryResult:
         self._index = self._manager.Value("i", 0)
         logger.debug(f"Instantiated QueryResult with {len(self._chunks)} chunks.")
 
-    def _parse_meta(self, ldc: MixteraDataCollection) -> dict:
+    def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
         dataset_ids = set()
         file_ids = set()
 
@@ -52,9 +52,9 @@ class QueryResult:
                         total_length += sum(end - start for start, end in file_ranges)
 
         return {
-            "dataset_type": {did: ldc._get_dataset_type_by_id(did) for did in dataset_ids},
-            "parsing_func": {did: ldc._get_dataset_func_by_id(did) for did in dataset_ids},
-            "file_path": {fid: ldc._get_file_path_by_id(fid) for fid in file_ids},
+            "dataset_type": {did: mdc._get_dataset_type_by_id(did) for did in dataset_ids},
+            "parsing_func": {did: mdc._get_dataset_func_by_id(did) for did in dataset_ids},
+            "file_path": {fid: mdc._get_file_path_by_id(fid) for fid in file_ids},
             "total_length": total_length,
         }
 
