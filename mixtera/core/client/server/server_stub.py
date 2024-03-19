@@ -51,7 +51,7 @@ class ServerStub(MixteraClient):
     def _get_result_metadata(
         self, job_id: str
     ) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
-        return self._server_connection._get_result_metadata(job_id)
+        return self._server_connection.get_result_metadata(job_id)
 
     def is_remote(self) -> bool:
         return True

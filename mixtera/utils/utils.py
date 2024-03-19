@@ -64,7 +64,7 @@ def run_async_until_complete(call: Any) -> Any:
 
 def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
     """
-    Waits for a key to appear in a dict or timeout is thrown.
+    Busy waits for a key to appear in a dict or timeout is thrown.
     Args:
         dictionary (dict): The dictionary to check.
         key (str): The key to search for.
@@ -75,7 +75,7 @@ def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
     timeout_at = time.time() + timeout
 
     while key not in dictionary and time.time() <= timeout_at:
-        time.sleep(0.1)
+        time.sleep(0.5)
 
     return key in dictionary
 
