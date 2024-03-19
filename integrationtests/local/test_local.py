@@ -15,11 +15,11 @@ def parsing_func(sample):
 
 
 def test_filter_javascript(client: MixteraClient, chunk_size: int):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("language", "==", "JavaScript"))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     client.execute_query(query, chunk_size)
     result_samples = []
-    for sample in client.stream_results(training_id, False):
+    for sample in client.stream_results(job_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -28,12 +28,12 @@ def test_filter_javascript(client: MixteraClient, chunk_size: int):
 
 
 def test_filter_html(client: MixteraClient, chunk_size: int):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("language", "==", "HTML"))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("language", "==", "HTML"))
     client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, False):
+    for sample in client.stream_results(job_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -42,16 +42,16 @@ def test_filter_html(client: MixteraClient, chunk_size: int):
 
 
 def test_filter_both(client: MixteraClient, chunk_size: int):
-    training_id = str(round(time.time() * 1000))
+    job_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id)
+        Query.for_job(job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id).select(("language", "==", "JavaScript")))
+        .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
     client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, False):
+    for sample in client.stream_results(job_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -60,12 +60,12 @@ def test_filter_both(client: MixteraClient, chunk_size: int):
 
 
 def test_filter_license(client: MixteraClient, chunk_size: int):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("license", "==", "CC"))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("license", "==", "CC"))
     client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, False):
+    for sample in client.stream_results(job_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -74,24 +74,24 @@ def test_filter_license(client: MixteraClient, chunk_size: int):
 
 
 def test_filter_unknown_license(client: MixteraClient, chunk_size: int):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("license", "==", "All rights reserved."))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     client.execute_query(query, chunk_size)
-    assert len(list(client.stream_results(training_id, False))) == 0, "Got results back for expected empty results."
+    assert len(list(client.stream_results(job_id, False))) == 0, "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(client: MixteraClient, chunk_size: int):
     # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
-    training_id = str(round(time.time() * 1000))
+    job_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id)
+        Query.for_job(job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id).select(("license", "==", "CC")))
+        .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
     client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, False):
+    for sample in client.stream_results(job_id, False):
         result_samples.append(sample)
 
     assert len(result_samples) == 1500, f"Got {len(result_samples)} samples instead of the expected 1500!"

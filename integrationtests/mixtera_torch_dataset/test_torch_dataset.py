@@ -17,9 +17,9 @@ def sample_parsing_func(sample):
 
 
 def test_filter_javascript(client: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("language", "==", "JavaScript"))
-    torch_ds = MixteraTorchDataset(client, query, training_id, chunk_size, tunnel_via_server=tunnel)
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
+    torch_ds = MixteraTorchDataset(client, query, job_id, chunk_size, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -31,9 +31,9 @@ def test_filter_javascript(client: MixteraClient, chunk_size: int, num_workers: 
 
 
 def test_filter_html(client: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("language", "==", "HTML"))
-    torch_ds = MixteraTorchDataset(client, query, training_id, chunk_size, tunnel_via_server=tunnel)
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("language", "==", "HTML"))
+    torch_ds = MixteraTorchDataset(client, query, job_id, chunk_size, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -45,13 +45,13 @@ def test_filter_html(client: MixteraClient, chunk_size: int, num_workers: int, b
 
 
 def test_filter_both(client: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
+    job_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id)
+        Query.for_job(job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id).select(("language", "==", "JavaScript")))
+        .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
-    torch_ds = MixteraTorchDataset(client, query, training_id, chunk_size, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(client, query, job_id, chunk_size, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -63,9 +63,9 @@ def test_filter_both(client: MixteraClient, chunk_size: int, num_workers: int, b
 
 
 def test_filter_license(client: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("license", "==", "CC"))
-    torch_ds = MixteraTorchDataset(client, query, training_id, chunk_size, tunnel_via_server=tunnel)
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("license", "==", "CC"))
+    torch_ds = MixteraTorchDataset(client, query, job_id, chunk_size, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -79,9 +79,9 @@ def test_filter_license(client: MixteraClient, chunk_size: int, num_workers: int
 def test_filter_unknown_license(
     client: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
 ):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("license", "==", "All rights reserved."))
-    torch_ds = MixteraTorchDataset(client, query, training_id, chunk_size, tunnel_via_server=tunnel)
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
+    torch_ds = MixteraTorchDataset(client, query, job_id, chunk_size, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -93,13 +93,13 @@ def test_filter_license_and_html(
     client: MixteraClient, chunk_size: int, num_workers: int, batch_size: int, tunnel: bool
 ):
     # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
-    training_id = str(round(time.time() * 1000))
+    job_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id)
+        Query.for_job(job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id).select(("license", "==", "CC")))
+        .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
-    torch_ds = MixteraTorchDataset(client, query, training_id, chunk_size, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(client, query, job_id, chunk_size, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:

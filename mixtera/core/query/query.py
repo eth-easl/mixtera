@@ -8,10 +8,10 @@ from mixtera.core.query.query_result import QueryResult
 
 
 class Query:
-    def __init__(self, training_id: str) -> None:
+    def __init__(self, job_id: str) -> None:
         self.query_plan = QueryPlan()
         self.results: Optional[QueryResult] = None
-        self.training_id = training_id
+        self.job_id = job_id
 
     def is_empty(self) -> bool:
         return self.query_plan.is_empty()
@@ -35,16 +35,16 @@ class Query:
         setattr(cls, op_name, process_op)
 
     @classmethod
-    def for_training(cls, training_id: str) -> "Query":
+    def for_job(cls, job_id: str) -> "Query":
         """
         Factory method to instantiate a new query for a given job id.
 
         Args:
-            training_id (str): The training_id to instantiate a query for.
+            job_id (str): The job_id to instantiate a query for.
         Returns:
             Query: The Query object.
         """
-        return cls(training_id)
+        return cls(job_id)
 
     @property
     def root(self) -> Operator:

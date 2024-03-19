@@ -89,7 +89,7 @@ class ServerConnection:
         success = run_async_until_complete(self._execute_query(query, chunk_size))
         return success
 
-    async def _get_query_result_meta(self, training_id: str) -> Optional[dict]:
+    async def _get_query_result_meta(self, job_id: str) -> Optional[dict]:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -98,14 +98,14 @@ class ServerConnection:
         # Announce we want to get the query meta result
         await write_int(int(ServerTask.GET_META_RESULT), ID_BYTES, writer)
 
-        # Announce training ID
-        await write_utf8_string(training_id, ID_BYTES, writer)
+        # Announce job ID
+        await write_utf8_string(job_id, ID_BYTES, writer)
 
         # Get meta object
         return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
 
     # TODO(create issue): Use some ResultChunk type
-    async def _get_next_result(self, training_id: str) -> Optional["IndexType"]:
+    async def _get_next_result(self, job_id: str) -> Optional["IndexType"]:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -114,21 +114,21 @@ class ServerConnection:
         # Announce we want to get a result chunk
         await write_int(int(ServerTask.GET_NEXT_RESULT_CHUNK), ID_BYTES, writer)
 
-        # Announce training ID
-        await write_utf8_string(training_id, ID_BYTES, writer)
+        # Announce job ID
+        await write_utf8_string(job_id, ID_BYTES, writer)
 
         # Get meta object
         return await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
 
-    def _stream_result_chunks(self, training_id: str) -> Generator["IndexType", None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator["IndexType", None, None]:
         # TODO(create issue): We might want to prefetch here
-        while (next_result := run_async_until_complete(self._get_next_result(training_id))) is not None:
+        while (next_result := run_async_until_complete(self._get_next_result(job_id))) is not None:
             yield next_result
 
     def _get_result_metadata(
-        self, training_id: str
+        self, job_id: str
     ) -> tuple[dict[int, Any], dict[int, Callable[[str], str]], dict[int, str]]:
-        if (meta := run_async_until_complete(self._get_query_result_meta(training_id))) is None:
+        if (meta := run_async_until_complete(self._get_query_result_meta(job_id))) is None:
             raise RuntimeError("Error while fetching meta results")
 
         return meta["dataset_type"], meta["parsing_func"], meta["file_path"]

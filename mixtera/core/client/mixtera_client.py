@@ -172,11 +172,11 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, training_id: str, tunnel_via_server: bool) -> Generator[str, None, None]:
+    def stream_results(self, job_id: str, tunnel_via_server: bool) -> Generator[str, None, None]:
         """
-        Given a training ID, returns the QueryResult object from which the result chunks can be obtained.
+        Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
-            training_id (str): The training ID to get the results for.
+            job_id (str): The job ID to get the results for.
             tunnel_via_server (bool): If true, samples are streamed via the Mixtera server.
         Returns:
             A Generator over string samples.
@@ -184,19 +184,19 @@ class MixteraClient(ABC):
         Raises:
             RuntimeError if query has not been executed. # TODO (MaxiBoether): dont forget this!
         """
-        result_metadata = self._get_result_metadata(training_id)
-        for result_chunk in self._stream_result_chunks(training_id):
+        result_metadata = self._get_result_metadata(job_id)
+        for result_chunk in self._stream_result_chunks(job_id):
             # TODO(): When implementing the new sampling on the ResultChunk,
             # the ResultChunk class should offer an iterator instead.
             yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
 
     @abstractmethod
-    def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
         """
-        Given a training ID, iterates over the result chunks.
+        Given a job ID, iterates over the result chunks.
 
         Args:
-            training_id (str): The training ID to get the results for.
+            job_id (str): The job ID to get the results for.
         Returns:
             A Generator over result chunks.
 
@@ -207,13 +207,13 @@ class MixteraClient(ABC):
 
     @abstractmethod
     def _get_result_metadata(
-        self, training_id: str
+        self, job_id: str
     ) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
         """
-        Given a training ID, get metadata for the query result.
+        Given a job ID, get metadata for the query result.
 
         Args:
-            training_id (str): The training ID to get the results for.
+            job_id (str): The job ID to get the results for.
         Returns:
             A tuple containing mappings to parse the results (dataset_type_dict, parsing_func_dict, file_path_dict)
 

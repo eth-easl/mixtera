@@ -80,32 +80,30 @@ class LocalStub(MixteraClient):
             data_only_on_primary=data_only_on_primary,
         )
 
-    def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
-        query_result = self._get_query_result(training_id)
+    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
+        query_result = self._get_query_result(job_id)
         yield from query_result
 
     def _get_result_metadata(
-        self, training_id: str
+        self, job_id: str
     ) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
-        query_result = self._get_query_result(training_id)
+        query_result = self._get_query_result(job_id)
         return query_result.dataset_type, query_result.parsing_func, query_result.file_path
 
     def _register_query(self, query: "Query", chunk_size: int) -> bool:
-        if query.training_id in self._training_query_map:
-            logger.warning(f"We already have a query for training {query.training_id}!")
+        if query.job_id in self._training_query_map:
+            logger.warning(f"We already have a query for job {query.job_id}!")
             return False
 
         with self._training_query_map_lock:
-            self._training_query_map[query.training_id] = (query, chunk_size)
+            self._training_query_map[query.job_id] = (query, chunk_size)
 
-        logger.info(
-            f"Registered query {str(query)} with chunk_size {chunk_size}" + f" for training {query.training_id}."
-        )
+        logger.info(f"Registered query {str(query)} with chunk_size {chunk_size}" + f" for job {query.job_id}.")
 
         return True
 
-    def _get_query_result(self, training_id: str) -> QueryResult:
-        if not wait_for_key_in_dict(self._training_query_map, training_id, 60.0):
-            raise RuntimeError(f"Unknown training {training_id}")
+    def _get_query_result(self, job_id: str) -> QueryResult:
+        if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
+            raise RuntimeError(f"Unknown job {job_id}")
         # Since queries are only registered after they are executed, results is guaranteed to not be None
-        return self._training_query_map[training_id][0].results
+        return self._training_query_map[job_id][0].results

@@ -24,7 +24,7 @@ def main():
     if register_dataset:
         mdc.register_dataset("test_dataset", "/Users/mboether/phd/mixtera/test_dataset", JSONLDataset, parsing_func, "RED_PAJAMA")
 
-    query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML")) # num_nodes = 1 default
+    query = Query.for_job(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML")) # num_nodes = 1 default
     _ = query.execute(mdc, chunk_size=100) # -> LocalQueryResult
 
     ### FORK ###
@@ -40,7 +40,7 @@ def main():
     rdc = MixteraClient.from_remote("127.0.0.1", 8888)
 
     # Pre-fork on primary node
-    query = Query.for_training(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))
+    query = Query.for_job(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))
     _ = query.execute(rdc, chunk_size=100) # -> RemoteQueryResult, most likely ignored
 
     ### FORK ###
@@ -53,9 +53,9 @@ def main():
         raise RuntimeError("Local does not equal remote non tunnel result!")
 
     ## Remote case (with streaming)
-    TRAINING_ID = str(round(time.time() * 1000)) # Need a new training ID
+    TRAINING_ID = str(round(time.time() * 1000)) # Need a new job ID
     # Pre-fork on primary node
-    query = Query.for_training(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))
+    query = Query.for_job(TRAINING_ID, num_workers_per_node, num_nodes=2).select(("language", "==", "HTML"))
     _ = query.execute(rdc, chunk_size=100) # -> RemoteQueryResult, most likely ignored
 
     ### FORK ###
@@ -68,8 +68,8 @@ def main():
         raise RuntimeError("Local does not equal remote tunnel result!")
 
     ### Torch Test
-    TRAINING_ID = str(round(time.time() * 1000)) # Need a new training ID
-    query = Query.for_training(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML"))
+    TRAINING_ID = str(round(time.time() * 1000)) # Need a new job ID
+    query = Query.for_job(TRAINING_ID, num_workers_per_node).select(("language", "==", "HTML"))
     torch_ds = MixteraTorchDataset(rdc, query, TRAINING_ID, 100, tunnel_via_server=False)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=2, num_workers=16)
 

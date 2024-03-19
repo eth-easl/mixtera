@@ -6,12 +6,12 @@ from mixtera.core.query import Query
 
 
 def test_filter_javascript(client: ServerStub, chunk_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("language", "==", "JavaScript"))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -20,12 +20,12 @@ def test_filter_javascript(client: ServerStub, chunk_size: int, tunnel: bool):
 
 
 def test_filter_html(client: ServerStub, chunk_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("language", "==", "HTML"))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("language", "==", "HTML"))
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -34,16 +34,16 @@ def test_filter_html(client: ServerStub, chunk_size: int, tunnel: bool):
 
 
 def test_filter_both(client: ServerStub, chunk_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
+    job_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id)
+        Query.for_job(job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id).select(("language", "==", "JavaScript")))
+        .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of 1000!"
@@ -52,12 +52,12 @@ def test_filter_both(client: ServerStub, chunk_size: int, tunnel: bool):
 
 
 def test_filter_license(client: ServerStub, chunk_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("license", "==", "CC"))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("license", "==", "CC"))
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -66,26 +66,26 @@ def test_filter_license(client: ServerStub, chunk_size: int, tunnel: bool):
 
 
 def test_filter_unknown_license(client: ServerStub, chunk_size: int, tunnel: bool):
-    training_id = str(round(time.time() * 1000))
-    query = Query.for_training(training_id).select(("license", "==", "All rights reserved."))
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     assert client.execute_query(query, chunk_size)
     assert (
-        len(list(client.stream_results(training_id, tunnel_via_server=tunnel))) == 0
+        len(list(client.stream_results(job_id, tunnel_via_server=tunnel))) == 0
     ), "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(client: ServerStub, chunk_size: int, tunnel: bool):
     # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
-    training_id = str(round(time.time() * 1000))
+    job_id = str(round(time.time() * 1000))
     query = (
-        Query.for_training(training_id)
+        Query.for_job(job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_training(training_id).select(("license", "==", "CC")))
+        .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
     assert client.execute_query(query, chunk_size)
     result_samples = []
 
-    for sample in client.stream_results(training_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
     assert len(result_samples) == 1500, f"Got {len(result_samples)} samples instead of the expected 1500!"

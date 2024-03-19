@@ -47,7 +47,7 @@ class TestQueryPlan(unittest.TestCase):
 class TestQuery(unittest.TestCase):
     def setUp(self):
         self.client = MixteraClient.from_directory(".")
-        self.query = Query("training_id")
+        self.query = Query("job_id")
 
     def test_init(self):
         self.assertIsInstance(self.query.query_plan, QueryPlan)
@@ -62,8 +62,8 @@ class TestQuery(unittest.TestCase):
         self.assertTrue(hasattr(Query, "testoperator"))
 
     def test_for_training(self):
-        query = Query.for_training("training_id")
-        self.assertEqual(query.training_id, "training_id")
+        query = Query.for_job("job_id")
+        self.assertEqual(query.job_id, "job_id")
 
     def test_root(self):
         operator = MockOperator("test_operator")
@@ -90,7 +90,7 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
-        query = Query("training_id").mockoperator("test")
+        query = Query("job_id").mockoperator("test")
         assert self.client.execute_query(query, 1)
         query_result = query.results
         res = list(query_result)
@@ -120,7 +120,7 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
-        query = Query.for_training("training_id").mockoperator("test", len_results=2)
+        query = Query.for_job("job_id").mockoperator("test", len_results=2)
         assert self.client.execute_query(query, 2)
         res = list(query.results)
         res = [x._index for x in res]

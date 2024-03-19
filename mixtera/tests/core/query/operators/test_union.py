@@ -9,7 +9,7 @@ from mixtera.core.query.query import Query
 class TestUnion(unittest.TestCase):
     def setUp(self):
         self.client = MixteraClient.from_directory(".")
-        self.query_a = Query.for_training("training_id").select(("field1", "==", "value1"))
+        self.query_a = Query.for_job("job_id").select(("field1", "==", "value1"))
         self.query_a.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
 
         self.query_a.root.results.append_entry("field1", "value1", "did", "fid", (0, 2))
@@ -20,7 +20,7 @@ class TestUnion(unittest.TestCase):
         self.assertEqual(self.union.children[0], self.query_a.root)
 
     def test_execute(self):
-        query_b = Query.for_training("training_id").select(("field1", "==", "value2"))
+        query_b = Query.for_job("job_id").select(("field1", "==", "value2"))
         query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         query_b.root.results.append_entry("field1", "value2", "did", "fid", (0, 2))
         gt_result = {"field1": {"value1": {"did": {"fid": (0, 2)}}, "value2": {"did": {"fid": (0, 2)}}}}

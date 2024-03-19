@@ -66,7 +66,7 @@ class TestQueryE2E(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
-        query = Query.for_training("training_id").select(("language", "==", "Go"))
+        query = Query.for_job("job_id").select(("language", "==", "Go"))
         assert self.client.execute_query(query, 1)
         res = query.results
         for x in res:
@@ -74,8 +74,8 @@ class TestQueryE2E(unittest.TestCase):
             break
 
     def test_union(self):
-        query_1 = Query.for_training("training_id").select(("language", "==", "Go"))
-        query_2 = Query.for_training("training_id")
+        query_1 = Query.for_job("job_id").select(("language", "==", "Go"))
+        query_2 = Query.for_job("job_id")
         query_2.select(("language", "==", "CSS"))
         query_2 = query_2.union(query_1)
         assert self.client.execute_query(query_2, 1)

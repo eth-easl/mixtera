@@ -28,7 +28,7 @@ class MixteraServer:
         self._result_chunk_generator_map_lock = mp.Lock()
 
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        logger.debug("Received register training request")
+        logger.debug("Received register query request")
         chunk_size = await read_int(ID_BYTES, reader)
         logger.debug(f"chunk_size = {chunk_size}")
         query = await read_pickeled_object(SAMPLE_SIZE_BYTES, reader)
@@ -50,17 +50,17 @@ class MixteraServer:
         await writer.drain()
 
     async def _return_next_result_chunk(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        training_id = await read_utf8_string(ID_BYTES, reader)
+        job_id = await read_utf8_string(ID_BYTES, reader)
         with self._result_chunk_generator_map_lock:
-            if training_id not in self._result_chunk_generator_map:
-                self._result_chunk_generator_map[training_id] = self._local_stub._get_query_result(training_id)
+            if job_id not in self._result_chunk_generator_map:
+                self._result_chunk_generator_map[job_id] = self._local_stub._get_query_result(job_id)
 
-        next_chunk = next(self._result_chunk_generator_map[training_id], None)
+        next_chunk = next(self._result_chunk_generator_map[job_id], None)
         await write_pickeled_object(next_chunk, SAMPLE_SIZE_BYTES, writer)
 
     async def _return_result_metadata(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        training_id = await read_utf8_string(ID_BYTES, reader)
-        dataset_dict, parsing_dict, file_path_dict = self._local_stub._get_result_metadata(training_id)
+        job_id = await read_utf8_string(ID_BYTES, reader)
+        dataset_dict, parsing_dict, file_path_dict = self._local_stub._get_result_metadata(job_id)
 
         meta = {
             "dataset_type": dataset_dict,

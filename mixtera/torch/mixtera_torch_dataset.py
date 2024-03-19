@@ -11,7 +11,7 @@ class MixteraTorchDataset(IterableDataset):
         self,
         client: MixteraClient,
         query: Query,
-        training_id: str,
+        job_id: str,
         chunk_size: int,
         node_id: int = 0,
         tunnel_via_server: bool = False,
@@ -20,7 +20,7 @@ class MixteraTorchDataset(IterableDataset):
         # Alternative: Let people inherit from this.
         self._client = client
         self._query = query
-        self._training_id = training_id
+        self._training_id = job_id
         self._node_id = node_id
         self._chunk_size = chunk_size
         self._tunnel_via_server = tunnel_via_server

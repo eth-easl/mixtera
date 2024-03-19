@@ -42,7 +42,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
     async def test_register_query(self, mock_read_int, mock_read_pickeled_object, mock_write_int):
         mock_read_int.return_value = AsyncMock(return_value=4)
         query_mock = MagicMock()
-        query_mock.training_id = "cool_training_id"
+        query_mock.job_id = "cool_training_id"
         mock_read_pickeled_object.return_value = query_mock
         mock_writer = create_mock_writer()
 
@@ -81,10 +81,10 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
     async def test_get_meta_result(
         self, mock_get_result_metadata, mock_read_utf8_string, mock_read_int, mock_write_pickeled_object
     ):
-        training_id = "training_id"
+        job_id = "job_id"
         mock_get_result_metadata.return_value = (1, 2, 3)
         mock_read_int.return_value = int(ServerTask.GET_META_RESULT)
-        mock_read_utf8_string.return_value = training_id
+        mock_read_utf8_string.return_value = job_id
         mock_writer = create_mock_writer()
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
@@ -109,18 +109,18 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
             yield 1
             yield 2
 
-        training_id = "itsamemario"
+        job_id = "itsamemario"
         mock_read_int.return_value = int(ServerTask.GET_NEXT_RESULT_CHUNK)
-        mock_read_utf8_string.return_value = training_id
+        mock_read_utf8_string.return_value = job_id
         mock_get_query_result.return_value = sample_generator()
         mock_writer = create_mock_writer()
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
-        mock_get_query_result.assert_called_once_with(training_id)
+        mock_get_query_result.assert_called_once_with(job_id)
         mock_write_pickeled_object.assert_awaited_once_with(1, SAMPLE_SIZE_BYTES, mock_writer)
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
-        mock_get_query_result.assert_called_once_with(training_id)
+        mock_get_query_result.assert_called_once_with(job_id)
         expected_calls = [
             call(1, SAMPLE_SIZE_BYTES, mock_writer),  # The first call
             call(2, SAMPLE_SIZE_BYTES, mock_writer),  # The second call

@@ -41,17 +41,17 @@ class ServerStub(MixteraClient):
             logger.error("Could not register query at server!")
             return False
 
-        logger.info(f"Registered query for training {query.training_id} at server!")
+        logger.info(f"Registered query for job {query.job_id} at server!")
 
         return True
 
-    def _stream_result_chunks(self, training_id: str) -> Generator[IndexType, None, None]:
-        yield from self._server_connection._stream_result_chunks(training_id)
+    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
+        yield from self._server_connection._stream_result_chunks(job_id)
 
     def _get_result_metadata(
-        self, training_id: str
+        self, job_id: str
     ) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
-        return self._server_connection._get_result_metadata(training_id)
+        return self._server_connection._get_result_metadata(job_id)
 
     def is_remote(self) -> bool:
         return True
