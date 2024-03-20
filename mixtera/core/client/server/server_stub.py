@@ -5,13 +5,13 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
+from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import Query
 from mixtera.network.connection import ServerConnection
 
 
 class ServerStub(MixteraClient):
-
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         if len(args) == 1 and isinstance(args[0], tuple):
             host, port = args[0]
@@ -36,8 +36,15 @@ class ServerStub(MixteraClient):
         loc: str,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
-        metadata_parser_type: str,
+        metadata_parser_identifier: str,
     ) -> bool:
+        raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
+
+    def register_metadata_parser(
+        self,
+        identifier: str,
+        parser: Type[MetadataParser],
+    ) -> None:
         raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
 
     def check_dataset_exists(self, identifier: str) -> bool:

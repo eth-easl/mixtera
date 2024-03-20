@@ -7,6 +7,7 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.index import IndexType
+from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query, QueryResult
 from mixtera.utils import wait_for_key_in_dict
@@ -32,9 +33,16 @@ class LocalStub(MixteraClient):
         loc: str,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
-        metadata_parser_type: str,
+        metadata_parser_identifier: str,
     ) -> bool:
-        return self._mdc.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_type)
+        return self._mdc.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
+
+    def register_metadata_parser(
+        self,
+        identifier: str,
+        parser: Type[MetadataParser],
+    ) -> None:
+        return self._mdc._metadata_factory.add_parser(identifier, parser)
 
     def check_dataset_exists(self, identifier: str) -> bool:
         return self._mdc.check_dataset_exists(identifier)

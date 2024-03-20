@@ -18,7 +18,7 @@ def main() -> None:
     print(f"Prepping directory {server_dir}.")
     write_jsonl(server_dir / "testd.jsonl")
     client = MixteraClient.from_directory(server_dir)
-    client._mdc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
+    client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     client.register_dataset(
         "ldc_integrationtest_dataset", server_dir / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
     )

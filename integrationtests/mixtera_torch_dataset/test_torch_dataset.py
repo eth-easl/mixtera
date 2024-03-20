@@ -122,7 +122,7 @@ def test_torchds(client: MixteraClient, chunk_size: int, num_workers: int, batch
 def test_tds(dir: Path) -> None:
     write_jsonl(dir / "testd.jsonl")
     local_client = MixteraClient(dir)
-    local_client._mdc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
+    local_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     local_client.register_dataset(
         "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )

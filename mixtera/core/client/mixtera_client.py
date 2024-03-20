@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
+from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
 
@@ -15,7 +16,6 @@ if TYPE_CHECKING:
 
 
 class MixteraClient(ABC):
-
     def __new__(cls, *args: Any) -> "MixteraClient":
         """
         Meta-function to dispatch calls to the constructor of MixteraClient to the ServerStub
@@ -89,7 +89,7 @@ class MixteraClient(ABC):
         loc: str,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
-        metadata_parser_type: str,
+        metadata_parser_identifier: str,
     ) -> bool:
         """
         This method registers a dataset in Mixtera.
@@ -104,10 +104,27 @@ class MixteraClient(ABC):
                 on the dataset type at hand. For example, for the JSONLDataset, every line
                 is processed with this function and it can be used to extract the actual
                 payload out of the metadata.
-            metadata_parser_type: the name of the metadata parser to be used for indexing
+            metadata_parser_identifier (str): the identifier of the metadata parser
+                to be used for indexing. Can be registered using `register_metadata_parser`.
 
         Returns:
             Boolean indicating success.
+        """
+
+        raise NotImplementedError()
+
+    @abstractmethod
+    def register_metadata_parser(
+        self,
+        identifier: str,
+        parser: Type[MetadataParser],
+    ) -> None:
+        """
+        This method registers a metadata parser in Mixtera.
+
+        Args:
+            identifier (str): The dataset identifier.
+            parser (Type[MetadataParser]): The class object of the parser to register.
         """
 
         raise NotImplementedError()

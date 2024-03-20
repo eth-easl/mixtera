@@ -60,8 +60,7 @@ def setup_server_directory(server_dir: Path):
     client = MixteraClient.from_directory(server_dir)
     
     # Register the metadata parser.
-    # TODO(#60,#56): This should be offered on the client.
-    client._mdc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
+    client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     
     # Registering the dataset with the client.
     client.register_dataset(

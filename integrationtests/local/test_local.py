@@ -111,8 +111,7 @@ def test_client_chunksize(client: MixteraClient, chunk_size: int):
 def test_client(dir: Path) -> None:
     write_jsonl(dir / "testd.jsonl")
     client = MixteraClient.from_directory(dir)
-    # TODO(#60): This should be improved.
-    client._mdc._metadata_factory.add_parser("TEST_PARSER", TestMetadataParser)
+    client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     client.register_dataset(
         "client_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
     )
