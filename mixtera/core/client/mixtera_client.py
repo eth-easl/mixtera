@@ -198,11 +198,11 @@ class MixteraClient(ABC):
             A Generator over string samples.
 
         Raises:
-            RuntimeError if query has not been executed. # TODO (MaxiBoether): dont forget this!
+            RuntimeError if query has not been executed.
         """
         result_metadata = self._get_result_metadata(job_id)
         for result_chunk in self._stream_result_chunks(job_id):
-            # TODO(): When implementing the new sampling on the ResultChunk,
+            # TODO(#35): When implementing the new sampling on the ResultChunk,
             # the ResultChunk class should offer an iterator instead.
             yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
 
@@ -217,7 +217,7 @@ class MixteraClient(ABC):
             A Generator over result chunks.
 
         Raises:
-            RuntimeError if query has not been executed. # TODO (MaxiBoether): dont forget this!
+            RuntimeError if query has not been executed.
         """
         raise NotImplementedError()
 
@@ -234,7 +234,7 @@ class MixteraClient(ABC):
             A tuple containing mappings to parse the results (dataset_type_dict, parsing_func_dict, file_path_dict)
 
         Raises:
-            RuntimeError if query has not been executed. # TODO (MaxiBoether): dont forget this!
+            RuntimeError if query has not been executed.
         """
         raise NotImplementedError()
 

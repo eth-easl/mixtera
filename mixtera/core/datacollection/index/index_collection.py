@@ -19,18 +19,54 @@ from mixtera.utils.utils import return_with_deepcopy_or_noop
 
 
 def create_inner_dict() -> defaultdict[Any, list]:
+    """
+    Creates and returns a `defaultdict` with a default factory of `list`.
+    This represents the innermost level of the index structure where each
+    feature value points to a list of payloads (row indices or row ranges).
+
+    Returns:
+        defaultdict[Any, list]: A `defaultdict` mapping keys to lists.
+    """
     return defaultdict(list)
 
 
 def create_mid_dict() -> defaultdict[Any, defaultdict]:
+    """
+    Creates and returns a `defaultdict` with a default factory that produces
+    `defaultdict`s of lists. This represents the layer in the index structure
+    where each file ID maps to a `defaultdict` that holds the payloads for
+    that file.
+
+    Returns:
+        defaultdict[Any, defaultdict]: A `defaultdict` mapping keys to `defaultdict`s of lists.
+    """
     return defaultdict(create_inner_dict)
 
 
 def create_outer_dict() -> defaultdict[Any, defaultdict]:
+    """
+    Creates and returns a `defaultdict` with a default factory that produces
+    `defaultdict`s of `defaultdict`s of lists. This represents the layer in
+    the index structure where each dataset ID maps to a `defaultdict` that
+    holds the file IDs and their associated payloads.
+
+    Returns:
+        defaultdict[Any, defaultdict]: A `defaultdict` mapping keys to `defaultdict`s of `defaultdict`s of lists.
+    """
     return defaultdict(create_mid_dict)
 
 
 def create_top_dict() -> IndexType:
+    """
+    Creates and returns a `defaultdict` with a default factory that produces
+    `defaultdict`s of `defaultdict`s of `defaultdict`s of lists. This
+    represents the top level of the index structure where each feature name
+    maps to a `defaultdict` that holds the feature values and their
+    associated dataset IDs, file IDs, and payloads.
+
+    Returns:
+        IndexType: A `defaultdict` mapping feature names to their structured index data.
+    """
     return defaultdict(create_outer_dict)
 
 
