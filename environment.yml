@@ -3,6 +3,7 @@ name: mixtera
 channels:
   - conda-forge
   - anaconda
+  - pytorch
 
 dependencies:
   - python>=3.12
@@ -11,3 +12,4 @@ dependencies:
   - loguru
   - numpy
   - dill
+  - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency

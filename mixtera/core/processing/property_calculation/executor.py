@@ -7,7 +7,6 @@ from mixtera.core.processing import ExecutionMode
 
 
 class PropertyCalculationExecutor(ABC):
-
     @staticmethod
     def from_mode(
         mode: ExecutionMode,

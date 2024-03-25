@@ -1,21 +1,21 @@
 import sqlite3
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional, Type
+from typing import Callable, List, Optional, Type
 
 import dill
 from loguru import logger
-from mixtera.core.datacollection import MixteraDataCollection, Property, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import Index
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
+from mixtera.core.datacollection.property import Property
+from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
 
 
-class LocalDataCollection(MixteraDataCollection):
-
+class MixteraDataCollection:
     def __init__(self, directory: Path) -> None:
         if not directory.exists():
             raise RuntimeError(f"Directory {directory} does not exist.")
@@ -34,6 +34,12 @@ class LocalDataCollection(MixteraDataCollection):
             self._connection = self._init_database()
         else:
             self._connection = sqlite3.connect(self._database_path)
+
+    def __getstate__(self) -> dict:
+        # We cannot pickle the sqlite connection.
+        d = dict(self.__dict__)
+        del d["_connection"]
+        return d
 
     def _init_database(self) -> sqlite3.Connection:
         assert hasattr(self, "_database_path")
@@ -79,6 +85,9 @@ class LocalDataCollection(MixteraDataCollection):
         parsing_func: Callable[[str], str],
         metadata_parser_type: str,
     ) -> bool:
+        if isinstance(loc, Path):
+            loc = str(loc)
+
         if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, parsing_func)) == -1:
             return False
 
@@ -133,7 +142,7 @@ class LocalDataCollection(MixteraDataCollection):
         return -1
 
     def _insert_file_into_table(self, dataset_id: int, loc: Path) -> int:
-        # TODO(create issue): Potentially batch inserts of multiple files if this is too slow.
+        # TODO(#61): Potentially batch inserts of multiple files if this is too slow.
         query = "INSERT INTO files (dataset_id, location) VALUES (?, ?);"
         cur = self._connection.cursor()
         logger.info(f"Inserting file at {loc} for dataset id = {dataset_id}")
@@ -294,7 +303,7 @@ class LocalDataCollection(MixteraDataCollection):
 
     def remove_dataset(self, identifier: str) -> bool:
         # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
-        raise NotImplementedError("Not implemented for LocalCollection")
+        raise NotImplementedError("Not implemented yet.")
 
     def _get_all_files(self) -> list[tuple[int, int, Type[Dataset], str]]:
         try:
@@ -363,19 +372,6 @@ class LocalDataCollection(MixteraDataCollection):
 
         return result[0]
 
-    def get_samples_from_ranges(
-        self, ranges_per_dataset_and_file: dict[int, dict[int, list[tuple[int, int]]]]
-    ) -> Iterable[str]:
-        for dataset_id, file_dict in ranges_per_dataset_and_file.items():
-            dataset_parsing_func = self._get_dataset_func_by_id(dataset_id)
-            filename_dict = {
-                self._get_file_path_by_id(file_id): file_ranges for file_id, file_ranges in file_dict.items()
-            }
-            # Since we are in the LocalCollection, server_connection is always None.
-            yield from self._get_dataset_type_by_id(dataset_id).read_ranges_from_files(
-                filename_dict, dataset_parsing_func, None
-            )
-
     def add_property(
         self,
         property_name: str,
@@ -421,6 +417,17 @@ class LocalDataCollection(MixteraDataCollection):
         self._insert_partial_index_into_table(property_name, new_index)
 
     def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:
+        """
+        This function returns the index of the MixteraDataCollection.
+
+        Args:
+            property_name (Optional[str], optional): The name of the property to query.
+                If not provided, all properties are returned.
+
+        Returns:
+            An `InMemoryDictionaryRangeIndex` object or None if a `property_name`
+            is specified, but is not present in the index.
+        """
         if property_name is None:
             logger.warning(
                 "No property name provided, returning all indices from database. ",

@@ -7,20 +7,12 @@
    :show-inheritance:
 ```
 
-## Local Data Collection
+## Mixtera Data Collection
 
 ```{eval-rst}
-.. automodule:: mixtera.core.datacollection.local
+.. automodule:: mixtera.core.datacollection
    :members:
    :undoc-members:
    :show-inheritance:
 ```
 
-## Remote Data Collection
-
-```{eval-rst}
-.. automodule:: mixtera.core.datacollection.remote
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```

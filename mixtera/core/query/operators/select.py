@@ -1,9 +1,13 @@
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from mixtera.core.query.query import QueryPlan
 
 from ._base import Operator
 from .intersect import Intersection
+
+if TYPE_CHECKING:
+    from mixtera.core.client.local import MixteraDataCollection
+
 
 valid_operators = ["==", ">", "<", ">=", "<=", "!="]
 
@@ -51,19 +55,18 @@ class Select(Operator):
         else:
             raise RuntimeError(f"Invalid condition: {condition}, must be a Condition or a tuple of length 3")
 
-    def execute(self) -> None:
+    def execute(self, mdc: "MixteraDataCollection") -> None:
         assert len(self.children) == 0, f"Select operator must have 0 children, got {len(self.children)}"
-        assert self.mdc is not None, "Select operator must have a MixteraDataCollection"
         # TODO(#42): In a future PR, we may want to only load the
         # index that meets the condition, instead of loading the entire index
         # and then filter the results.
-        if (index := self.mdc.get_index(self.condition.field)) is None:
+        if (index := mdc.get_index(self.condition.field)) is None:
             self.results = {}
             return
         self.results = index.get_index_by_predicate(self.condition.field, self.condition.meet)
 
     def __str__(self) -> str:
-        return f"select<{self.mdc}>({self.condition})"
+        return f"select<>({self.condition})"
 
     def insert(self, query_plan: "QueryPlan") -> Operator:
         """

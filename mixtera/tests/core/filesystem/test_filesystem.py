@@ -4,11 +4,10 @@ from typing import Generator, Iterable
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.filesystem import FileSystem
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class DummyFileSystem(FileSystem):
-
     @classmethod
     def get_file_iterable(cls, file_path: str) -> Iterable[str]:
         yield from ["line 1", "line 2"]

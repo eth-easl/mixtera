@@ -10,7 +10,6 @@ from mixtera.core.processing.property_calculation import LocalPropertyCalculatio
 
 
 class TestLocalPropertyCalculationExecutor(unittest.TestCase):
-
     def setUp(self):
         self.setup_func = MagicMock()
         self.calc_func = MagicMock()
@@ -99,7 +98,6 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
             tempfile.NamedTemporaryFile(suffix=".jsonl", delete=True, mode="w") as temp_file1,
             tempfile.NamedTemporaryFile(suffix=".jsonl", delete=True, mode="w") as temp_file2,
         ):
-
             temp_file1.write("\n".join(sample_data))
             temp_file1.seek(0)  # Set file pointer to beginning
 

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import Callable, Union
+from typing import Any, Callable, Union
 
 from loguru import logger
 from mixtera.core.datacollection.index import (
@@ -14,12 +14,67 @@ from mixtera.core.datacollection.index import (
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
 
+# Note that these functions cannot be nested lambdas or nested functions since they cannot be pickled
+# when using 'spawn' in multiprocessing.
+
+
+def create_inner_dict() -> defaultdict[Any, list]:
+    """
+    Creates and returns a `defaultdict` with a default factory of `list`.
+    This represents the innermost level of the index structure where each
+    feature value points to a list of payloads (row indices or row ranges).
+
+    Returns:
+        defaultdict[Any, list]: A `defaultdict` mapping keys to lists.
+    """
+    return defaultdict(list)
+
+
+def create_mid_dict() -> defaultdict[Any, defaultdict]:
+    """
+    Creates and returns a `defaultdict` with a default factory that produces
+    `defaultdict`s of lists. This represents the layer in the index structure
+    where each file ID maps to a `defaultdict` that holds the payloads for
+    that file.
+
+    Returns:
+        defaultdict[Any, defaultdict]: A `defaultdict` mapping keys to `defaultdict`s of lists.
+    """
+    return defaultdict(create_inner_dict)
+
+
+def create_outer_dict() -> defaultdict[Any, defaultdict]:
+    """
+    Creates and returns a `defaultdict` with a default factory that produces
+    `defaultdict`s of `defaultdict`s of lists. This represents the layer in
+    the index structure where each dataset ID maps to a `defaultdict` that
+    holds the file IDs and their associated payloads.
+
+    Returns:
+        defaultdict[Any, defaultdict]: A `defaultdict` mapping keys to `defaultdict`s of `defaultdict`s of lists.
+    """
+    return defaultdict(create_mid_dict)
+
+
+def create_top_dict() -> IndexType:
+    """
+    Creates and returns a `defaultdict` with a default factory that produces
+    `defaultdict`s of `defaultdict`s of `defaultdict`s of lists. This
+    represents the top level of the index structure where each feature name
+    maps to a `defaultdict` that holds the feature values and their
+    associated dataset IDs, file IDs, and payloads.
+
+    Returns:
+        IndexType: A `defaultdict` mapping feature names to their structured index data.
+    """
+    return defaultdict(create_outer_dict)
+
 
 def raw_index_dict_instantiator() -> IndexType:
     """
     Instantiates and returns a raw index dict of `IndexType`.
     """
-    return defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+    return create_top_dict()
 
 
 class InMemoryDictionaryIndex(Index, ABC):
@@ -172,6 +227,17 @@ class InMemoryDictionaryRangeIndex(InMemoryDictionaryIndex):
     ) -> None:
         assert isinstance(payload, tuple), "InMemoryDictionaryRangeIndex can only append a range tuple!"
         self._index[feature_name][feature_value][dataset_id][file_id].append(payload)
+
+    @property
+    def values_count(self) -> int:
+        total_count = 0
+        for _, feature_values in self._index.items():
+            for _, dataset_ids in feature_values.items():
+                for _, file_ids in dataset_ids.items():
+                    for _, file_ranges in file_ids.items():
+                        for start, end in file_ranges:
+                            total_count += end - start
+        return total_count
 
 
 class InMemoryDictionaryLineIndex(InMemoryDictionaryIndex):

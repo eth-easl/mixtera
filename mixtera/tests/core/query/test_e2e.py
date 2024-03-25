@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-from mixtera.core.datacollection.local import LocalDataCollection
 from mixtera.core.query import Query
 
 
@@ -13,7 +13,7 @@ class TestQueryE2E(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.directory = Path(self.temp_dir.name)
-        ldc = LocalDataCollection(self.directory)
+        client = MixteraClient.from_directory(self.directory)
 
         jsonl_file_path1 = self.directory / "temp1.jsonl"
         with open(jsonl_file_path1, "w", encoding="utf-8") as f:
@@ -56,41 +56,41 @@ class TestQueryE2E(unittest.TestCase):
             return f"prefix_{data}"
 
         self.parsing_func_source = inspect.getsource(parsing_func)
-        ldc.register_dataset("test_dataset", str(self.directory), JSONLDataset, parsing_func, "RED_PAJAMA")
-        files = ldc._get_all_files()
+        client.register_dataset("test_dataset", str(self.directory), JSONLDataset, parsing_func, "RED_PAJAMA")
+        files = client._mdc._get_all_files()
         self.file1_id = [file_id for file_id, _, _, path in files if "temp1.jsonl" in path][0]
         self.file2_id = [file_id for file_id, _, _, path in files if "temp2.jsonl" in path][0]
-        self.mdc = ldc
+        self.client = client
 
     def tearDown(self):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
-        query = Query.from_datacollection(self.mdc).select(("language", "==", "Go"))
-        res = query.execute(chunk_size=1)
+        query = Query.for_job("job_id").select(("language", "==", "Go"))
+        assert self.client.execute_query(query, 1)
+        res = query.results
         for x in res:
-            self.assertEqual(x._index, {"language": {"Go": {1: {1: [(0, 1)]}}}})
+            self.assertEqual(x._index, {"language": {"Go": {1: {self.file1_id: [(0, 1)]}}}})
             break
 
     def test_union(self):
-        query_1 = Query.from_datacollection(self.mdc).select(("language", "==", "Go"))
-        query_2 = Query.from_datacollection(self.mdc)
+        query_1 = Query.for_job("job_id").select(("language", "==", "Go"))
+        query_2 = Query.for_job("job_id")
         query_2.select(("language", "==", "CSS"))
         query_2 = query_2.union(query_1)
-        query_result = query_2.execute(chunk_size=1)
+        assert self.client.execute_query(query_2, 1)
+        query_result = query_2.results
         res = list(query_result)
         res = [x._index for x in res]
-        print(res)
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
-        self.assertEqual(
+        self.assertCountEqual(
             res,
             [
-                {"language": {"Go": {1: {1: [(0, 1)]}}}},
-                {"language": {"Go": {1: {1: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {1: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {1: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {2: [(0, 1)]}}}},
+                {"language": {"Go": {1: {self.file1_id: [(0, 1)]}}}},
+                {"language": {"Go": {1: {self.file1_id: [(1, 2)]}}}},
+                {"language": {"CSS": {1: {self.file1_id: [(1, 2)]}}}},
+                {"language": {"CSS": {1: {self.file2_id: [(0, 1)]}}}},
             ],
         )
         # check metadata

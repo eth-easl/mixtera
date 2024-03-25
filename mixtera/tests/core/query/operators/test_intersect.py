@@ -13,8 +13,8 @@ class MockOperator(Operator):
     def display(self, level):
         print(" " * level + self.name)
 
-    def execute(self):
-        pass
+    def execute(self, mdc):
+        del mdc
 
 
 class TestIntersection(unittest.TestCase):
@@ -32,12 +32,12 @@ class TestIntersection(unittest.TestCase):
 
     def test_execute(self):
         self.intersection.children.append(self.query_b.root)
-        self.intersection.execute()
+        self.intersection.execute(None)
         self.assertEqual(self.intersection.results, [2, 3])
 
     def test_execute_with_incorrect_children(self):
         with self.assertRaises(AssertionError):
-            self.intersection.execute()
+            self.intersection.execute(None)
 
     def test_repr(self):
         self.assertEqual(str(self.intersection), "intersection<>()")

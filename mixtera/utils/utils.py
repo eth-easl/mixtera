@@ -1,3 +1,5 @@
+import asyncio
+import time
 from collections import defaultdict
 from copy import deepcopy
 from typing import Any, List, Tuple, Union
@@ -47,6 +49,35 @@ def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
     if isinstance(ddict, (defaultdict, dict)):
         ddict = {k: defaultdict_to_dict(v) for k, v in ddict.items()}
     return ddict
+
+
+def run_async_until_complete(call: Any) -> Any:
+    """
+    Runs a async coroutine until complete and returns its result
+    Args:
+        call (Any): The coroutine to run.
+    Returns:
+        Any: The result of the corountine.
+    """
+    return asyncio.run(call)
+
+
+def wait_for_key_in_dict(dictionary: dict, key: str, timeout: float) -> bool:
+    """
+    Busy waits for a key to appear in a dict or timeout is thrown.
+    Args:
+        dictionary (dict): The dictionary to check.
+        key (str): The key to search for.
+        timeout (float): How many seconds to wait.
+    Returns:
+        bool: Whether the key is in the dictionary after timeout seconds.
+    """
+    timeout_at = time.time() + timeout
+
+    while key not in dictionary and time.time() <= timeout_at:
+        time.sleep(0.5)
+
+    return key in dictionary
 
 
 def numpy_to_native_type(obj: Any) -> Any:

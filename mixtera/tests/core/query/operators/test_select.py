@@ -31,20 +31,17 @@ class TestSelect(unittest.TestCase):
             Select("invalid_condition")
 
     def test_execute_with_no_children(self):
-        self.select.mdc = MagicMock()
+        mdc = MagicMock()
         returned_index = InMemoryDictionaryRangeIndex()
         returned_index.append_entry("field", "value", "did", "fid", (0, 2))
-        self.select.mdc.get_index.return_value = returned_index
+        mdc.get_index.return_value = returned_index
         self.select.condition.meet = MagicMock(return_value=True)
-        self.select.execute()
-        print(self.select.results)
+        self.select.execute(mdc)
         self.assertEqual(self.select.results._index, returned_index._index)
 
     def test_execute_with_one_child(self):
-        self.select.mdc = MagicMock()
         returned_index = InMemoryDictionaryRangeIndex()
         returned_index.append_entry("field", "value", "did", "fid", (0, 2))
-        self.select.mdc.get_index.return_value = returned_index
 
         self.select.condition.meet = MagicMock(return_value=True)
         self.select.children = [MagicMock()]
@@ -61,9 +58,8 @@ class TestSelect(unittest.TestCase):
         self.assertEqual(query_plan.root.children[0], select_1)
         self.assertEqual(query_plan.root.children[1], select_2)
 
-    def test_repr(self):
-        self.select.mdc = "mdc"
-        self.assertEqual(str(self.select), "select<mdc>(field operator value)")
+    def test_str(self):
+        self.assertEqual(str(self.select), "select<>(field operator value)")
 
 
 class TestCondition(unittest.TestCase):

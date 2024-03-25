@@ -1,7 +1,12 @@
+from typing import TYPE_CHECKING
+
 from loguru import logger
-from mixtera.core.query.query import Query
 
 from ._base import Operator
+
+if TYPE_CHECKING:
+    from mixtera.core.client.local import MixteraDataCollection
+    from mixtera.core.query.query import Query
 
 
 class Union(Operator):
@@ -12,11 +17,12 @@ class Union(Operator):
         Operator (Query): a query to combine with the current query.
     """
 
-    def __init__(self, query_a: Query) -> None:
+    def __init__(self, query_a: "Query") -> None:
         super().__init__()
         self.children.append(query_a.root)
 
-    def execute(self) -> None:
+    def execute(self, mdc: "MixteraDataCollection") -> None:
+        del mdc
         assert len(self.children) == 2, f"Union operator must have 2 children, got {len(self.children)}"
         logger.warning(
             "Union operator only supports bag semantics for now, meaning that it will not remove duplicates."

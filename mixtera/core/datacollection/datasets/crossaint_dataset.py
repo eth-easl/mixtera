@@ -3,7 +3,7 @@ from typing import Callable, Iterable, Optional
 
 from mixtera.core.datacollection.datasets.dataset import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.server import ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class CrossaintDataset(Dataset):

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from mixtera.core.datacollection import MixteraDataCollection
+from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query import Operator, Query, QueryPlan
 
@@ -15,7 +15,8 @@ class MockOperator(Operator):
     def display(self, level):
         print("-" * level + self.name)
 
-    def execute(self):
+    def execute(self, mdc):
+        del mdc
         self.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         self.results.append_entry("field", "value", "did", "fid", (0, 2))
 
@@ -45,25 +46,24 @@ class TestQueryPlan(unittest.TestCase):
 
 class TestQuery(unittest.TestCase):
     def setUp(self):
-        self.mdc = MixteraDataCollection.from_directory(".")
-        self.query = Query(self.mdc)
+        self.client = MixteraClient.from_directory(".")
+        self.query = Query("job_id")
 
     def test_init(self):
-        self.assertEqual(self.query.mdc, self.mdc)
         self.assertIsInstance(self.query.query_plan, QueryPlan)
 
     def test_register(self):
         class TestOperator(Operator):
-            def execute(self) -> None:
+            def execute(self, mdc) -> None:
+                del mdc
                 self.results = ["test"]
 
         Query.register(TestOperator)
         self.assertTrue(hasattr(Query, "testoperator"))
 
-    def test_from_datacollection(self):
-        query = Query.from_datacollection(self.mdc)
-        self.assertEqual(query.mdc, self.mdc)
-        self.assertIsInstance(query.query_plan, QueryPlan)
+    def test_for_training(self):
+        query = Query.for_job("job_id")
+        self.assertEqual(query.job_id, "job_id")
 
     def test_root(self):
         operator = MockOperator("test_operator")
@@ -77,9 +77,9 @@ class TestQuery(unittest.TestCase):
             self.query.display()
             mock_print.assert_called_once_with("test_operator")
 
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_func_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_type_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_file_path_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
     def test_execute_chunksize_one(
         self,
         mock_get_file_path_by_id: MagicMock,
@@ -90,8 +90,9 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
-        query = Query.from_datacollection(self.mdc).mockoperator("test")
-        query_result = query.execute(chunk_size=1)
+        query = Query("job_id").mockoperator("test")
+        assert self.client.execute_query(query, 1)
+        query_result = query.results
         res = list(query_result)
         res = [x._index for x in res]
         gt_meta = {
@@ -106,9 +107,9 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(query_result.dataset_type, gt_meta["dataset_type"])
         self.assertEqual(query_result.file_path, gt_meta["file_path"])
 
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_func_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_dataset_type_by_id")
-    @patch("mixtera.core.datacollection.local.LocalDataCollection._get_file_path_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
     def test_execute_chunksize_two(
         self,
         mock_get_file_path_by_id: MagicMock,
@@ -119,8 +120,8 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
-        query = Query(self.mdc).mockoperator("test", len_results=2)
-        res = query.execute(chunk_size=2)
-        res = list(res)
+        query = Query.for_job("job_id").mockoperator("test", len_results=2)
+        assert self.client.execute_query(query, 2)
+        res = list(query.results)
         res = [x._index for x in res]
         self.assertEqual(res, [{"field": {"value": {"did": {"fid": [(0, 2)]}}}}])
