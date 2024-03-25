@@ -1,5 +1,4 @@
 import asyncio
-import multiprocessing as mp
 from pathlib import Path
 from typing import Generator
 
@@ -35,9 +34,10 @@ class MixteraServer:
         self._host = host
         self._port = port
         self._directory = directory
-        self._local_stub = LocalStub(self._directory)
+        self._local_stub: LocalStub = LocalStub(self._directory)
         self._result_chunk_generator_map: dict[str, Generator[str, None, None]] = {}
-        self._result_chunk_generator_map_lock = mp.Lock()
+        self._result_chunk_generator_map_lock = asyncio.Lock()
+        self._register_query_lock = asyncio.Lock()
 
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -55,7 +55,8 @@ class MixteraServer:
         logger.debug(f"chunk_size = {chunk_size}")
         query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
-        success = self._local_stub.execute_query(query, chunk_size)
+        async with self._register_query_lock:
+            success = self._local_stub.execute_query(query, chunk_size)
         logger.debug(f"Registered query with success = {success} and executed it.")
 
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
@@ -87,7 +88,7 @@ class MixteraServer:
             writer (asyncio.StreamWriter): The stream writer to write data to the client.
         """
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        with self._result_chunk_generator_map_lock:
+        async with self._result_chunk_generator_map_lock:
             if job_id not in self._result_chunk_generator_map:
                 self._result_chunk_generator_map[job_id] = self._local_stub._get_query_result(job_id)
 

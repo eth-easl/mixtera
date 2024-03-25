@@ -13,7 +13,6 @@ from mixtera.utils import defaultdict_to_dict
 
 
 class TestLocalDataCollection(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
 

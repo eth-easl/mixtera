@@ -1,4 +1,4 @@
-import multiprocessing as mp
+import threading
 from pathlib import Path
 from typing import Callable, Generator, Type
 
@@ -24,7 +24,7 @@ class LocalStub(MixteraClient):
             raise RuntimeError(f"Directory {self.directory} does not exist.")
 
         self._mdc = MixteraDataCollection(self.directory)
-        self._training_query_map_lock = mp.Lock()
+        self._training_query_map_lock = threading.Lock()
         self._training_query_map: dict[str, tuple[Query, int]] = {}  # (query, chunk_size)
 
     def register_dataset(

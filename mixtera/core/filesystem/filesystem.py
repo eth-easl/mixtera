@@ -7,7 +7,6 @@ from mixtera.network.connection import ServerConnection
 
 
 class FileSystem(ABC):
-
     @staticmethod
     def from_path(file_path: str) -> "Type[FileSystem]":
         """

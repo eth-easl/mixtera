@@ -6,7 +6,6 @@ from mixtera.core.processing.property_calculation import LocalPropertyCalculatio
 
 
 class TestPropertyCalculationExecutor(unittest.TestCase):
-
     def test_from_mode_raises_error_with_dop_less_than_1(self):
         with self.assertRaises(RuntimeError) as context:
             PropertyCalculationExecutor.from_mode(ExecutionMode.LOCAL, 0, 10, Mock(), Mock())

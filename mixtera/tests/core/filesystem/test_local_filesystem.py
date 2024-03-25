@@ -6,7 +6,6 @@ from mixtera.core.filesystem import LocalFileSystem
 
 
 class TestLocalFileSystem(unittest.TestCase):
-
     def test_get_file_iterable(self):
         file_path = "testfile.txt"
         mock_file_data = "local line 1\nlocal line 2\n"

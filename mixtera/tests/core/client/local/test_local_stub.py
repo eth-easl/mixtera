@@ -11,7 +11,6 @@ from mixtera.core.query import Query, QueryResult
 
 
 class TestLocalStub(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint:disable=consider-using-with
         self.directory = Path(self.temp_dir.name)

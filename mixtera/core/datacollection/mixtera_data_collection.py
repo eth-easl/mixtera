@@ -16,7 +16,6 @@ from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
 
 
 class MixteraDataCollection:
-
     def __init__(self, directory: Path) -> None:
         if not directory.exists():
             raise RuntimeError(f"Directory {directory} does not exist.")

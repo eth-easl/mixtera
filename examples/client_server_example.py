@@ -117,7 +117,7 @@ def main(server_host: str, server_port: int):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python server_client_example.py <server_host> <server_port> (e.g. localhost 8888)")
+        print("Usage: python client_server_example.py <server_host> <server_port> (e.g. localhost 8888)")
         sys.exit(1)
     
     host = sys.argv[1]

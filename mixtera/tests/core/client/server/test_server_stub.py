@@ -12,7 +12,6 @@ from mixtera.network.connection import ServerConnection
 
 
 class TestServerStub(unittest.TestCase):
-
     def setUp(self):
         self.host = "localhost"
         self.port = 8080

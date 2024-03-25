@@ -189,7 +189,6 @@ class TestInMemoryDictionaryIndex(unittest.TestCase):
 
 
 class TestInMemoryDictionaryLineIndex(unittest.TestCase):
-
     def test_compress(self):
         index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_LINES)
 
