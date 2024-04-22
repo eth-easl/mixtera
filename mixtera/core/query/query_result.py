@@ -5,9 +5,12 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, raw_index_dict_instantiator
+from mixtera.core.datacollection.index import IndexType, InvertedIndex
+from mixtera.core.datacollection.index.index_collection import IndexFactory, \
+    IndexTypes, raw_index_dict_instantiator, create_inverted_index
 from mixtera.utils import defaultdict_to_dict
+
+import portion
 
 
 class QueryResult:
@@ -57,6 +60,44 @@ class QueryResult:
             "file_path": {fid: mdc._get_file_path_by_id(fid) for fid in file_ids},
             "total_length": total_length,
         }
+
+    def _invert_result(self) -> InvertedIndex:
+        """
+        Returns a dictionary that points from files to lists of ranges annotated
+        with properties.
+
+        Returns:
+            A dictionary of the form:
+                {
+                    "dataset_id": {
+                        "file_id": {[
+                            (lo_bound, hi_bound, {feature_1_name: feature_1_value, ...}),
+                        ...
+                        ]},
+                        ...
+                    },
+                    ...
+                }
+
+        """
+
+        # Invert index
+        inverted_dictionary: InvertedIndex = create_inverted_index()
+        for property_name, property_values in self.results.items():
+            for property_value, datasets in property_values.items():
+                for dataset_id, files in datasets.items():
+                    for file_id, ranges in files.items():
+                        for range in ranges:
+                            inverted_dictionary[dataset_id][file_id].append(
+                                (portion.closedopen(range[0], range[1]), {property_name: property_value}))
+
+
+
+        return
+
+
+
+
 
     def chunking(self) -> None:
         # structure of self.chunks: [index_type, index_type, ...]

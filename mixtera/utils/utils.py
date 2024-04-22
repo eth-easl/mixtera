@@ -110,3 +110,38 @@ def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Un
       The `to_return` object or a copy of it if `copy` is `True`
     """
     return to_return if not copy else deepcopy(to_return)
+
+
+def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False):
+    """
+    Merge two dictionaries that contain key-value pairs of property_name ->
+    [property_value_1, ...] into one.
+
+    Args:
+        left: left property dictionary
+        right: right property dictionary
+        unique_lists: if True, the per-property merged list does not contain
+            duplicate values
+
+    Returns:
+        The merged dictionaries. The merge should be side-effect safe.
+    """
+    new_dict = {}
+    intersection = set()
+
+    for k, v in left.items():
+        if k in right:
+          intersection.add(k)
+        else:
+          new_dict[k] = v.copy()
+
+    for k, v in right.items():
+        if k not in intersection:
+          new_dict[k] = v.copy()
+        else:
+          if unique_lists:
+            new_dict[k] = list(set(v + left[k]))
+          else:
+            new_dict[k] = v + left[k]
+
+    return new_dict
