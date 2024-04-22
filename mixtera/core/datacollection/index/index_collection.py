@@ -10,6 +10,7 @@ from mixtera.core.datacollection.index import (
     IndexFeatureValueType,
     IndexRangeType,
     IndexType,
+    InvertedIndex
 )
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
@@ -75,6 +76,15 @@ def raw_index_dict_instantiator() -> IndexType:
     Instantiates and returns a raw index dict of `IndexType`.
     """
     return create_top_dict()
+
+
+def create_inverted_index() -> InvertedIndex:
+    """
+    Creates an InvertedIndex type.
+
+    Returns: an InvertedIndex object
+    """
+    return create_outer_dict()
 
 
 class InMemoryDictionaryIndex(Index, ABC):
