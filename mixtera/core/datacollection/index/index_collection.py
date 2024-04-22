@@ -3,6 +3,7 @@ from collections import defaultdict
 from enum import Enum
 from typing import Any, Callable, Union
 
+import portion
 from loguru import logger
 from mixtera.core.datacollection.index import (
     Index,
@@ -84,7 +85,16 @@ def create_inverted_index() -> InvertedIndex:
 
     Returns: an InvertedIndex object
     """
-    return create_outer_dict()
+    return create_mid_dict()
+
+
+def create_inverted_index_interval_dict() -> InvertedIndex:
+    """
+    Creates an inverted index with an interval dict at the leafs.
+
+    Returns: inverted index
+    """
+    return defaultdict(lambda: defaultdict(lambda: portion.IntervalDict))
 
 
 class InMemoryDictionaryIndex(Index, ABC):

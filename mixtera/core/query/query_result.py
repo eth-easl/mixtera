@@ -6,11 +6,13 @@ from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType, InvertedIndex
-from mixtera.core.datacollection.index.index_collection import IndexFactory, \
-    IndexTypes, raw_index_dict_instantiator, create_inverted_index
+from mixtera.core.datacollection.index.index_collection import (IndexFactory, IndexTypes, raw_index_dict_instantiator,
+                                                                create_inverted_index_interval_dict)
 from mixtera.utils import defaultdict_to_dict
 
 import portion
+
+from mixtera.utils.utils import merge_property_dicts
 
 
 class QueryResult:
@@ -72,7 +74,6 @@ class QueryResult:
                     "dataset_id": {
                         "file_id": {[
                             (lo_bound, hi_bound, {feature_1_name: feature_1_value, ...}),
-                        ...
                         ]},
                         ...
                     },
@@ -80,20 +81,22 @@ class QueryResult:
                 }
 
         """
-
         # Invert index
-        inverted_dictionary: InvertedIndex = create_inverted_index()
+        inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
         for property_name, property_values in self.results.items():
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
                     for file_id, ranges in files.items():
-                        for range in ranges:
-                            inverted_dictionary[dataset_id][file_id].append(
-                                (portion.closedopen(range[0], range[1]), {property_name: property_value}))
+                        interval_dict = inverted_dictionary[dataset_id][file_id]
+                        for row_range in ranges:
+                            range_interval = portion.closedopen(row_range[0], row_range[1])
+                            intersections = interval_dict[range_interval]
+                            interval_dict[range_interval] = {property_name: property_value}
+                            for intersection_range, intersection_properties in intersections.items():
+                                interval_dict[intersection_range] = merge_property_dicts(
+                                    interval_dict[intersection_range].values()[0], intersection_properties)
 
-
-
-        return
+        return inverted_dictionary
 
 
 
