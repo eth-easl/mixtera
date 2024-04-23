@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import portion as P
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query import Operator, Query, QueryPlan
@@ -175,6 +176,94 @@ class TestQuery(unittest.TestCase):
         res = list(query.results)
         res = [x._index for x in res]
         self.assertEqual(res, [{"field": {"value": {"did": {"fid": [(0, 2)]}}}}])
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_create_inverted_index(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        reference_result = {
+            0: {
+                0: {
+                    P.closedopen(0, 25): {"topic": ["law"], "language": ["french"]},
+                    P.closedopen(25, 50)
+                    | P.closedopen(140, 150): {"topic": ["law", "medicine"], "language": ["french", "english"]},
+                    P.closedopen(50, 75) | P.closedopen(180, 200): {"topic": ["medicine"], "language": ["english"]},
+                    P.closedopen(80, 100): {"topic": ["medicine"]},
+                    P.closedopen(100, 120) | P.closedopen(210, 300): {"language": ["french"]},
+                    P.closedopen(120, 125): {"topic": ["medicine"], "language": ["french"]},
+                    P.closedopen(125, 140): {"topic": ["law", "medicine"], "language": ["french"]},
+                    P.closedopen(150, 180): {"topic": ["law", "medicine"], "language": ["english"]},
+                    P.closedopen(200, 210): {"language": ["french", "english"]},
+                    P.closedopen(300, 400): {"language": ["english"]},
+                },
+                1: {
+                    P.closedopen(50, 100): {"topic": ["medicine"], "language": ["english"]},
+                    P.closedopen(100, 150): {"topic": ["law", "medicine"], "language": ["french", "english"]},
+                    P.closedopen(150, 160) | P.closedopen(170, 200) | P.closedopen(250, 350): {"language": ["french"]},
+                    P.closedopen(160, 170): {"topic": ["medicine"], "language": ["french"]},
+                    P.closedopen(200, 210): {"topic": ["law", "medicine"], "language": ["french"]},
+                    P.closedopen(210, 250): {"topic": ["law"], "language": ["french"]},
+                },
+                2: {P.closedopen(10, 20): {"language": ["english"]}},
+            },
+            1: {
+                0: {
+                    P.closedopen(0, 25) | P.closedopen(200, 250): {"topic": ["law"]},
+                    P.closedopen(25, 40) | P.closedopen(60, 75): {"topic": ["law"], "language": ["french"]},
+                    P.closedopen(40, 50) | P.closedopen(75, 90): {"language": ["french"]},
+                    P.closedopen(50, 60): {"topic": ["law", "medicine"], "language": ["english"]},
+                    P.closedopen(90, 100): {"topic": ["medicine"], "language": ["french", "english"]},
+                    P.closedopen(100, 110) | P.closedopen(130, 150): {"topic": ["medicine"], "language": ["english"]},
+                },
+                1: {
+                    P.closedopen(0, 20): {"language": ["french"]},
+                    P.closedopen(20, 30): {"topic": ["law"], "language": ["french"]},
+                    P.closedopen(30, 50): {"topic": ["medicine"], "language": ["french"]},
+                    P.closedopen(50, 100) | P.closedopen(150, 200): {"topic": ["medicine"]},
+                },
+            },
+            2: {
+                0: {
+                    P.closedopen(0, 80) | P.closedopen(150, 200): {"language": ["english"]},
+                    P.closedopen(80, 100): {"topic": ["law"], "language": ["english"]},
+                }
+            },
+        }
+
+        query = Query.for_job("job_id").complexmockoperator("test")
+        assert self.client.execute_query(query, 1)
+        inverted_index = query.results._invert_result(query.results.results._index)
+
+        # True result vs reference
+        for document_id, doc_entries in inverted_index.items():
+            for file_id, file_entries in doc_entries.items():
+                for intervals, properties in file_entries.items():
+                    self.assertTrue(
+                        document_id in reference_result
+                        and file_id in reference_result[document_id]
+                        and intervals in reference_result[document_id][file_id]
+                    )
+                    self.assertDictEqual(properties, reference_result[document_id][file_id][intervals])
+
+        # Reference vs True result
+        for document_id, doc_entries in reference_result.items():
+            for file_id, file_entries in doc_entries.items():
+                for intervals, properties in file_entries.items():
+                    self.assertTrue(
+                        document_id in inverted_index
+                        and file_id in inverted_index[document_id]
+                        and intervals in inverted_index[document_id][file_id]
+                    )
+                    self.assertDictEqual(properties, inverted_index[document_id][file_id][intervals].values()[0])
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
