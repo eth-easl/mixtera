@@ -27,7 +27,9 @@ class QueryResult:
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    def __init__(self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1) -> None:
+    def __init__(
+        self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1, mixture: Optional[int] = None
+    ) -> None:
         """
         Args:
             mdc (LocalDataCollection): The LocalDataCollection object.
@@ -38,6 +40,7 @@ class QueryResult:
         self.results = results
         self._meta = self._parse_meta(mdc)
         self._chunks: list[IndexType] = []
+        self._mixture = mixture
         self.chunking()
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
@@ -164,8 +167,12 @@ class QueryResult:
         """
         This is a dummy method for implementing chunking added here to not break the unit tests.
         """
+        # mixture_dict = self._mixture.get_mixture()
         inverted_index: InvertedIndex = self._invert_result(self.results._index)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
+        # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
+        #                 (3) add unit test for it (4) [separately of this] add multiprocessing to inverted/chunk index
+
         return chunker_index
 
     def chunking(self) -> None:
