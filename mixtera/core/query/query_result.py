@@ -163,7 +163,7 @@ class QueryResult:
         """
         inverted_index: InvertedIndex = self._invert_result(self.results)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
-        return ChunkerIndex
+        return chunker_index
 
 
     def chunking(self) -> None:

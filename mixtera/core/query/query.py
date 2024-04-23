@@ -17,7 +17,7 @@ class Query:
         return self.query_plan.is_empty()
 
     @classmethod
-    def register(cls, operator: Operator) -> None:
+    def register(cls, operator: type[Operator]) -> None:
         """
         This method registers operators for the query.
         By default, all built-in operators (under ./operators) are registered.
