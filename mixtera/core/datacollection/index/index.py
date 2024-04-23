@@ -27,8 +27,9 @@ IndexType = dict[str, IndexFeatureValueType]
 
 
 # Inverted index: dataset_id -> file_id -> portion.Interval -> property_name -> [property_value_1, ...]
-InvertedIndex = dict[int, dict[str | int, list[
-    tuple[Union[tuple[int, int], portion.Interval], dict[str, Union[int, float, str]]]]]]
+InvertedIndex = dict[
+    int, dict[str | int, list[tuple[Union[tuple[int, int], portion.Interval], dict[str, Union[int, float, str]]]]]
+]
 
 # Chunker index: hashable_prop_key -> dataset_id -> file_id -> list of ranges
 ChunkerIndex = dict[str, dict[int, dict[int | str, IndexRowRangeType]]]

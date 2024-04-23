@@ -6,12 +6,13 @@ from typing import Any, Callable, Union
 import portion
 from loguru import logger
 from mixtera.core.datacollection.index import (
+    ChunkerIndex,
     Index,
     IndexDatasetEntryRangeType,
     IndexFeatureValueType,
     IndexRangeType,
     IndexType,
-    InvertedIndex, ChunkerIndex
+    InvertedIndex,
 )
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
@@ -94,7 +95,7 @@ def create_inverted_index_interval_dict() -> InvertedIndex:
 
     Returns: inverted index
     """
-    return defaultdict(lambda: defaultdict(lambda: portion.IntervalDict()))
+    return defaultdict(lambda: defaultdict(portion.IntervalDict))
 
 
 def create_chunker_index() -> ChunkerIndex:
