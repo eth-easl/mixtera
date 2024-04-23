@@ -2,18 +2,20 @@ import multiprocessing as mp
 from typing import Callable, Optional, Type
 
 import dill
+import portion
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType, InvertedIndex, ChunkerIndex
-from mixtera.core.datacollection.index.index_collection import (IndexFactory, IndexTypes, raw_index_dict_instantiator,
-                                                                create_inverted_index_interval_dict,
-                                                                create_chunker_index)
+from mixtera.core.datacollection.index import ChunkerIndex, IndexType, InvertedIndex
+from mixtera.core.datacollection.index.index_collection import (
+    IndexFactory,
+    IndexTypes,
+    create_chunker_index,
+    create_inverted_index_interval_dict,
+    raw_index_dict_instantiator,
+)
 from mixtera.utils import defaultdict_to_dict
-
-import portion
-
-from mixtera.utils.utils import merge_property_dicts, generate_hashable_search_key
+from mixtera.utils.utils import generate_hashable_search_key, merge_property_dicts
 
 
 class QueryResult:
@@ -91,7 +93,7 @@ class QueryResult:
         """
         inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
 
-        for property_name, property_values in index.items():
+        for property_name, property_values in index.items():  # pylint: disable=too-many-nested-blocks
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
                     for file_id, ranges in files.items():
@@ -102,7 +104,8 @@ class QueryResult:
                             interval_dict[range_interval] = {property_name: [property_value]}
                             for intersection_range, intersection_properties in intersections.items():
                                 interval_dict[intersection_range] = merge_property_dicts(
-                                    interval_dict[intersection_range].values()[0], intersection_properties)
+                                    interval_dict[intersection_range].values()[0], intersection_properties
+                                )
 
         # TODO(DanGraur): Add option to parallelize: (1) find count of (prop, value, dset, file) tuples (2) divide these
         #                 by the nr of threads/procs; give each proc one of these ranges (3) each proc produces
@@ -146,7 +149,7 @@ class QueryResult:
                     for interval in intervals:
                         # Create a key for this interval; only the first value for a property is considered here
                         property_names = list(interval_properties.keys())
-                        property_values = [interval_properties[property_name][0] for property_name in property_names]
+                        property_values = [interval_properties[property_name] for property_name in property_names]
                         hashable_key = generate_hashable_search_key(property_names, property_values)
 
                         # Add the interval to the chunk index
@@ -164,7 +167,6 @@ class QueryResult:
         inverted_index: InvertedIndex = self._invert_result(self.results._index)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
         return chunker_index
-
 
     def chunking(self) -> None:
         # structure of self.chunks: [index_type, index_type, ...]

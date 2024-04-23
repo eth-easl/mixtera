@@ -134,25 +134,26 @@ def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) ->
 
     for k, v in left.items():
         if k in right:
-          intersection.add(k)
+            intersection.add(k)
         else:
 
-          new_dict[k] = v.copy()
+            new_dict[k] = v.copy()
 
     for k, v in right.items():
         if k not in intersection:
-          new_dict[k] = v.copy()
+            new_dict[k] = v.copy()
         else:
-          if unique_lists:
-            new_dict[k] = list(set(v + left[k]))
-          else:
-            new_dict[k] = v + left[k]
+            if unique_lists:
+                new_dict[k] = list(set(v + left[k]))
+            else:
+                new_dict[k] = v + left[k]
 
     return new_dict
 
 
-def generate_hashable_search_key(property_names: list[str], property_values: list[str | int | float],
-                                 sort_lists: bool = True) -> str:
+def generate_hashable_search_key(
+    property_names: list[str], property_values: list[list[str | int | float]], sort_lists: bool = True
+) -> str:
     """
     Generate a string representation of a set of property names and values. By default,
     these should be sorted and aligned.
@@ -165,7 +166,8 @@ def generate_hashable_search_key(property_names: list[str], property_values: lis
     Returns:
         A string that can be used in a ChunkerIndex to identify ranges fulfilling a certain property
     """
-    zipped = zip(property_names, property_values)
+    zipped = list(zip(property_names, property_values))
     if sort_lists:
-        zipped = sorted(zipped, key=lambda x: x[0])
-    return ";".join([f"{x}:{y}" for x, y in zipped])
+        zipped.sort(key=lambda x: x[0])
+    # return ";".join([f"{x}:{y}" for x, y in zipped])  # Take the first value
+    return ";".join([f"{x}:{','.join([str(yy) for yy in y])}" for x, y in zipped])  # Take all values

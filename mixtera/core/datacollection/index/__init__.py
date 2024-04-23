@@ -3,6 +3,7 @@ This submodule contains implementations for Mixtera indexes
 """
 
 from .index import (
+    ChunkerIndex,
     Index,
     IndexCommonType,
     IndexDatasetEntryLineType,
@@ -20,7 +21,6 @@ from .index import (
     IndexRowRangeType,
     IndexType,
     InvertedIndex,
-    ChunkerIndex
 )
 from .index_collection import InMemoryDictionaryIndex, InMemoryDictionaryLineIndex, InMemoryDictionaryRangeIndex
 
@@ -49,5 +49,5 @@ __all__ = [
     "InMemoryDictionaryLineIndex",
     "InMemoryDictionaryRangeIndex",
     "InvertedIndex",
-    "ChunkerIndex"
+    "ChunkerIndex",
 ]
