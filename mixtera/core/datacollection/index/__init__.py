@@ -19,7 +19,8 @@ from .index import (
     IndexRowIndicatorsType,
     IndexRowRangeType,
     IndexType,
-    InvertedIndex
+    InvertedIndex,
+    ChunkerIndex
 )
 from .index_collection import InMemoryDictionaryIndex, InMemoryDictionaryLineIndex, InMemoryDictionaryRangeIndex
 
@@ -47,5 +48,6 @@ __all__ = [
     "InMemoryDictionaryIndex",
     "InMemoryDictionaryLineIndex",
     "InMemoryDictionaryRangeIndex",
-    "InvertedIndex"
+    "InvertedIndex",
+    "ChunkerIndex"
 ]

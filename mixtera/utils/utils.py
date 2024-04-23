@@ -112,7 +112,7 @@ def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Un
     return to_return if not copy else deepcopy(to_return)
 
 
-def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False):
+def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) -> dict:
     """
     Merge two dictionaries that contain key-value pairs of property_name ->
     [property_value_1, ...] into one.
@@ -145,3 +145,23 @@ def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False):
             new_dict[k] = v + left[k]
 
     return new_dict
+
+
+def generate_hashable_search_key(property_names: list[str], property_values: list[str | int | float],
+                                 sort_lists: bool = True) -> str:
+    """
+    Generate a string representation of a set of property names and values. By default,
+    these should be sorted and aligned.
+
+    Args:
+        property_names: a list with the property names
+        property_values: a list with the property values
+        sort_lists: a boolean, indicating whether to sort the two lists (the property_values relative to property_names)
+
+    Returns:
+        A string that can be used in a ChunkerIndex to identify ranges fulfilling a certain property
+    """
+    zipped = zip(property_names, property_values)
+    if sort_lists:
+        zipped = sorted(zipped, key=lambda x: x[0])
+    return ";".join([f"{x}:{y}" for x, y in zipped])

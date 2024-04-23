@@ -5,14 +5,15 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType, InvertedIndex
+from mixtera.core.datacollection.index import IndexType, InvertedIndex, ChunkerIndex
 from mixtera.core.datacollection.index.index_collection import (IndexFactory, IndexTypes, raw_index_dict_instantiator,
-                                                                create_inverted_index_interval_dict)
+                                                                create_inverted_index_interval_dict,
+                                                                create_chunker_index)
 from mixtera.utils import defaultdict_to_dict
 
 import portion
 
-from mixtera.utils.utils import merge_property_dicts
+from mixtera.utils.utils import merge_property_dicts, generate_hashable_search_key
 
 
 class QueryResult:
@@ -63,27 +64,34 @@ class QueryResult:
             "total_length": total_length,
         }
 
-    def _invert_result(self) -> InvertedIndex:
+    @staticmethod
+    def _invert_result(index: IndexType) -> InvertedIndex:
         """
-        Returns a dictionary that points from files to lists of ranges annotated
-        with properties.
-
-        Returns:
-            A dictionary of the form:
-                {
-                    "dataset_id": {
-                        "file_id": {[
-                            (lo_bound, hi_bound, {feature_1_name: feature_1_value, ...}),
-                        ]},
+        Returns an InvertedIndex that points from files to an ordered dictionary
+        of ranges (from portion) annotated with properties:
+            {
+                "dataset_id": {
+                    "file_id": {
+                        portion.Interval: {
+                            feature_1_name: [feature_1_value, ...],
+                            ...
+                        },
                         ...
                     },
                     ...
-                }
+                },
+                ...
+            }
 
+        Args:
+            index: an IndexType object that will be inverted.
+
+        Returns:
+            An InvertedIndex
         """
-        # Invert index
         inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
-        for property_name, property_values in self.results.items():
+
+        for property_name, property_values in index.items():
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
                     for file_id, ranges in files.items():
@@ -96,10 +104,66 @@ class QueryResult:
                                 interval_dict[intersection_range] = merge_property_dicts(
                                     interval_dict[intersection_range].values()[0], intersection_properties)
 
+        # TODO(DanGraur): Add option to parallelize: (1) find count of (prop, value, dset, file) tuples (2) divide these
+        #                 by the nr of threads/procs; give each proc one of these ranges (3) each proc produces
+        #                 dset, file -> list[(range, prop)] data structures (4) count nr of files; divide by proc count
+        #                 and disseminate to procs (5) each proc merges the props and intervals per files received.
+        #                 (6) merge into a single data structure. This process is a 2-stage map-reduce.
         return inverted_dictionary
 
+    @staticmethod
+    def _create_chunker_index(inverted_index: InvertedIndex) -> ChunkerIndex:
+        """
+        Create a ChunkerIndex object from an InvertedIndex object. A ChunkerIndex has the following structure:
+        {
+            "prop_0_name:prop_0_value;prop_1_name:prop_1_value...": {
+                dataset_0_id: {
+                    file_0_id: [
+                        [lo_bound_0, hi_bound_0],
+                        ...
+                    ],
+                    ...
+                },
+                ...
+            },
+            ...
+        }
 
+        The ChunkerIndex object is useful for creating mixture chunks.
 
+        Args:
+            inverted_index: an InvertedIndex object.
+
+        Returns: a ChunkerIndex object.
+
+        """
+        chunker_index: ChunkerIndex = create_chunker_index()
+
+        for document_id, document_entries in inverted_index.items():
+            for file_id, file_entries in document_entries.items():
+                for intervals, interval_properties in file_entries.items():
+                    # intervals can be a simplified interval (e.g. '[-7,-2) | [11,15)') so we need a for loop
+                    for interval in intervals:
+                        # Create a key for this interval; only the first value for a property is considered here
+                        property_names = list(interval_properties.keys())
+                        property_values = [interval_properties[property_name][0] for property_name in property_names]
+                        hashable_key = generate_hashable_search_key(property_names, property_values)
+
+                        # Add the interval to the chunk index
+                        chunker_index[hashable_key][document_id][file_id].append([interval.lower, interval.upper])
+
+        # TODO(DanGraur): Add option to parallelize: (1) count number of files (2) disseminate to procs equally;
+        #                 each proc handles the list reduction and converts to a chunker index (3) chunker indexes are
+        #                 returned and merged by main proc
+        return chunker_index
+
+    def _temp_chunker(self) -> ChunkerIndex:
+        """
+        This is a dummy method for implementing chunking added here to not break the unit tests.
+        """
+        inverted_index: InvertedIndex = self._invert_result(self.results)
+        chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
+        return ChunkerIndex
 
 
     def chunking(self) -> None:
