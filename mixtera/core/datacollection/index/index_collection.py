@@ -94,7 +94,7 @@ def create_inverted_index_interval_dict() -> InvertedIndex:
 
     Returns: inverted index
     """
-    return defaultdict(lambda: defaultdict(lambda: portion.IntervalDict))
+    return defaultdict(lambda: defaultdict(lambda: portion.IntervalDict()))
 
 
 def create_chunker_index() -> ChunkerIndex:
