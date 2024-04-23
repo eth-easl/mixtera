@@ -66,7 +66,7 @@ class Query:
     def __str__(self) -> str:
         return str(self.query_plan)
 
-    def execute(self, mdc: MixteraDataCollection, chunk_size: int = 1) -> None:
+    def execute(self, mdc: MixteraDataCollection, chunk_size: int = 1, mixture: Optional[int] = None) -> None:
         """
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
