@@ -114,8 +114,11 @@ def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Un
 
 def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) -> dict:
     """
-    Merge two dictionaries that contain key-value pairs of property_name ->
-    [property_value_1, ...] into one.
+    Merge two dictionaries that contain key-value pairs of the form:
+        {
+            property_name: [property_value_1, ...],
+            ...
+        }
 
     Args:
         left: left property dictionary
@@ -133,6 +136,7 @@ def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) ->
         if k in right:
           intersection.add(k)
         else:
+
           new_dict[k] = v.copy()
 
     for k, v in right.items():

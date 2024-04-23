@@ -99,7 +99,7 @@ class QueryResult:
                         for row_range in ranges:
                             range_interval = portion.closedopen(row_range[0], row_range[1])
                             intersections = interval_dict[range_interval]
-                            interval_dict[range_interval] = {property_name: property_value}
+                            interval_dict[range_interval] = {property_name: [property_value]}
                             for intersection_range, intersection_properties in intersections.items():
                                 interval_dict[intersection_range] = merge_property_dicts(
                                     interval_dict[intersection_range].values()[0], intersection_properties)
@@ -161,7 +161,7 @@ class QueryResult:
         """
         This is a dummy method for implementing chunking added here to not break the unit tests.
         """
-        inverted_index: InvertedIndex = self._invert_result(self.results)
+        inverted_index: InvertedIndex = self._invert_result(self.results._index)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
         return chunker_index
 
