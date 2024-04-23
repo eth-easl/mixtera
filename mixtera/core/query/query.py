@@ -6,6 +6,8 @@ from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.query_plan import QueryPlan
 from mixtera.core.query.query_result import QueryResult
 
+from .mixture import Mixture
+
 
 class Query:
     def __init__(self, job_id: str) -> None:
@@ -66,7 +68,7 @@ class Query:
     def __str__(self) -> str:
         return str(self.query_plan)
 
-    def execute(self, mdc: MixteraDataCollection, chunk_size: int = 1, mixture: Optional[int] = None) -> None:
+    def execute(self, mdc: MixteraDataCollection, chunk_size: int = 1, mixture: Optional[Mixture] = None) -> None:
         """
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
@@ -76,5 +78,5 @@ class Query:
         """
         logger.debug(f"Executing query locally with chunk size {chunk_size}")
         self.root.post_order_traverse(mdc)
-        self.results = QueryResult(mdc, self.root.results, chunk_size=chunk_size)
+        self.results = QueryResult(mdc, self.root.results, chunk_size=chunk_size, mixture=mixture)
         logger.debug("Query executed.")

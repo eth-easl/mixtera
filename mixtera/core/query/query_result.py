@@ -17,6 +17,8 @@ from mixtera.core.datacollection.index.index_collection import (
 from mixtera.utils import defaultdict_to_dict
 from mixtera.utils.utils import generate_hashable_search_key, merge_property_dicts
 
+from .mixture import Mixture
+
 
 class QueryResult:
     """QueryResult is a class that represents the results of a query.
@@ -28,7 +30,7 @@ class QueryResult:
     """
 
     def __init__(
-        self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1, mixture: Optional[int] = None
+        self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1, mixture: Optional[Mixture] = None
     ) -> None:
         """
         Args:
