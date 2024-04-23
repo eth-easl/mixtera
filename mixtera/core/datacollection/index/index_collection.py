@@ -11,7 +11,7 @@ from mixtera.core.datacollection.index import (
     IndexFeatureValueType,
     IndexRangeType,
     IndexType,
-    InvertedIndex
+    InvertedIndex, ChunkerIndex
 )
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
@@ -95,6 +95,15 @@ def create_inverted_index_interval_dict() -> InvertedIndex:
     Returns: inverted index
     """
     return defaultdict(lambda: defaultdict(lambda: portion.IntervalDict))
+
+
+def create_chunker_index() -> ChunkerIndex:
+    """
+    Creates an ChunkerIndex type.
+
+    Returns: an ChunkerIndex object
+    """
+    return defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
 
 class InMemoryDictionaryIndex(Index, ABC):
