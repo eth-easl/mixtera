@@ -329,6 +329,131 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
+        reference_chunks = [
+            {"language:french;topic:law": {0: {0: [(0, 6)]}}, "language:english;topic:medicine": {0: {0: [(50, 54)]}}},
+            {"language:french;topic:law": {0: {0: [(6, 12)]}}, "language:english;topic:medicine": {0: {0: [(54, 58)]}}},
+            {
+                "language:french;topic:law": {0: {0: [(12, 18)]}},
+                "language:english;topic:medicine": {0: {0: [(58, 62)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(18, 24)]}},
+                "language:english;topic:medicine": {0: {0: [(62, 66)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(24, 25), (25, 30)]}},
+                "language:english;topic:medicine": {0: {0: [(66, 70)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(30, 36)]}},
+                "language:english;topic:medicine": {0: {0: [(70, 74)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(36, 42)]}},
+                "language:english;topic:medicine": {0: {0: [(74, 75), (180, 183)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(42, 48)]}},
+                "language:english;topic:medicine": {0: {0: [(183, 187)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(48, 50), (140, 144)]}},
+                "language:english;topic:medicine": {0: {0: [(187, 191)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(144, 150)]}},
+                "language:english;topic:medicine": {0: {0: [(191, 195)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(125, 131)]}},
+                "language:english;topic:medicine": {0: {0: [(195, 199)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(131, 137)]}},
+                "language:english;topic:medicine": {0: {0: [(199, 200)], 1: [(50, 53)]}},
+            },
+            {
+                "language:french;topic:law": {0: {0: [(137, 140)], 1: [(100, 103)]}},
+                "language:english;topic:medicine": {0: {1: [(53, 57)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(103, 109)]}},
+                "language:english;topic:medicine": {0: {1: [(57, 61)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(109, 115)]}},
+                "language:english;topic:medicine": {0: {1: [(61, 65)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(115, 121)]}},
+                "language:english;topic:medicine": {0: {1: [(65, 69)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(121, 127)]}},
+                "language:english;topic:medicine": {0: {1: [(69, 73)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(127, 133)]}},
+                "language:english;topic:medicine": {0: {1: [(73, 77)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(133, 139)]}},
+                "language:english;topic:medicine": {0: {1: [(77, 81)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(139, 145)]}},
+                "language:english;topic:medicine": {0: {1: [(81, 85)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(145, 150), (200, 201)]}},
+                "language:english;topic:medicine": {0: {1: [(85, 89)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(201, 207)]}},
+                "language:english;topic:medicine": {0: {1: [(89, 93)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(207, 210), (210, 213)]}},
+                "language:english;topic:medicine": {0: {1: [(93, 97)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(213, 219)]}},
+                "language:english;topic:medicine": {0: {1: [(97, 100)]}, 1: {0: [(100, 101)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(219, 225)]}},
+                "language:english;topic:medicine": {1: {0: [(101, 105)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(225, 231)]}},
+                "language:english;topic:medicine": {1: {0: [(105, 109)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(231, 237)]}},
+                "language:english;topic:medicine": {1: {0: [(109, 110), (130, 133)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(237, 243)]}},
+                "language:english;topic:medicine": {1: {0: [(133, 137)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(243, 249)]}},
+                "language:english;topic:medicine": {1: {0: [(137, 141)]}},
+            },
+            {
+                "language:french;topic:law": {0: {1: [(249, 250)]}, 1: {0: [(25, 30)]}},
+                "language:english;topic:medicine": {1: {0: [(141, 145)]}},
+            },
+            {
+                "language:french;topic:law": {1: {0: [(30, 36)]}},
+                "language:english;topic:medicine": {1: {0: [(145, 149)]}},
+            },
+            {
+                "language:french;topic:law": {1: {0: [(36, 40), (60, 62)]}},
+                "language:english;topic:medicine": {1: {0: [(149, 150)]}},
+            },
+        ]
+
         mixture_concentration = {
             "language:french;topic:law": 0.6,  # 6 instances per batch
             "language:english;topic:medicine": 0.4,  # 4 instances per batch
@@ -338,9 +463,35 @@ class TestQuery(unittest.TestCase):
 
         mixture = NoopMixture(10, mixture_concentration)
         assert self.client.execute_query(query, mixture=mixture)
+        chunks = query.results._chunks
 
-        chunks = query.results._temp_chunker()
-        import json
+        def _subchunk_counter(chunk, key):
+            count = 0
+            for _0, document_entry in chunk[key].items():
+                for _1, ranges in document_entry.items():
+                    for base_range in ranges:
+                        count += base_range[1] - base_range[0]
+            return count
 
-        print()
-        print(json.dumps(chunks, indent=4))
+        expected_chunk_count = 32
+        expected_error_count_s1 = 0
+        expected_error_count_s2 = 1
+
+        real_error_count_s1 = 0
+        real_error_count_s2 = 0
+
+        for chunk in chunks:
+            subchunk_1_count = _subchunk_counter(chunk, "language:french;topic:law")
+            subchunk_2_count = _subchunk_counter(chunk, "language:english;topic:medicine")
+
+            if subchunk_1_count != 6:
+                real_error_count_s1 += 1
+
+            if subchunk_2_count != 4:
+                real_error_count_s2 += 1
+
+        self.assertEqual(expected_chunk_count, len(chunks))
+        self.assertEqual(expected_error_count_s1, real_error_count_s1)
+        self.assertEqual(expected_error_count_s2, real_error_count_s2)
+        for i in range(len(chunks)):
+            self.assertDictEqual(reference_chunks[i], chunks[i])
