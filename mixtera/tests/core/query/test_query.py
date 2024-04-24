@@ -349,14 +349,16 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         mixture_concentration = {
-            "language:french;topic:law": 0.6,
-            "language:english;topic:medicine": 0.4,
+            "language:french;topic:law": 0.6,        # 6 instances per batch
+            "language:english;topic:medicine": 0.4,  # 4 instances per batch
         }
 
         query = Query.for_job("job_id").complexmockoperator("test")
 
         mixture = NoopMixture(10, mixture_concentration)
-        assert self.client.execute_query(query, 10, mixture)
+        assert self.client.execute_query(query, 1, mixture)
 
         chunks = query.results._temp_chunker()
-        print(chunks)
+        import json
+        print()
+        print(json.dumps(chunks, indent=4))
