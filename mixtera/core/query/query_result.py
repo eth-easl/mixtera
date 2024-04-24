@@ -1,4 +1,5 @@
 import multiprocessing as mp
+from collections import defaultdict
 from typing import Callable, Optional, Type
 
 import dill
@@ -6,7 +7,7 @@ import portion
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex, Index, IndexType, InvertedIndex
+from mixtera.core.datacollection.index import ChunkerIndex, Index, IndexType, InvertedIndex, ChunkerIndexDatasetEntries
 from mixtera.core.datacollection.index.index_collection import (
     IndexFactory,
     IndexTypes,
@@ -166,7 +167,86 @@ class QueryResult:
         #                 returned and merged by main proc
         return chunker_index
 
-    def _temp_chunker(self) -> ChunkerIndex:
+    @staticmethod
+    def _generate_per_mixture_component_chunks(chunker_index: ChunkerIndex,
+                                               component_key: str, component_cardinality: int) -> list[
+        ChunkerIndexDatasetEntries]:
+        """
+        This method per chunks for each component of a mixture (e.g. 25% medicine + english) given a key into
+        the chunking index and the cardinality (in number of instances) for the component
+        (e.g. 25% --> 25 instances).
+
+        Args:
+            chunker_index: The chunking index
+            component_key: chunking index key
+            component_cardinality: number of instances required for the component of the mixture
+
+        Returns:
+            A list of component chunks. The list has the following format:
+            [
+                {
+                    dataset_0_id: {
+                        file_0_id: [
+                            [low_bound_0, high_bound_0],
+                            ...
+                        },
+                        ...
+                    },
+                    ...
+                },
+                ...
+            ]
+        """
+        component_chunks = []
+        target_ranges = chunker_index[component_key]
+
+        current_cardinality = 0
+        current_parition = defaultdict(lambda: defaultdict(list))
+
+        for dataset_id, document_entries in target_ranges.items():
+            for file_id, ranges in document_entries.items():
+                for base_range in ranges:
+                    current_range = list(base_range)
+                    range_cardinality = current_range[1] - current_range[0]
+                    if current_cardinality + range_cardinality < component_cardinality:
+                        current_parition[dataset_id][file_id].append(current_range)
+                        current_cardinality += range_cardinality
+                    else:
+                        # Add the partial range and the full component
+                        diff = current_cardinality + range_cardinality - component_cardinality
+                        current_parition[dataset_id][file_id].append([current_range[0], current_range[1] - diff])
+                        component_chunks.append(current_parition)
+
+                        # Prepare the rest of the range and new component
+                        current_range = [current_range[1] - diff, current_range[1]]
+                        current_parition = defaultdict(lambda: defaultdict(list))
+                        current_cardinality = 0
+
+                        # Process the remaining range
+                        continue_processing = current_range[1] != current_range[0]
+                        while continue_processing:
+                            range_cardinality = current_range[1] - current_range[0]
+                            if current_cardinality + range_cardinality < component_cardinality:
+                                current_parition[dataset_id][file_id].append(current_range)
+                                current_cardinality += range_cardinality
+                                continue_processing = False
+                            else:
+                                diff = current_cardinality + range_cardinality - component_cardinality
+                                current_parition[dataset_id][file_id].append(
+                                    [current_range[0], current_range[1] - diff])
+                                component_chunks.append(current_parition)
+
+                                # Prepare the rest of the range and new component
+                                current_range = [current_range[1] - diff, current_range[1]]
+                                current_parition = defaultdict(lambda: defaultdict(list))
+                                current_cardinality = 0
+
+                                # Stop if range has been exhausted perfectly
+                                continue_processing = current_range[1] <= current_range[0]
+
+        return component_chunks
+
+    def _temp_chunker(self) -> list[ChunkerIndex]:
         """
         This is a dummy method for implementing chunking added here to not break the unit tests.
         """
@@ -175,7 +255,18 @@ class QueryResult:
         # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
         #                 (3) add unit test for it (4) [separately of this] add multiprocessing to inverted/chunk index
 
-        return chunker_index
+        mixture = self._mixture.get_mixture()
+        mixture_keys = mixture.keys()
+        component_chunks = [self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys]
+
+        chunks = []
+        for components in zip(component_chunks):
+            chunk = {}
+            for component in zip(mixture_keys, components):
+                chunk[component[0]] = component[1]
+            chunks.append(chunk)
+
+        return chunks
 
     def chunking(self) -> None:
         # structure of self.chunks: [index_type, index_type, ...]

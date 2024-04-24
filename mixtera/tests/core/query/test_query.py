@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import portion as P
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
-from mixtera.core.query import Operator, Query, QueryPlan
+from mixtera.core.query import Operator, Query, QueryPlan, NoopMixture
 from mixtera.utils import defaultdict_to_dict
 
 
@@ -334,3 +334,29 @@ class TestQuery(unittest.TestCase):
         chunk_index = query.results._create_chunker_index(inverted_index)
         print(defaultdict_to_dict(chunk_index))
         self.assertDictEqual(defaultdict_to_dict(chunk_index), reference_result)
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_create_chunking(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        mixture_concentration = {
+            "language:french;topic:law": 0.6,
+            "language:english;topic:medicine": 0.4,
+        }
+
+        query = Query.for_job("job_id").complexmockoperator("test")
+
+        mixture = NoopMixture(10, mixture_concentration)
+        assert self.client.execute_query(query, 10, mixture)
+
+        chunks = query.results._temp_chunker()
+        print(chunks)

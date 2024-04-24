@@ -32,7 +32,8 @@ InvertedIndex = dict[
 ]
 
 # Chunker index: hashable_prop_key -> dataset_id -> file_id -> list of ranges
-ChunkerIndex = dict[str, dict[int, dict[int | str, IndexRowRangeType]]]
+ChunkerIndexDatasetEntries = dict[int, dict[int | str, IndexRowRangeType]]
+ChunkerIndex = dict[str, ChunkerIndexDatasetEntries]
 
 
 class Index(ABC):

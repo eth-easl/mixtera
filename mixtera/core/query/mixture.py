@@ -32,9 +32,11 @@ class Mixture(ABC):
 class NoopMixture(Mixture):
     """Mixture class that simply stores a predefined mixture."""
 
-    def __init__(self, chunk_size: int, mixture: dict[str, int]) -> None:
+    def __init__(self, chunk_size: int, mixture: dict[str, float]) -> None:
         super().__init__(chunk_size)
-        self._mixture = mixture
+        self._mixture = {
+            key: int(chunk_size * val) for key, val in mixture.items()
+        }
 
     def get_mixture(self) -> dict[str, int]:
         return self._mixture
