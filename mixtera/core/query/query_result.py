@@ -201,7 +201,7 @@ class QueryResult:
         target_ranges = chunker_index[component_key]
 
         current_cardinality = 0
-        current_parition = defaultdict(lambda: defaultdict(list))
+        current_partition = defaultdict(lambda: defaultdict(list))
 
         for dataset_id, document_entries in target_ranges.items():
             for file_id, ranges in document_entries.items():
@@ -209,40 +209,43 @@ class QueryResult:
                     current_range = list(base_range)
                     range_cardinality = current_range[1] - current_range[0]
                     if current_cardinality + range_cardinality < component_cardinality:
-                        current_parition[dataset_id][file_id].append(current_range)
+                        current_partition[dataset_id][file_id].append(current_range)
                         current_cardinality += range_cardinality
                     else:
                         # Add the partial range and the full component
                         diff = current_cardinality + range_cardinality - component_cardinality
-                        current_parition[dataset_id][file_id].append([current_range[0], current_range[1] - diff])
-                        component_chunks.append(current_parition)
+                        current_partition[dataset_id][file_id].append([current_range[0], current_range[1] - diff])
+                        component_chunks.append(current_partition)
 
                         # Prepare the rest of the range and new component
                         current_range = [current_range[1] - diff, current_range[1]]
-                        current_parition = defaultdict(lambda: defaultdict(list))
+                        current_partition = defaultdict(lambda: defaultdict(list))
                         current_cardinality = 0
 
                         # Process the remaining range
-                        continue_processing = current_range[1] != current_range[0]
+                        continue_processing = current_range[1] > current_range[0]
                         while continue_processing:
                             range_cardinality = current_range[1] - current_range[0]
                             if current_cardinality + range_cardinality < component_cardinality:
-                                current_parition[dataset_id][file_id].append(current_range)
+                                current_partition[dataset_id][file_id].append(current_range)
                                 current_cardinality += range_cardinality
                                 continue_processing = False
                             else:
                                 diff = current_cardinality + range_cardinality - component_cardinality
-                                current_parition[dataset_id][file_id].append(
+                                current_partition[dataset_id][file_id].append(
                                     [current_range[0], current_range[1] - diff])
-                                component_chunks.append(current_parition)
+                                component_chunks.append(current_partition)
 
                                 # Prepare the rest of the range and new component
                                 current_range = [current_range[1] - diff, current_range[1]]
-                                current_parition = defaultdict(lambda: defaultdict(list))
+                                current_partition = defaultdict(lambda: defaultdict(list))
                                 current_cardinality = 0
 
                                 # Stop if range has been exhausted perfectly
-                                continue_processing = current_range[1] <= current_range[0]
+                                continue_processing = current_range[1] > current_range[0]
+
+        if current_cardinality > 0:
+            component_chunks.append(current_partition)
 
         return component_chunks
 
@@ -260,7 +263,7 @@ class QueryResult:
         component_chunks = [self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys]
 
         chunks = []
-        for components in zip(component_chunks):
+        for components in zip(*component_chunks):
             chunk = {}
             for component in zip(mixture_keys, components):
                 chunk[component[0]] = component[1]
