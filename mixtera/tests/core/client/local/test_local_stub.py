@@ -58,9 +58,9 @@ class TestLocalStub(unittest.TestCase):
         self.local_stub._mdc = mock_mdc
         self.local_stub._register_query = MagicMock(return_value=True)
 
-        result = self.local_stub.execute_query(query, chunk_size)
+        result = self.local_stub.execute_query(query, chunk_size=chunk_size, mixture=None)
 
-        query.execute.assert_called_once_with(mock_mdc, chunk_size=chunk_size)
+        query.execute.assert_called_once_with(mock_mdc, chunk_size=chunk_size, mixture=None)
         self.local_stub._register_query.assert_called_once_with(query, chunk_size)
         self.assertTrue(result)
 
@@ -71,9 +71,9 @@ class TestLocalStub(unittest.TestCase):
         query.job_id = "test_job_id"
         self.local_stub._register_query = MagicMock(return_value=False)
         self.local_stub._mdc = mock_mdc
-        result = self.local_stub.execute_query(query, chunk_size)
+        result = self.local_stub.execute_query(query, chunk_size=chunk_size, mixture=None)
 
-        query.execute.assert_called_once_with(mock_mdc, chunk_size=chunk_size)
+        query.execute.assert_called_once_with(mock_mdc, chunk_size=chunk_size, mixture=None)
         self.local_stub._register_query.assert_called_once_with(query, chunk_size)
         self.assertFalse(result)
 

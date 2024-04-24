@@ -34,9 +34,7 @@ class NoopMixture(Mixture):
 
     def __init__(self, chunk_size: int, mixture: dict[str, float]) -> None:
         super().__init__(chunk_size)
-        self._mixture = {
-            key: int(chunk_size * val) for key, val in mixture.items()
-        }
+        self._mixture = {key: int(chunk_size * val) for key, val in mixture.items()}
 
         # Ensure approximation errors do not affect final chunk size
         diff = chunk_size - sum(self._mixture.values())

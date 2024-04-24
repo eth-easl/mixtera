@@ -4,6 +4,7 @@ This submodule contains implementations for Mixtera indexes
 
 from .index import (
     ChunkerIndex,
+    ChunkerIndexDatasetEntries,
     Index,
     IndexCommonType,
     IndexDatasetEntryLineType,
@@ -21,7 +22,6 @@ from .index import (
     IndexRowRangeType,
     IndexType,
     InvertedIndex,
-    ChunkerIndexDatasetEntries,
 )
 from .index_collection import InMemoryDictionaryIndex, InMemoryDictionaryLineIndex, InMemoryDictionaryRangeIndex
 
