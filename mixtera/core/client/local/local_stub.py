@@ -1,6 +1,6 @@
 import multiprocessing as mp
 from pathlib import Path
-from typing import Callable, Generator, Type, Optional
+from typing import Callable, Generator, Optional, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
@@ -9,7 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.index import IndexType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Query, QueryResult, Mixture
+from mixtera.core.query import Mixture, Query, QueryResult
 from mixtera.utils import wait_for_key_in_dict
 
 
@@ -53,7 +53,7 @@ class LocalStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         return self._mdc.remove_dataset(identifier)
 
-    def execute_query(self, query: Query, chunk_size: int, mixture: Optional[Mixture] = None) -> bool:
+    def execute_query(self, query: Query, chunk_size: Optional[int] = None, mixture: Optional[Mixture] = None) -> bool:
         query.execute(self._mdc, chunk_size=chunk_size, mixture=mixture)
         return self._register_query(query, chunk_size)
 

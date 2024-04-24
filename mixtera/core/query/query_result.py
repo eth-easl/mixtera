@@ -7,16 +7,9 @@ import portion
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex, Index, IndexType, InvertedIndex, ChunkerIndexDatasetEntries
-from mixtera.core.datacollection.index.index_collection import (
-    IndexFactory,
-    IndexTypes,
-    create_chunker_index,
-    create_inverted_index_interval_dict,
-    raw_index_dict_instantiator,
-)
-from mixtera.utils import defaultdict_to_dict
-from mixtera.utils.utils import generate_hashable_search_key, merge_property_dicts
+from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, IndexType, InvertedIndex
+from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
+from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
 
 from .mixture import Mixture
 
@@ -31,19 +24,32 @@ class QueryResult:
     """
 
     def __init__(
-        self, mdc: MixteraDataCollection, results: Index, chunk_size: int = 1, mixture: Optional[Mixture] = None
+        self,
+        mdc: MixteraDataCollection,
+        results: Index,
+        chunk_size: Optional[int] = 1,
+        mixture: Optional[Mixture] = None,
     ) -> None:
         """
         Args:
             mdc (LocalDataCollection): The LocalDataCollection object.
             results (IndexType): The results of the query.
-            chunk_size (int): The chunk size of the results.
+            chunk_size (int): The chunk size of the results. This parameter is mutually exclusive with
+                the mixture parameter.
+            mixture: A mixture object defining the mixture to be reflected in the chunks. This parameter is mutually
+                exclusive with the chunk_size parameter.
         """
-        self.chunk_size = chunk_size
+        if mixture is not None and chunk_size is not None:
+            raise AttributeError(
+                "Both mixture and chunk_size are specified! Only one of these parameter can be specified!"
+            )
+
+        self._chunk_size = chunk_size
+        self._mixture = mixture
+
         self.results = results
         self._meta = self._parse_meta(mdc)
-        self._chunks: list[IndexType] = []
-        self._mixture = mixture
+        self._chunks: list[ChunkerIndexDatasetEntries] = []
         self.chunking()
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
@@ -168,9 +174,9 @@ class QueryResult:
         return chunker_index
 
     @staticmethod
-    def _generate_per_mixture_component_chunks(chunker_index: ChunkerIndex,
-                                               component_key: str, component_cardinality: int) -> list[
-        ChunkerIndexDatasetEntries]:
+    def _generate_per_mixture_component_chunks(
+        chunker_index: ChunkerIndex, component_key: str, component_cardinality: int
+    ) -> list[ChunkerIndexDatasetEntries]:
         """
         This method per chunks for each component of a mixture (e.g. 25% medicine + english) given a key into
         the chunking index and the cardinality (in number of instances) for the component
@@ -206,7 +212,7 @@ class QueryResult:
         for dataset_id, document_entries in target_ranges.items():
             for file_id, ranges in document_entries.items():
                 for base_range in ranges:
-                    current_range = list(base_range)
+                    current_range = (base_range[0], base_range[1])
                     range_cardinality = current_range[1] - current_range[0]
                     if current_cardinality + range_cardinality < component_cardinality:
                         current_partition[dataset_id][file_id].append(current_range)
@@ -214,11 +220,11 @@ class QueryResult:
                     else:
                         # Add the partial range and the full component
                         diff = current_cardinality + range_cardinality - component_cardinality
-                        current_partition[dataset_id][file_id].append([current_range[0], current_range[1] - diff])
-                        component_chunks.append(current_partition)
+                        current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
+                        component_chunks.append(defaultdict_to_dict(current_partition))
 
                         # Prepare the rest of the range and new component
-                        current_range = [current_range[1] - diff, current_range[1]]
+                        current_range = (current_range[1] - diff, current_range[1])
                         current_partition = defaultdict(lambda: defaultdict(list))
                         current_cardinality = 0
 
@@ -233,11 +239,12 @@ class QueryResult:
                             else:
                                 diff = current_cardinality + range_cardinality - component_cardinality
                                 current_partition[dataset_id][file_id].append(
-                                    [current_range[0], current_range[1] - diff])
-                                component_chunks.append(current_partition)
+                                    (current_range[0], current_range[1] - diff)
+                                )
+                                component_chunks.append(defaultdict_to_dict(current_partition))
 
                                 # Prepare the rest of the range and new component
-                                current_range = [current_range[1] - diff, current_range[1]]
+                                current_range = (current_range[1] - diff, current_range[1])
                                 current_partition = defaultdict(lambda: defaultdict(list))
                                 current_cardinality = 0
 
@@ -245,7 +252,7 @@ class QueryResult:
                                 continue_processing = current_range[1] > current_range[0]
 
         if current_cardinality > 0:
-            component_chunks.append(current_partition)
+            component_chunks.append(defaultdict_to_dict(current_partition))
 
         return component_chunks
 
@@ -260,7 +267,9 @@ class QueryResult:
 
         mixture = self._mixture.get_mixture()
         mixture_keys = mixture.keys()
-        component_chunks = [self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys]
+        component_chunks = [
+            self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
+        ]
 
         chunks = []
         for components in zip(*component_chunks):
@@ -272,79 +281,43 @@ class QueryResult:
         return chunks
 
     def chunking(self) -> None:
-        # structure of self.chunks: [index_type, index_type, ...]
-        # each index_type is an index, but contains exactly
-        # chunk_size items, except the last one.
-        chunks: list[dict] = []
-        # here we chunk the self.results from a large index_type
-        # into smaller index_types.
-        current_chunk: IndexType = raw_index_dict_instantiator()
-        current_chunk_length = 0
-        # this is likely not a good impl, optimize it later.
-        # now just ensure correct chunk_size and each chunk is an index.
-        # pylint: disable-next=too-many-nested-blocks
-        for property_name in self.results.get_all_features():
-            for property_value, property_dict in self.results.get_dict_index_by_feature(property_name).items():
-                for did, files in property_dict.items():
-                    for fid, file_ranges in files.items():
-                        for start, end in file_ranges:
-                            # TODO(#35): we may want to optimize this later together with mixture.
-                            # for now this is a simple implementaion (for testing)
-                            # case 1: the entire range fits into the current chunk, add it to the current chunk
-                            if end - start < self.chunk_size - current_chunk_length:
-                                current_chunk[property_name][property_value][did][fid].append((start, end))
-                                current_chunk_length += end - start
-                                # chunk is not full yet
-                            # case 2: the entire range does not fit into the current chunk
-                            else:
-                                # # step 1: add the first part of the range to the current chunk, to fill it up
-                                current_chunk[property_name][property_value][did][fid].append(
-                                    (start, start + self.chunk_size - current_chunk_length)
-                                )
-                                # this time the chunk is full
-                                chunks.append(current_chunk)
-                                # step 2: calculate how many chunks are needed for the rest of the range
-                                remaining_length = end - (start + self.chunk_size - current_chunk_length)
-                                remaining_chunks = remaining_length // self.chunk_size
-                                if remaining_chunks > 0:
-                                    # step 3: add the remaining chunks
-                                    for i in range(remaining_chunks):
-                                        new_chunk = raw_index_dict_instantiator()
-                                        new_chunk[property_name] = {
-                                            property_value: {
-                                                did: {
-                                                    fid: [
-                                                        (
-                                                            start
-                                                            + self.chunk_size
-                                                            - current_chunk_length
-                                                            + i * self.chunk_size,
-                                                            start
-                                                            + self.chunk_size
-                                                            - current_chunk_length
-                                                            + (i + 1) * self.chunk_size,
-                                                        )
-                                                    ]
-                                                }
-                                            }
-                                        }
-                                        chunks.append(new_chunk)
-                                remaining_length = remaining_length % self.chunk_size
-                                current_chunk = raw_index_dict_instantiator()
-                                current_chunk_length = 0
-                                start_new = start + remaining_chunks * self.chunk_size
-                                if remaining_length > 0:
-                                    current_chunk[property_name] = {
-                                        property_value: {did: {fid: [(start_new, start_new + remaining_length)]}}
-                                    }
-                                    current_chunk_length += remaining_length
-                        # reset current chunk after this file - we anyway need a new index for the next file
-        if current_chunk_length > 0:
-            chunks.append(current_chunk)
-        for chunk in chunks:
-            chunk_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
-            chunk_index._index = defaultdict_to_dict(chunk)
-            self._chunks.append(chunk_index)
+        """
+        Implements the chunking logic. This method populates the self._chunks variable with chunks fulfilling the
+        requirements specified by the self._mixture object (if it exists). Otherwise, simply produces chunks of given
+        chunk size using any data.
+        """
+        inverted_index: InvertedIndex = self._invert_result(self.results)
+        chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
+        # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
+        #                 (3) add unit test for it (4) [separately of this] add multiprocessing to inverted/chunk index
+
+        if self._mixture is not None:
+            # If we have a mixture, we use that to generate the chunks
+            mixture = self._mixture.get_mixture()
+            mixture_keys = mixture.keys()
+            component_chunks = [
+                self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
+            ]
+
+            # Chunks will be composed using multiple properties
+            for components in zip(*component_chunks):
+                chunk = {}
+                for component in zip(mixture_keys, components):
+                    chunk[component[0]] = component[1]
+                self._chunks.append(chunk)
+        else:
+            # Each chunk stems from a single property
+            for key in chunker_index.keys():
+                temp = [
+                    {key: x} for x in self._generate_per_mixture_component_chunks(chunker_index, key, self._chunk_size)
+                ]
+                self._chunks.extend(temp)
+
+    @property
+    def chunk_size(self) -> int:
+        if self._mixture is not None:
+            return self._mixture.chunk_size
+        return self._chunk_size
 
     @property
     def dataset_type(self) -> dict[int, Type[Dataset]]:

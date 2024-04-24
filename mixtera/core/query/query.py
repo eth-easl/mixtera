@@ -68,15 +68,19 @@ class Query:
     def __str__(self) -> str:
         return str(self.query_plan)
 
-    def execute(self, mdc: MixteraDataCollection, chunk_size: int = 1, mixture: Optional[Mixture] = None) -> None:
+    def execute(
+        self, mdc: MixteraDataCollection, chunk_size: Optional[int] = None, mixture: Optional[Mixture] = None
+    ) -> None:
         """
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
             mdc: The MixteraDataCollection object required to execute the query
             chunk_size (int): chunk_size is used to set the size of `subresults` in the QueryResult object.
                 Defaults to 1. When iterating over a :py:class:`QueryResult`
-                object, the results are yielded in chunks of size `chunk_size`.
-            mixture: a Mixture object defining the chunk mixture
+                object, the results are yielded in chunks of size `chunk_size`. This parameter is mutually exclusive
+                with the mixture parameter.
+           mixture: A mixture object defining the mixture to be reflected in the chunks. This parameter is mutually
+                exclusive with the chunk_size parameter.
         """
         logger.debug(f"Executing query locally with chunk size {chunk_size}")
         self.root.post_order_traverse(mdc)
