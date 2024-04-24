@@ -160,7 +160,7 @@ def generate_hashable_search_key(
 
     Args:
         property_names: a list with the property names
-        property_values: a list with the property values
+        property_values: a list of lists with the property values
         sort_lists: a boolean, indicating whether to sort the two lists (the property_values relative to property_names)
 
     Returns:
@@ -169,5 +169,5 @@ def generate_hashable_search_key(
     zipped = list(zip(property_names, property_values))
     if sort_lists:
         zipped.sort(key=lambda x: x[0])
-    # return ";".join([f"{x}:{y}" for x, y in zipped])  # Take the first value
-    return ";".join([f"{x}:{','.join([str(yy) for yy in y])}" for x, y in zipped])  # Take all values
+    return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
+    # return ";".join([f"{x}:{','.join([str(yy) for yy in y])}" for x, y in zipped])  # Take all values
