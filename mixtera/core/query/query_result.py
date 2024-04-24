@@ -72,7 +72,7 @@ class QueryResult:
         }
 
     @staticmethod
-    def _invert_result(index: IndexType) -> InvertedIndex:
+    def _invert_result(index: Index) -> InvertedIndex:
         """
         Returns an InvertedIndex that points from files to an ordered dictionary
         of ranges (from portion) annotated with properties:
@@ -96,9 +96,10 @@ class QueryResult:
         Returns:
             An InvertedIndex
         """
+        raw_index = index.get_full_dict_index(copy=False)
         inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
 
-        for property_name, property_values in index.items():  # pylint: disable=too-many-nested-blocks
+        for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
                     for file_id, ranges in files.items():
@@ -169,7 +170,7 @@ class QueryResult:
         """
         This is a dummy method for implementing chunking added here to not break the unit tests.
         """
-        inverted_index: InvertedIndex = self._invert_result(self.results._index)
+        inverted_index: InvertedIndex = self._invert_result(self.results)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
         # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
         #                 (3) add unit test for it (4) [separately of this] add multiprocessing to inverted/chunk index

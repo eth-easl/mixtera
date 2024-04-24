@@ -241,7 +241,7 @@ class TestQuery(unittest.TestCase):
 
         query = Query.for_job("job_id").complexmockoperator("test")
         assert self.client.execute_query(query, 1)
-        inverted_index = query.results._invert_result(query.results.results._index)
+        inverted_index = query.results._invert_result(query.results.results)
 
         # True result vs reference
         for document_id, doc_entries in inverted_index.items():
@@ -330,7 +330,7 @@ class TestQuery(unittest.TestCase):
 
         query = Query.for_job("job_id").complexmockoperator("test")
         assert self.client.execute_query(query, 1)
-        inverted_index = query.results._invert_result(query.results.results._index)
+        inverted_index = query.results._invert_result(query.results.results)
         chunk_index = query.results._create_chunker_index(inverted_index)
         print(defaultdict_to_dict(chunk_index))
         self.assertDictEqual(defaultdict_to_dict(chunk_index), reference_result)
