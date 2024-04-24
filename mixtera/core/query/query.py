@@ -72,9 +72,11 @@ class Query:
         """
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
+            mdc: The MixteraDataCollection object required to execute the query
             chunk_size (int): chunk_size is used to set the size of `subresults` in the QueryResult object.
                 Defaults to 1. When iterating over a :py:class:`QueryResult`
                 object, the results are yielded in chunks of size `chunk_size`.
+            mixture: a Mixture object defining the chunk mixture
         """
         logger.debug(f"Executing query locally with chunk size {chunk_size}")
         self.root.post_order_traverse(mdc)

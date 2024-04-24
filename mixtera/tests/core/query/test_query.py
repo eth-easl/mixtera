@@ -278,33 +278,59 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
+        # This assumes keys are generated using all potential property values
+        # reference_result = {
+        #     "language:french;topic:law": {
+        #         0: {0: [[0, 25]], 1: [[210, 250]]},
+        #         1: {0: [[25, 40], [60, 75]], 1: [[20, 30]]},
+        #     },
+        #     "language:french,english;topic:law,medicine": {0: {0: [[25, 50], [140, 150]], 1: [[100, 150]]}},
+        #     "language:english;topic:medicine": {
+        #         0: {0: [[50, 75], [180, 200]], 1: [[50, 100]]},
+        #         1: {0: [[100, 110], [130, 150]]},
+        #     },
+        #     "topic:medicine": {0: {0: [[80, 100]]}, 1: {1: [[50, 100], [150, 200]]}},
+        #     "language:french": {
+        #         0: {0: [[100, 120], [210, 300]], 1: [[150, 160], [170, 200], [250, 350]]},
+        #         1: {0: [[40, 50], [75, 90]], 1: [[0, 20]]},
+        #     },
+        #     "language:french;topic:medicine": {0: {0: [[120, 125]], 1: [[160, 170]]}, 1: {1: [[30, 50]]}},
+        #     "language:french;topic:law,medicine": {0: {0: [[125, 140]], 1: [[200, 210]]}},
+        #     "language:english;topic:law,medicine": {0: {0: [[150, 180]]}, 1: {0: [[50, 60]]}},
+        #     "language:french,english": {0: {0: [[200, 210]]}},
+        #     "language:english": {0: {0: [[300, 400]], 2: [[10, 20]]}, 2: {0: [[0, 80], [150, 200]]}},
+        #     "topic:law": {1: {0: [[0, 25], [200, 250]]}},
+        #     "language:french,english;topic:medicine": {1: {0: [[90, 100]]}},
+        #     "language:english;topic:law": {2: {0: [[80, 100]]}},
+        # }
+
+        # This assumes keys are generated using a single (the first) value of a property
         reference_result = {
             "language:french;topic:law": {
-                0: {0: [[0, 25]], 1: [[210, 250]]},
+                0: {0: [[0, 25], [25, 50], [140, 150], [125, 140]], 1: [[100, 150], [200, 210], [210, 250]]},
                 1: {0: [[25, 40], [60, 75]], 1: [[20, 30]]},
             },
-            "language:french,english;topic:law,medicine": {0: {0: [[25, 50], [140, 150]], 1: [[100, 150]]}},
             "language:english;topic:medicine": {
                 0: {0: [[50, 75], [180, 200]], 1: [[50, 100]]},
                 1: {0: [[100, 110], [130, 150]]},
             },
             "topic:medicine": {0: {0: [[80, 100]]}, 1: {1: [[50, 100], [150, 200]]}},
             "language:french": {
-                0: {0: [[100, 120], [210, 300]], 1: [[150, 160], [170, 200], [250, 350]]},
+                0: {0: [[100, 120], [210, 300], [200, 210]], 1: [[150, 160], [170, 200], [250, 350]]},
                 1: {0: [[40, 50], [75, 90]], 1: [[0, 20]]},
             },
-            "language:french;topic:medicine": {0: {0: [[120, 125]], 1: [[160, 170]]}, 1: {1: [[30, 50]]}},
-            "language:french;topic:law,medicine": {0: {0: [[125, 140]], 1: [[200, 210]]}},
-            "language:english;topic:law,medicine": {0: {0: [[150, 180]]}, 1: {0: [[50, 60]]}},
-            "language:french,english": {0: {0: [[200, 210]]}},
+            "language:french;topic:medicine": {
+                0: {0: [[120, 125]], 1: [[160, 170]]},
+                1: {0: [[90, 100]], 1: [[30, 50]]},
+            },
+            "language:english;topic:law": {0: {0: [[150, 180]]}, 1: {0: [[50, 60]]}, 2: {0: [[80, 100]]}},
             "language:english": {0: {0: [[300, 400]], 2: [[10, 20]]}, 2: {0: [[0, 80], [150, 200]]}},
             "topic:law": {1: {0: [[0, 25], [200, 250]]}},
-            "language:french,english;topic:medicine": {1: {0: [[90, 100]]}},
-            "language:english;topic:law": {2: {0: [[80, 100]]}},
         }
 
         query = Query.for_job("job_id").complexmockoperator("test")
         assert self.client.execute_query(query, 1)
         inverted_index = query.results._invert_result(query.results.results._index)
         chunk_index = query.results._create_chunker_index(inverted_index)
+        print(defaultdict_to_dict(chunk_index))
         self.assertDictEqual(defaultdict_to_dict(chunk_index), reference_result)

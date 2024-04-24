@@ -6,7 +6,7 @@ import portion
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex, IndexType, InvertedIndex
+from mixtera.core.datacollection.index import ChunkerIndex, Index, IndexType, InvertedIndex
 from mixtera.core.datacollection.index.index_collection import (
     IndexFactory,
     IndexTypes,
@@ -30,7 +30,7 @@ class QueryResult:
     """
 
     def __init__(
-        self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1, mixture: Optional[Mixture] = None
+        self, mdc: MixteraDataCollection, results: Index, chunk_size: int = 1, mixture: Optional[Mixture] = None
     ) -> None:
         """
         Args:
@@ -169,7 +169,6 @@ class QueryResult:
         """
         This is a dummy method for implementing chunking added here to not break the unit tests.
         """
-        # mixture_dict = self._mixture.get_mixture()
         inverted_index: InvertedIndex = self._invert_result(self.results._index)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
         # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
