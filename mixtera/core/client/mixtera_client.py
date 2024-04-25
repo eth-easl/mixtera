@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType, ChunkerIndex
+from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
