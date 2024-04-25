@@ -94,7 +94,7 @@ def test_filter_license_and_html(client: MixteraClient, chunk_size: int):
     for sample in client.stream_results(job_id, False):
         result_samples.append(sample)
 
-    assert len(result_samples) == 1500, f"Got {len(result_samples)} samples instead of the expected 1500!"
+    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 

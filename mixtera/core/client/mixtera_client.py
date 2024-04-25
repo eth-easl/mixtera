@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType
+from mixtera.core.datacollection.index import IndexType, ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
@@ -207,7 +207,7 @@ class MixteraClient(ABC):
             yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
 
     @abstractmethod
-    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
         """
         Given a job ID, iterates over the result chunks.
 
@@ -240,7 +240,7 @@ class MixteraClient(ABC):
 
     def _iterate_result_chunk(
         self,
-        result_chunk: IndexType,
+        result_chunk: ChunkerIndex,
         dataset_type_dict: dict[int, Type[Dataset]],
         parsing_func_dict: dict[int, Callable[[str], str]],
         file_path_dict: dict[int, str],
@@ -250,7 +250,7 @@ class MixteraClient(ABC):
         Given a result chunk, iterates over the samples.
 
         Args:
-            result_chunk (IndexType): The result chunk object.
+            result_chunk (ChunkerIndex): The result chunk object.
             dataset_type_dict (dict): A mapping from dataset ID to dataset type.
             parsing_func_dict (dict): A mapping from dataset ID to parsing function.
             file_path_dict (dict): A mapping from file ID to file path.
@@ -274,13 +274,12 @@ class MixteraClient(ABC):
                     "Currently, tunneling samples via the server is only supported when using a ServerStub."
                 )
 
-        for _, property_dict in result_chunk._index.items():
-            for _, val_dict in property_dict.items():
-                for did, file_dict in val_dict.items():
-                    filename_dict = {file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_dict.items()}
-                    yield from dataset_type_dict[did].read_ranges_from_files(
-                        filename_dict, parsing_func_dict[did], server_connection
-                    )
+        for _0, dataset_entries in result_chunk.items():
+            for did, file_entries in dataset_entries.items():
+                filename_dict = {file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
+                yield from dataset_type_dict[did].read_ranges_from_files(
+                    filename_dict, parsing_func_dict[did], server_connection
+                )
 
     @abstractmethod
     def is_remote(self) -> bool:
