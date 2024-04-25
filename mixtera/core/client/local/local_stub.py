@@ -55,7 +55,7 @@ class LocalStub(MixteraClient):
 
     def execute_query(self, query: Query, chunk_size: Optional[int] = None, mixture: Optional[Mixture] = None) -> bool:
         query.execute(self._mdc, chunk_size=chunk_size, mixture=mixture)
-        return self._register_query(query, chunk_size)
+        return self._register_query(query, chunk_size)  # type: ignore[arg-type]
 
     def is_remote(self) -> bool:
         return False

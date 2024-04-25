@@ -39,7 +39,7 @@ class NoopMixture(Mixture):
         # Ensure approximation errors do not affect final chunk size
         diff = chunk_size - sum(self._mixture.values())
         if diff > 0:
-            self._mixture[self._mixture.keys()[0]] += diff
+            self._mixture[list(self._mixture.keys())[0]] += diff
 
     def get_mixture(self) -> dict[str, int]:
         return self._mixture
