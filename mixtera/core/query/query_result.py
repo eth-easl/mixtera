@@ -311,6 +311,7 @@ class QueryResult:
                 temp = [
                     # type: ignore[arg-type]
                     {key: x}
+                    # type: ignore[arg-type]
                     for x in self._generate_per_mixture_component_chunks(chunker_index, key, self._chunk_size)
                 ]
                 self._chunks.extend(temp)
