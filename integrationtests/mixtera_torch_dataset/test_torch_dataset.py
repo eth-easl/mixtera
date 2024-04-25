@@ -105,7 +105,7 @@ def test_filter_license_and_html(
     for batch in dl:
         result_samples.extend(batch)
 
-    assert len(result_samples) == 1500, f"Got {len(result_samples)} samples instead of the expected 1500!"
+    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
