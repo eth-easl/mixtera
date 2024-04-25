@@ -1,6 +1,6 @@
 import multiprocessing as mp
 from collections import defaultdict
-from typing import Callable, Optional, Type
+from typing import Any, Callable, Optional, Type
 
 import dill
 import portion
@@ -207,7 +207,7 @@ class QueryResult:
         target_ranges = chunker_index[component_key]
 
         current_cardinality = 0
-        current_partition = defaultdict(lambda: defaultdict(list))
+        current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
 
         for dataset_id, document_entries in target_ranges.items():  # pylint: disable=too-many-nested-blocks
             for file_id, ranges in document_entries.items():
@@ -265,7 +265,7 @@ class QueryResult:
         # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
         #                 (3) add unit test for it (4) [separately of this] add multiprocessing to inverted/chunk index
 
-        mixture = self._mixture.get_mixture()
+        mixture = self._mixture.get_mixture()  # type: ignore[union-attr]
         mixture_keys = mixture.keys()
         component_chunks = [
             self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
@@ -309,7 +309,9 @@ class QueryResult:
             # Each chunk stems from a single property
             for key in chunker_index.keys():
                 temp = [
-                    {key: x} for x in self._generate_per_mixture_component_chunks(chunker_index, key, self._chunk_size)
+                    # type: ignore[arg-type]
+                    {key: x}
+                    for x in self._generate_per_mixture_component_chunks(chunker_index, key, self._chunk_size)
                 ]
                 self._chunks.extend(temp)
 
@@ -317,7 +319,7 @@ class QueryResult:
     def chunk_size(self) -> int:
         if self._mixture is not None:
             return self._mixture.chunk_size
-        return self._chunk_size
+        return self._chunk_size  # type: ignore[return-value]
 
     @property
     def dataset_type(self) -> dict[int, Type[Dataset]]:
