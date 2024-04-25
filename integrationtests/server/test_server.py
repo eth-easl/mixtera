@@ -88,7 +88,7 @@ def test_filter_license_and_html(client: ServerStub, chunk_size: int, tunnel: bo
     for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
-    assert len(result_samples) == 1500, f"Got {len(result_samples)} samples instead of the expected 1500!"
+    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
