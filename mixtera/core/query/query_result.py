@@ -209,7 +209,7 @@ class QueryResult:
         current_cardinality = 0
         current_partition = defaultdict(lambda: defaultdict(list))
 
-        for dataset_id, document_entries in target_ranges.items():
+        for dataset_id, document_entries in target_ranges.items():  # pylint: disable=too-many-nested-blocks
             for file_id, ranges in document_entries.items():
                 for base_range in ranges:
                     current_range = (base_range[0], base_range[1])

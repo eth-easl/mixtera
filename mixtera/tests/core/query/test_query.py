@@ -493,5 +493,5 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected_chunk_count, len(chunks))
         self.assertEqual(expected_error_count_s1, real_error_count_s1)
         self.assertEqual(expected_error_count_s2, real_error_count_s2)
-        for i in range(len(chunks)):
-            self.assertDictEqual(reference_chunks[i], chunks[i])
+        for i, chunk in enumerate(chunks):
+            self.assertDictEqual(reference_chunks[i], chunk)
