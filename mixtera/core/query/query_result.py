@@ -79,7 +79,7 @@ class QueryResult:
         }
 
     @staticmethod
-    def _invert_result(index: Index) -> InvertedIndex:
+    def _invert_result(index: Index, enable_parallelism: bool = False) -> InvertedIndex:
         """
         Returns an InvertedIndex that points from files to an ordered dictionary
         of ranges (from portion) annotated with properties:
@@ -99,32 +99,110 @@ class QueryResult:
 
         Args:
             index: an IndexType object that will be inverted.
+            enable_parallelism: if True, the inversion is done in a multi-processed fashion
 
         Returns:
             An InvertedIndex
         """
         raw_index = index.get_full_dict_index(copy=False)
-        inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
 
-        for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
+        if not enable_parallelism:  # pylint: disable=too-many-nested-blocks
+            inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
+            for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
+                for property_value, datasets in property_values.items():
+                    for dataset_id, files in datasets.items():
+                        for file_id, ranges in files.items():
+                            interval_dict = inverted_dictionary[dataset_id][file_id]
+                            for row_range in ranges:
+                                range_interval = portion.closedopen(row_range[0], row_range[1])
+                                intersections = interval_dict[range_interval]
+                                interval_dict[range_interval] = {property_name: [property_value]}
+                                for intersection_range, intersection_properties in intersections.items():
+                                    interval_dict[intersection_range] = merge_property_dicts(
+                                        interval_dict[intersection_range].values()[0], intersection_properties
+                                    )
+            return inverted_dictionary
+
+        # Parallel approach
+        range_workloads = []
+        for property_name, property_values in raw_index.items():
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
-                    for file_id, ranges in files.items():
-                        interval_dict = inverted_dictionary[dataset_id][file_id]
-                        for row_range in ranges:
-                            range_interval = portion.closedopen(row_range[0], row_range[1])
-                            intersections = interval_dict[range_interval]
-                            interval_dict[range_interval] = {property_name: [property_value]}
-                            for intersection_range, intersection_properties in intersections.items():
-                                interval_dict[intersection_range] = merge_property_dicts(
-                                    interval_dict[intersection_range].values()[0], intersection_properties
-                                )
+                    for file_id, _ in files.items():
+                        range_workloads.append((property_name, property_value, dataset_id, file_id))
 
-        # TODO(DanGraur): Add option to parallelize: (1) find count of (prop, value, dset, file) tuples (2) divide these
-        #                 by the nr of threads/procs; give each proc one of these ranges (3) each proc produces
-        #                 dset, file -> list[(range, prop)] data structures (4) count nr of files; divide by proc count
-        #                 and disseminate to procs (5) each proc merges the props and intervals per files received.
-        #                 (6) merge into a single data structure. This process is a 2-stage map-reduce.
+        def _first_map_stage(payload: tuple[int, int]) -> dict[Any, Any]:
+            """
+            The first step in the inversion process. In this step, an inverted index is created on a per property,
+            dataset and file id basis.
+
+            Args:
+                payload: A tuple consisting of the [low, hi) intervals that should be processed in range_workloads
+
+            Returns:
+                An inverted dictionary generated from the assigned range
+            """
+            lo_bound, hi_bound = payload
+            partial_inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
+            for i in range(lo_bound, hi_bound):
+                prop_name, prop_val, did, fid = range_workloads[i]
+                interval_dictionary = partial_inverted_dictionary[did][fid]
+                for rrange in raw_index[prop_name][prop_val][did][fid]:
+                    interval_dictionary[
+                        portion.closedopen(rrange[0], rrange[1])] = {property_name: [property_value]}
+            return partial_inverted_dictionary
+
+        with mp.Pool() as pool:
+            work_partitions = list(range(0, len(range_workloads) + 1, len(range_workloads) // mp.cpu_count()))
+            work_partitions[-1] = len(range_workloads)
+            partial_results = pool.map(_first_map_stage, zip(work_partitions, work_partitions[1:]))
+
+        # Results will need to be merged
+        unique_keys = set()
+        merged_partial_results: dict[Any, dict[Any, list]] = defaultdict(lambda: defaultdict(list))
+        for partial_result in partial_results:
+            for document_id, document_entry in partial_result.items():
+                for file_id, interval_entries in document_entry.items():
+                    unique_keys.add((document_id, file_id))
+                    merged_partial_results[document_id][file_id].append(interval_entries)
+        unique_keys = list(unique_keys)
+
+        # Convert unique keys to list and start 2nd stage of map reduce
+        def _second_map_stage(payload: tuple[int, int]) -> dict[Any, Any]:
+            """
+            The second step in the inversion process. In this step, an inverted index is created on
+            a per dataset and file id basis.
+
+            Args:
+                payload: A tuple consisting of the [low, hi) intervals that should be processed in range_workloads
+
+            Returns:
+                An inverted dictionary generated from the assigned range
+            """
+            lo_bound, hi_bound = payload
+            partial_inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
+            for i in range(lo_bound, hi_bound):
+                document_id, file_id = unique_keys[i]
+                interval_dictionary = partial_inverted_dictionary[document_id][file_id]
+                for d in merged_partial_results[document_id][file_id]:
+                    for intervals, props in d.items():
+                        intersections = interval_dictionary[intervals]
+                        interval_dictionary[intervals] = props
+                        for intersection_range, intersection_properties in intersections.items():
+                            interval_dictionary[intersection_range] = merge_property_dicts(
+                                interval_dictionary[intersection_range].values()[0], intersection_properties
+                            )
+            return partial_inverted_dictionary
+
+        with mp.Pool() as pool:
+            work_partitions = list(range(0, len(unique_keys) + 1, len(unique_keys) // mp.cpu_count()))
+            work_partitions[-1] = len(unique_keys)
+            partial_results = pool.map(_second_map_stage, zip(work_partitions, work_partitions[1:]))
+
+        inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
+        for d in partial_results:
+            inverted_dictionary |= d
+
         return inverted_dictionary
 
     @staticmethod

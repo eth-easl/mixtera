@@ -222,7 +222,7 @@ class TestQuery(unittest.TestCase):
 
         query = Query.for_job("job_id").complexmockoperator("test")
         assert self.client.execute_query(query, 1)
-        inverted_index = query.results._invert_result(query.results.results)
+        inverted_index = query.results._invert_result(query.results.results, enable_parallelism=True)
 
         # True result vs reference
         for document_id, doc_entries in inverted_index.items():
