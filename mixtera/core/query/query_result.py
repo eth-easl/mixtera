@@ -307,13 +307,10 @@ class QueryResult:
                 self._chunks.append(chunk)
         else:
             # Each chunk stems from a single property
+            # Aliasing has to be done to avoid formatters complaining of line lengths
+            f_alias = self._generate_per_mixture_component_chunks
             for key in chunker_index.keys():
-                temp = [
-                    # type: ignore[arg-type]
-                    {key: x}
-                    # type: ignore[arg-type]
-                    for x in self._generate_per_mixture_component_chunks(chunker_index, key, self._chunk_size)
-                ]
+                temp = [{key: x} for x in f_alias(chunker_index, key, self._chunk_size)]  # type: ignore[arg-type]
                 self._chunks.extend(temp)
 
     @property
