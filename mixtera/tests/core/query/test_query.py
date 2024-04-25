@@ -319,7 +319,7 @@ class TestQuery(unittest.TestCase):
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
-    def test_create_chunking(
+    def test_create_chunking_with_mixture(
         self,
         mock_get_file_path_by_id: MagicMock,
         mock_get_dataset_type_by_id: MagicMock,
@@ -493,5 +493,225 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected_chunk_count, len(chunks))
         self.assertEqual(expected_error_count_s1, real_error_count_s1)
         self.assertEqual(expected_error_count_s2, real_error_count_s2)
+        for i, chunk in enumerate(chunks):
+            self.assertDictEqual(reference_chunks[i], chunk)
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_create_chunking_without_mixture(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        reference_chunks = [
+            {"language:french;topic:law": {0: {0: [(0, 7)]}}},
+            {"language:french;topic:law": {0: {0: [(7, 14)]}}},
+            {"language:french;topic:law": {0: {0: [(14, 21)]}}},
+            {"language:french;topic:law": {0: {0: [(21, 25), (25, 28)]}}},
+            {"language:french;topic:law": {0: {0: [(28, 35)]}}},
+            {"language:french;topic:law": {0: {0: [(35, 42)]}}},
+            {"language:french;topic:law": {0: {0: [(42, 49)]}}},
+            {"language:french;topic:law": {0: {0: [(49, 50), (140, 146)]}}},
+            {"language:french;topic:law": {0: {0: [(146, 150), (125, 128)]}}},
+            {"language:french;topic:law": {0: {0: [(128, 135)]}}},
+            {"language:french;topic:law": {0: {0: [(135, 140)], 1: [(100, 102)]}}},
+            {"language:french;topic:law": {0: {1: [(102, 109)]}}},
+            {"language:french;topic:law": {0: {1: [(109, 116)]}}},
+            {"language:french;topic:law": {0: {1: [(116, 123)]}}},
+            {"language:french;topic:law": {0: {1: [(123, 130)]}}},
+            {"language:french;topic:law": {0: {1: [(130, 137)]}}},
+            {"language:french;topic:law": {0: {1: [(137, 144)]}}},
+            {"language:french;topic:law": {0: {1: [(144, 150), (200, 201)]}}},
+            {"language:french;topic:law": {0: {1: [(201, 208)]}}},
+            {"language:french;topic:law": {0: {1: [(208, 210), (210, 215)]}}},
+            {"language:french;topic:law": {0: {1: [(215, 222)]}}},
+            {"language:french;topic:law": {0: {1: [(222, 229)]}}},
+            {"language:french;topic:law": {0: {1: [(229, 236)]}}},
+            {"language:french;topic:law": {0: {1: [(236, 243)]}}},
+            {"language:french;topic:law": {0: {1: [(243, 250)]}}},
+            {"language:french;topic:law": {1: {0: [(25, 32)]}}},
+            {"language:french;topic:law": {1: {0: [(32, 39)]}}},
+            {"language:french;topic:law": {1: {0: [(39, 40), (60, 66)]}}},
+            {"language:french;topic:law": {1: {0: [(66, 73)]}}},
+            {"language:french;topic:law": {1: {0: [(73, 75)], 1: [(20, 25)]}}},
+            {"language:french;topic:law": {1: {1: [(25, 30)]}}},
+            {"language:english;topic:medicine": {0: {0: [(50, 57)]}}},
+            {"language:english;topic:medicine": {0: {0: [(57, 64)]}}},
+            {"language:english;topic:medicine": {0: {0: [(64, 71)]}}},
+            {"language:english;topic:medicine": {0: {0: [(71, 75), (180, 183)]}}},
+            {"language:english;topic:medicine": {0: {0: [(183, 190)]}}},
+            {"language:english;topic:medicine": {0: {0: [(190, 197)]}}},
+            {"language:english;topic:medicine": {0: {0: [(197, 200)], 1: [(50, 54)]}}},
+            {"language:english;topic:medicine": {0: {1: [(54, 61)]}}},
+            {"language:english;topic:medicine": {0: {1: [(61, 68)]}}},
+            {"language:english;topic:medicine": {0: {1: [(68, 75)]}}},
+            {"language:english;topic:medicine": {0: {1: [(75, 82)]}}},
+            {"language:english;topic:medicine": {0: {1: [(82, 89)]}}},
+            {"language:english;topic:medicine": {0: {1: [(89, 96)]}}},
+            {"language:english;topic:medicine": {0: {1: [(96, 100)]}, 1: {0: [(100, 103)]}}},
+            {"language:english;topic:medicine": {1: {0: [(103, 110)]}}},
+            {"language:english;topic:medicine": {1: {0: [(130, 137)]}}},
+            {"language:english;topic:medicine": {1: {0: [(137, 144)]}}},
+            {"language:english;topic:medicine": {1: {0: [(144, 150)]}}},
+            {"topic:medicine": {0: {0: [(80, 87)]}}},
+            {"topic:medicine": {0: {0: [(87, 94)]}}},
+            {"topic:medicine": {0: {0: [(94, 100)]}, 1: {1: [(50, 51)]}}},
+            {"topic:medicine": {1: {1: [(51, 58)]}}},
+            {"topic:medicine": {1: {1: [(58, 65)]}}},
+            {"topic:medicine": {1: {1: [(65, 72)]}}},
+            {"topic:medicine": {1: {1: [(72, 79)]}}},
+            {"topic:medicine": {1: {1: [(79, 86)]}}},
+            {"topic:medicine": {1: {1: [(86, 93)]}}},
+            {"topic:medicine": {1: {1: [(93, 100)]}}},
+            {"topic:medicine": {1: {1: [(150, 157)]}}},
+            {"topic:medicine": {1: {1: [(157, 164)]}}},
+            {"topic:medicine": {1: {1: [(164, 171)]}}},
+            {"topic:medicine": {1: {1: [(171, 178)]}}},
+            {"topic:medicine": {1: {1: [(178, 185)]}}},
+            {"topic:medicine": {1: {1: [(185, 192)]}}},
+            {"topic:medicine": {1: {1: [(192, 199)]}}},
+            {"topic:medicine": {1: {1: [(199, 200)]}}},
+            {"language:french": {0: {0: [(100, 107)]}}},
+            {"language:french": {0: {0: [(107, 114)]}}},
+            {"language:french": {0: {0: [(114, 120), (210, 211)]}}},
+            {"language:french": {0: {0: [(211, 218)]}}},
+            {"language:french": {0: {0: [(218, 225)]}}},
+            {"language:french": {0: {0: [(225, 232)]}}},
+            {"language:french": {0: {0: [(232, 239)]}}},
+            {"language:french": {0: {0: [(239, 246)]}}},
+            {"language:french": {0: {0: [(246, 253)]}}},
+            {"language:french": {0: {0: [(253, 260)]}}},
+            {"language:french": {0: {0: [(260, 267)]}}},
+            {"language:french": {0: {0: [(267, 274)]}}},
+            {"language:french": {0: {0: [(274, 281)]}}},
+            {"language:french": {0: {0: [(281, 288)]}}},
+            {"language:french": {0: {0: [(288, 295)]}}},
+            {"language:french": {0: {0: [(295, 300), (200, 202)]}}},
+            {"language:french": {0: {0: [(202, 209)]}}},
+            {"language:french": {0: {0: [(209, 210)], 1: [(150, 156)]}}},
+            {"language:french": {0: {1: [(156, 160), (170, 173)]}}},
+            {"language:french": {0: {1: [(173, 180)]}}},
+            {"language:french": {0: {1: [(180, 187)]}}},
+            {"language:french": {0: {1: [(187, 194)]}}},
+            {"language:french": {0: {1: [(194, 200), (250, 251)]}}},
+            {"language:french": {0: {1: [(251, 258)]}}},
+            {"language:french": {0: {1: [(258, 265)]}}},
+            {"language:french": {0: {1: [(265, 272)]}}},
+            {"language:french": {0: {1: [(272, 279)]}}},
+            {"language:french": {0: {1: [(279, 286)]}}},
+            {"language:french": {0: {1: [(286, 293)]}}},
+            {"language:french": {0: {1: [(293, 300)]}}},
+            {"language:french": {0: {1: [(300, 307)]}}},
+            {"language:french": {0: {1: [(307, 314)]}}},
+            {"language:french": {0: {1: [(314, 321)]}}},
+            {"language:french": {0: {1: [(321, 328)]}}},
+            {"language:french": {0: {1: [(328, 335)]}}},
+            {"language:french": {0: {1: [(335, 342)]}}},
+            {"language:french": {0: {1: [(342, 349)]}}},
+            {"language:french": {0: {1: [(349, 350)]}, 1: {0: [(40, 46)]}}},
+            {"language:french": {1: {0: [(46, 50), (75, 78)]}}},
+            {"language:french": {1: {0: [(78, 85)]}}},
+            {"language:french": {1: {0: [(85, 90)], 1: [(0, 2)]}}},
+            {"language:french": {1: {1: [(2, 9)]}}},
+            {"language:french": {1: {1: [(9, 16)]}}},
+            {"language:french": {1: {1: [(16, 20)]}}},
+            {"language:french;topic:medicine": {0: {0: [(120, 125)], 1: [(160, 162)]}}},
+            {"language:french;topic:medicine": {0: {1: [(162, 169)]}}},
+            {"language:french;topic:medicine": {0: {1: [(169, 170)]}, 1: {0: [(90, 96)]}}},
+            {"language:french;topic:medicine": {1: {0: [(96, 100)], 1: [(30, 33)]}}},
+            {"language:french;topic:medicine": {1: {1: [(33, 40)]}}},
+            {"language:french;topic:medicine": {1: {1: [(40, 47)]}}},
+            {"language:french;topic:medicine": {1: {1: [(47, 50)]}}},
+            {"language:english;topic:law": {0: {0: [(150, 157)]}}},
+            {"language:english;topic:law": {0: {0: [(157, 164)]}}},
+            {"language:english;topic:law": {0: {0: [(164, 171)]}}},
+            {"language:english;topic:law": {0: {0: [(171, 178)]}}},
+            {"language:english;topic:law": {0: {0: [(178, 180)]}, 1: {0: [(50, 55)]}}},
+            {"language:english;topic:law": {1: {0: [(55, 60)]}, 2: {0: [(80, 82)]}}},
+            {"language:english;topic:law": {2: {0: [(82, 89)]}}},
+            {"language:english;topic:law": {2: {0: [(89, 96)]}}},
+            {"language:english;topic:law": {2: {0: [(96, 100)]}}},
+            {"language:english": {0: {0: [(300, 307)]}}},
+            {"language:english": {0: {0: [(307, 314)]}}},
+            {"language:english": {0: {0: [(314, 321)]}}},
+            {"language:english": {0: {0: [(321, 328)]}}},
+            {"language:english": {0: {0: [(328, 335)]}}},
+            {"language:english": {0: {0: [(335, 342)]}}},
+            {"language:english": {0: {0: [(342, 349)]}}},
+            {"language:english": {0: {0: [(349, 356)]}}},
+            {"language:english": {0: {0: [(356, 363)]}}},
+            {"language:english": {0: {0: [(363, 370)]}}},
+            {"language:english": {0: {0: [(370, 377)]}}},
+            {"language:english": {0: {0: [(377, 384)]}}},
+            {"language:english": {0: {0: [(384, 391)]}}},
+            {"language:english": {0: {0: [(391, 398)]}}},
+            {"language:english": {0: {0: [(398, 400)], 2: [(10, 15)]}}},
+            {"language:english": {0: {2: [(15, 20)]}, 2: {0: [(0, 2)]}}},
+            {"language:english": {2: {0: [(2, 9)]}}},
+            {"language:english": {2: {0: [(9, 16)]}}},
+            {"language:english": {2: {0: [(16, 23)]}}},
+            {"language:english": {2: {0: [(23, 30)]}}},
+            {"language:english": {2: {0: [(30, 37)]}}},
+            {"language:english": {2: {0: [(37, 44)]}}},
+            {"language:english": {2: {0: [(44, 51)]}}},
+            {"language:english": {2: {0: [(51, 58)]}}},
+            {"language:english": {2: {0: [(58, 65)]}}},
+            {"language:english": {2: {0: [(65, 72)]}}},
+            {"language:english": {2: {0: [(72, 79)]}}},
+            {"language:english": {2: {0: [(79, 80), (150, 156)]}}},
+            {"language:english": {2: {0: [(156, 163)]}}},
+            {"language:english": {2: {0: [(163, 170)]}}},
+            {"language:english": {2: {0: [(170, 177)]}}},
+            {"language:english": {2: {0: [(177, 184)]}}},
+            {"language:english": {2: {0: [(184, 191)]}}},
+            {"language:english": {2: {0: [(191, 198)]}}},
+            {"language:english": {2: {0: [(198, 200)]}}},
+            {"topic:law": {1: {0: [(0, 7)]}}},
+            {"topic:law": {1: {0: [(7, 14)]}}},
+            {"topic:law": {1: {0: [(14, 21)]}}},
+            {"topic:law": {1: {0: [(21, 25), (200, 203)]}}},
+            {"topic:law": {1: {0: [(203, 210)]}}},
+            {"topic:law": {1: {0: [(210, 217)]}}},
+            {"topic:law": {1: {0: [(217, 224)]}}},
+            {"topic:law": {1: {0: [(224, 231)]}}},
+            {"topic:law": {1: {0: [(231, 238)]}}},
+            {"topic:law": {1: {0: [(238, 245)]}}},
+            {"topic:law": {1: {0: [(245, 250)]}}},
+        ]
+
+        query = Query.for_job("job_id").complexmockoperator("test")
+        assert self.client.execute_query(query, chunk_size=7)
+        chunks = query.results._chunks
+
+        print(chunks)
+
+        def _subchunk_counter(chunk, key):
+            count = 0
+            for _0, document_entry in chunk[key].items():
+                for _1, ranges in document_entry.items():
+                    for base_range in ranges:
+                        count += base_range[1] - base_range[0]
+            return count
+
+        expected_chunk_count = 173
+        expected_error_count = 8
+
+        real_error_count = 0
+        for chunk in chunks:
+            chunk_count = 0
+            for k, _ in chunk.items():
+                chunk_count += _subchunk_counter(chunk, k)
+
+            if chunk_count != 7:
+                real_error_count += 1
+
+        self.assertEqual(expected_chunk_count, len(chunks))
+        self.assertEqual(expected_error_count, real_error_count)
         for i, chunk in enumerate(chunks):
             self.assertDictEqual(reference_chunks[i], chunk)
