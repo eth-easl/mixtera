@@ -43,6 +43,10 @@ class QueryResult:
             raise AttributeError(
                 "Both mixture and chunk_size are specified! Only one of these parameter can be specified!"
             )
+        if mixture is None and chunk_size is None:
+            raise AttributeError(
+                "Neither mixture nor chunk_size are specified! One of these parameters needs to be specified!"
+            )
 
         self._chunk_size = chunk_size
         self._mixture = mixture
