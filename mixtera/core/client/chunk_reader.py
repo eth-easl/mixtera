@@ -196,9 +196,9 @@ class ParallelChunkReader(ChunkReader):
             for property_name, property_count in self._batch_counts.items():
                 for _ in range(property_count):
                     yielded = False
-                    to_remove = []
                     retries = RETRY_COUNT
                     while not yielded and len(self._processes[property_name]) > 0 and retries > 0:
+                        to_remove = []
                         for i, q_proc in enumerate(self._processes[property_name]):
                             q, proc = q_proc
 
