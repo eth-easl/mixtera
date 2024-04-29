@@ -1,14 +1,13 @@
 import multiprocessing as mp
-from queue import Empty
 import time
 from abc import ABC, abstractmethod
+from queue import Empty
 from typing import Any, Callable, Iterator, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.query import Mixture, NoopMixture
 from mixtera.network.connection import ServerConnection
-
 
 # These parameters are relevant to the parallel reader in order to avoid timeouts
 RETRY_COUNT = 5
@@ -119,7 +118,7 @@ class ParallelChunkReader(ChunkReader):
         self._workloads = {}
         for property_combination, document_entries in self._chunker_index.items():
             if property_combination not in self._workloads:
-                self._workloads = []
+                self._workloads[property_combination] = []
             for document_id, file_entries in document_entries.items():
                 for file_id, ranges in file_entries.items():
                     self._workloads[property_combination].append((document_id, file_id, ranges))
@@ -156,7 +155,7 @@ class ParallelChunkReader(ChunkReader):
 
             # Create and start the processes
             for i in range(1, len(partition_ranges)):
-                queue = mp.Queue
+                queue = mp.Queue()
                 self._processes[key].append(
                     (
                         queue,
