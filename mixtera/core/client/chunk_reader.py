@@ -78,7 +78,21 @@ class ChunkReader(ABC):
         raise NotImplementedError("This method must be implemented by the subclass!")
 
 
+class StandardChunkReader(ChunkReader):
+    """Implementation of a single-process chunk reader that yields instances on a FCFS basis."""
+
+    def iterate_result_chunk(self) -> Iterator[Any]:
+        for _0, dataset_entries in self._chunker_index.items():
+            for did, file_entries in dataset_entries.items():
+                filename_dict = {
+                    self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
+                yield from self._dataset_type_dict[did].read_ranges_from_files(
+                    filename_dict, self._parsing_func_dict[did], self._server_connection
+                )
+
+
 class ParallelChunkReader(ChunkReader):
+    """Implementation of a multiprocess based chunk reader that fulfills the requirements of a mixture."""
 
     def __init__(
         self,
@@ -87,7 +101,7 @@ class ParallelChunkReader(ChunkReader):
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
         server_connection: ServerConnection,
-        batch_size: int = 32,
+        batch_size: int = 128,
         mixture: Optional[Mixture] = None,
         reader_count: Optional[int] = None,
     ):
@@ -100,7 +114,7 @@ class ParallelChunkReader(ChunkReader):
             file_path_dict: A mapping from file ID to file path.
             parsing_func_dict: A mapping from dataset ID to parsing function.
             server_connection: The server connection
-            batch_size: the size of a batch
+            batch_size: the size of a batch within which the mixture should be ensured
             mixture: an optional parameter that specifies the mixture
             reader_count: the number of parallel readers. If None, it is tuned to the number of CPUs.
         """

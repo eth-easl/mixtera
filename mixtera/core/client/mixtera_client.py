@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
 from mixtera.core.client import ParallelChunkReader
+from mixtera.core.client.chunk_reader import StandardChunkReader
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
@@ -275,17 +276,10 @@ class MixteraClient(ABC):
                     "Currently, tunneling samples via the server is only supported when using a ServerStub."
                 )
 
-        reader = ParallelChunkReader(
+        reader = StandardChunkReader(
             result_chunk, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection
         )
         yield from reader.iterate_result_chunk()
-        # for _0, dataset_entries in result_chunk.items():
-        #     for did, file_entries in dataset_entries.items():
-        #         filename_dict = {
-        #           file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
-        #         yield from dataset_type_dict[did].read_ranges_from_files(
-        #             filename_dict, parsing_func_dict[did], server_connection
-        #         )
 
     @abstractmethod
     def is_remote(self) -> bool:

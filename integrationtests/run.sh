@@ -68,7 +68,8 @@ python $SCRIPT_DIR/prep_server.py $WORK_DIR
 echo "Starting Mixtera server"
 
 server_output=$(mktemp)
-mixtera-server --port 6666 $WORK_DIR &> "$server_output" &
+
+$SCRIPT_DIR/../mixtera/network/server/mixtera-server --port 6666 $WORK_DIR &> "$server_output" &
 server_pid=$!
 
 sleep 2
