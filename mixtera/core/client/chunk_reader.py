@@ -1,10 +1,12 @@
 import multiprocessing as mp
 import time
 from abc import ABC, abstractmethod
+from enum import Enum
 from queue import Empty
 from random import shuffle
 from typing import Any, Callable, Iterator, Optional, Type
 
+from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.query import Mixture, NoopMixture
@@ -323,3 +325,48 @@ class ParallelChunkReader(ChunkReader):
         else:
             yield_source = self._iterate_result_chunk_no_window_level
         yield from yield_source()
+
+
+class ChunkReaderType(Enum):
+    """Specifies the types of chunk readers"""
+
+    PARALLEL = 1
+    NON_PARALLEL = 2
+
+
+class ChunkReaderFactory:
+    @staticmethod
+    def create_chunk_reader(
+        reader_type: ChunkReaderType,
+        chunker_index: ChunkerIndex,
+        dataset_type_dict: dict[int, Type[Dataset]],
+        file_path_dict: dict[int, str],
+        parsing_func_dict: dict[int, Callable[[str], str]],
+        server_connection: ServerConnection,
+        **kwargs: int,
+    ) -> ChunkReader:
+        """
+        Creates a chunk reader of a given type.
+
+        Args:
+            reader_type: The type of the instantiated chunk reader
+            chunker_index: the ChunkerIndex object
+            dataset_type_dict: A mapping from dataset ID to dataset type.
+            file_path_dict: A mapping from file ID to file path.
+            parsing_func_dict: A mapping from dataset ID to parsing function.
+            server_connection: The server connection
+            **kwargs: Any additional keyword arguments for the chunk reader
+
+        Returns:
+            A chunk reader instance with the specified type
+        """
+        if reader_type == ChunkReaderType.PARALLEL:
+            return ParallelChunkReader(
+                chunker_index, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection, **kwargs
+            )
+        if reader_type == ChunkReaderType.NON_PARALLEL:
+            return StandardChunkReader(
+                chunker_index, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection, **kwargs
+            )
+        logger.error(f"Mixtera does not support chunk reader type {reader_type}!")
+        raise NotImplementedError()
