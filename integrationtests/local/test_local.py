@@ -1,7 +1,7 @@
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 from integrationtests.utils import TestMetadataParser, write_jsonl_ensemble, write_single_jsonl
 from mixtera.core.client import ChunkReaderType, MixteraClient
@@ -19,7 +19,7 @@ def test_filter_javascript(
     client: MixteraClient,
     chunk_size: int,
     chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    chunk_reader_args: Optional[dict] = None,
+    **chunk_reader_args: Any,
 ) -> None:
     job_id = str(round(time.time() * 1000))
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
@@ -109,9 +109,9 @@ def test_client_chunksize(
     client: MixteraClient,
     chunk_size: int,
     chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    chunk_reader_args: Optional[dict] = None,
+    **chunk_reader_args: Any,
 ):
-    test_filter_javascript(client, chunk_size, chunk_reader_type=chunk_reader_type, chunk_reader_args=chunk_reader_args)
+    test_filter_javascript(client, chunk_size, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
     # test_filter_html(client, chunk_size)
     # test_filter_both(client, chunk_size)
     # test_filter_license(client, chunk_size)
@@ -144,17 +144,12 @@ def test_chunk_readers(dir: Path) -> None:
         "reader_count": 4,
         "per_window_mixture": False,
     }
-    special_params = [{"ensure_mixture": False}, {"ensure_mixture": True}] + [
-        base_parallel_params,
-        base_parallel_params | {"per_window_mixture": True},
-    ]
+    special_params = [{"ensure_mixture": False}, {"ensure_mixture": True}, base_parallel_params,
+                      base_parallel_params | {"per_window_mixture": True},]
 
-    count = 0
     for chunk_reader_type, chunk_reader_args in zip(reader_types, special_params):
-        print(f"> Count {count}")
-        count += 1
         test_client_chunksize(
-            client, chunk_size=250, chunk_reader_type=chunk_reader_type, chunk_reader_args=chunk_reader_args
+            client, chunk_size=250, chunk_reader_type=chunk_reader_type, **chunk_reader_args
         )
 
 
