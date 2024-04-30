@@ -123,7 +123,7 @@ class StandardChunkReader(ChunkReader):
         if self._ensure_mixture:
             yield_source = self._iterate_result_chunk_with_mixture
         else:
-            yield_source = self._iterate_result_chunk_without_mixture()
+            yield_source = self._iterate_result_chunk_without_mixture
         yield from yield_source()
 
 
@@ -171,7 +171,7 @@ class ParallelChunkReader(ChunkReader):
         # If no mixture is provided, it needs to be inferred
         if self._mixture is None:
             total_count = 0
-            partition_masses = {}
+            partition_masses: dict[str, int | float] = {}
             for property_combination, partition_entry in self._chunker_index.items():
                 count = 0
                 for _0, document_entry in partition_entry.items():
@@ -187,7 +187,7 @@ class ParallelChunkReader(ChunkReader):
             self._mixture = NoopMixture(total_count, partition_masses)
 
         # Collect the workloads (i.e. did+fid+ranges) and group them by the property combination they belong to
-        self._workloads = {}
+        self._workloads: dict[str, list[tuple[int, int | str, list]]] = {}
         for property_combination, document_entries in self._chunker_index.items():
             if property_combination not in self._workloads:
                 self._workloads[property_combination] = []
@@ -214,7 +214,7 @@ class ParallelChunkReader(ChunkReader):
         )
 
         # Spin up the processes
-        self._processes = {}
+        self._processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = {}
         for key, process_count in self._process_counts.items():
             self._processes[key] = []
 
@@ -227,7 +227,7 @@ class ParallelChunkReader(ChunkReader):
 
             # Create and start the processes
             for i in range(1, len(partition_ranges)):
-                queue = mp.Queue()
+                queue: mp.Queue = mp.Queue()
                 self._processes[key].append(
                     (
                         queue,
@@ -249,7 +249,7 @@ class ParallelChunkReader(ChunkReader):
                 self._processes[key][-1][1].start()
 
     @staticmethod
-    def _reader_process(*payload) -> None:
+    def _reader_process(*payload: Any) -> None:
         queue, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection, workloads = payload
 
         for document_id, file_id, ranges in workloads:
