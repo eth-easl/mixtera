@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
-from mixtera.core.client.chunk_reader import StandardChunkReader
+from mixtera.core.client.chunk_reader import ChunkReaderFactory, ChunkReaderType
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
@@ -189,12 +189,20 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, job_id: str, tunnel_via_server: bool = False) -> Generator[str, None, None]:
+    def stream_results(
+        self,
+        job_id: str,
+        tunnel_via_server: bool = False,
+        reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
+        **chunk_reader_parameters: Any,
+    ) -> Generator[str, None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
             job_id (str): The job ID to get the results for.
             tunnel_via_server (bool): If true, samples are streamed via the Mixtera server. Defaults to False.
+            reader_type (ChunkReaderType): The type of the chunk reader
+            chunk_reader_parameters (kwargs): Supplementary chunk-reader specific instantiation parameters
         Returns:
             A Generator over string samples.
 
@@ -246,6 +254,8 @@ class MixteraClient(ABC):
         parsing_func_dict: dict[int, Callable[[str], str]],
         file_path_dict: dict[int, str],
         tunnel_via_server: bool = False,
+        reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
+        **chunk_reader_parameters: Any,
     ) -> Generator[str, None, None]:
         """
         Given a result chunk, iterates over the samples.
@@ -256,6 +266,8 @@ class MixteraClient(ABC):
             parsing_func_dict (dict): A mapping from dataset ID to parsing function.
             file_path_dict (dict): A mapping from file ID to file path.
             tunnel_via_server (bool): If true, samples are streamed via the Mixtera server.
+            reader_type (ChunkReaderType): The type of the chunk reader
+            chunk_reader_parameters (kwargs): Supplementary chunk-reader specific instantiation parameters
 
         Returns:
             A Generator of samples.
@@ -275,8 +287,14 @@ class MixteraClient(ABC):
                     "Currently, tunneling samples via the server is only supported when using a ServerStub."
                 )
 
-        reader = StandardChunkReader(
-            result_chunk, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection, ensure_mixture=True
+        reader = ChunkReaderFactory.create_chunk_reader(
+            reader_type,
+            result_chunk,
+            dataset_type_dict,
+            file_path_dict,
+            parsing_func_dict,
+            server_connection,
+            **chunk_reader_parameters,
         )
         yield from reader.iterate_result_chunk()
 

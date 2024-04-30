@@ -343,7 +343,7 @@ class ChunkReaderFactory:
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
         server_connection: ServerConnection,
-        **kwargs: int,
+        **kwargs: Any,
     ) -> ChunkReader:
         """
         Creates a chunk reader of a given type.
