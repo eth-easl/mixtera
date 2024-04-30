@@ -181,7 +181,7 @@ class ParallelChunkReader(ChunkReader):
                 partition_masses[property_combination] = count
                 total_count += count
 
-            for key in partition_masses.keys():
+            for key, _ in partition_masses.items():
                 partition_masses[key] = partition_masses[key] / total_count
 
             self._mixture = NoopMixture(total_count, partition_masses)
@@ -201,7 +201,7 @@ class ParallelChunkReader(ChunkReader):
 
         # Determine the number of readers to use s.t. readers are not overprovisioned
         self.reader_count = min(
-            sum([len(x) for x in self._workloads.values()]),
+            sum(len(x) for x in self._workloads.values()),
             reader_count if reader_count is not None else mp.cpu_count(),
         )
 
@@ -267,7 +267,7 @@ class ParallelChunkReader(ChunkReader):
         Iterates over the data produced by the parallel readers and tries to build a mixture-correct dataset on the fly.
         """
         continue_iterating = True
-        while continue_iterating:
+        while continue_iterating:  # pylint: disable=too-many-nested-blocks
             continue_iterating = False
             for property_name, property_count in self._element_counts.items():
                 for _ in range(property_count):
