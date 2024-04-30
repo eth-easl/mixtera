@@ -28,7 +28,7 @@ class Mixture(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def get_raw_mixture(self) -> dict[str, int]:
+    def get_raw_mixture(self) -> dict[str, float]:
         """
         Returns the raw mixture dictionary (i.e. each property combination has an associated mass):
         {

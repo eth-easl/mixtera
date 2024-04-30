@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
-from mixtera.core.client import ParallelChunkReader
 from mixtera.core.client.chunk_reader import StandardChunkReader
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset

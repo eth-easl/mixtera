@@ -17,12 +17,12 @@ READ_TIMEOUT_TIME = 0.1  # 100ms
 
 class ChunkReader(ABC):
     def __init__(
-            self,
-            chunker_index: ChunkerIndex,
-            dataset_type_dict: dict[int, Type[Dataset]],
-            file_path_dict: dict[int, str],
-            parsing_func_dict: dict[int, Callable[[str], str]],
-            server_connection: ServerConnection
+        self,
+        chunker_index: ChunkerIndex,
+        dataset_type_dict: dict[int, Type[Dataset]],
+        file_path_dict: dict[int, str],
+        parsing_func_dict: dict[int, Callable[[str], str]],
+        server_connection: ServerConnection,
     ) -> None:
         """
         Initializer for a ChunkReader.
@@ -59,13 +59,13 @@ class StandardChunkReader(ChunkReader):
     """Implementation of a single-process chunk reader that yields instances on a FCFS basis."""
 
     def __init__(
-            self,
-            chunker_index: ChunkerIndex,
-            dataset_type_dict: dict[int, Type[Dataset]],
-            file_path_dict: dict[int, str],
-            parsing_func_dict: dict[int, Callable[[str], str]],
-            server_connection: ServerConnection,
-            ensure_mixture: bool = False
+        self,
+        chunker_index: ChunkerIndex,
+        dataset_type_dict: dict[int, Type[Dataset]],
+        file_path_dict: dict[int, str],
+        parsing_func_dict: dict[int, Callable[[str], str]],
+        server_connection: ServerConnection,
+        ensure_mixture: bool = False,
     ) -> None:
         """
         Initializer for a StandardChunkReader.
@@ -95,7 +95,8 @@ class StandardChunkReader(ChunkReader):
         for _0, dataset_entries in self._chunker_index.items():
             for did, file_entries in dataset_entries.items():
                 filename_dict = {
-                    self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
+                    self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()
+                }
                 yield from self._dataset_type_dict[did].read_ranges_from_files(
                     filename_dict, self._parsing_func_dict[did], self._server_connection
                 )
@@ -108,10 +109,13 @@ class StandardChunkReader(ChunkReader):
         for _0, dataset_entries in self._chunker_index.items():
             for did, file_entries in dataset_entries.items():
                 filename_dict = {
-                    self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
-                read_instances.extend(self._dataset_type_dict[did].read_ranges_from_files(
-                    filename_dict, self._parsing_func_dict[did], self._server_connection
-                ))
+                    self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()
+                }
+                read_instances.extend(
+                    self._dataset_type_dict[did].read_ranges_from_files(
+                        filename_dict, self._parsing_func_dict[did], self._server_connection
+                    )
+                )
         shuffle(read_instances)
         yield from read_instances
 
@@ -127,16 +131,16 @@ class ParallelChunkReader(ChunkReader):
     """Implementation of a multiprocess based chunk reader that fulfills the requirements of a mixture."""
 
     def __init__(
-            self,
-            chunker_index: ChunkerIndex,
-            dataset_type_dict: dict[int, Type[Dataset]],
-            file_path_dict: dict[int, str],
-            parsing_func_dict: dict[int, Callable[[str], str]],
-            server_connection: ServerConnection,
-            window_size: int = 128,
-            mixture: Optional[Mixture] = None,
-            reader_count: Optional[int] = None,
-            per_window_mixture: bool = False
+        self,
+        chunker_index: ChunkerIndex,
+        dataset_type_dict: dict[int, Type[Dataset]],
+        file_path_dict: dict[int, str],
+        parsing_func_dict: dict[int, Callable[[str], str]],
+        server_connection: ServerConnection,
+        window_size: int = 128,
+        mixture: Optional[Mixture] = None,
+        reader_count: Optional[int] = None,
+        per_window_mixture: bool = False,
     ):
         """
         Initializer for a ChunkReader.
@@ -150,7 +154,8 @@ class ParallelChunkReader(ChunkReader):
             window_size: the size of a window within which the mixture should be maintained
             mixture: an optional parameter that specifies the mixture
             reader_count: the number of parallel readers. If None, it is tuned to the number of CPUs.
-            per_window_mixture: if True, the mixture will be fulfilled within each window_size
+            per_window_mixture: if True, the mixture will be fulfilled within each window_size; this might make
+                the reader slower due to the additional synchronization and ordering requirements
         """
         super().__init__(
             chunker_index,
@@ -234,7 +239,7 @@ class ParallelChunkReader(ChunkReader):
                                 self._file_path_dict,
                                 self._parsing_func_dict,
                                 self._server_connection,
-                                self._workloads[key][partition_ranges[i - 1]: partition_ranges[i]],
+                                self._workloads[key][partition_ranges[i - 1] : partition_ranges[i]],
                             ),
                         ),
                     )
@@ -318,4 +323,3 @@ class ParallelChunkReader(ChunkReader):
         else:
             yield_source = self._iterate_result_chunk_no_window_level
         yield from yield_source()
-
