@@ -213,7 +213,13 @@ class MixteraClient(ABC):
         for result_chunk in self._stream_result_chunks(job_id):
             # TODO(#35): When implementing the new sampling on the ResultChunk,
             # the ResultChunk class should offer an iterator instead.
-            yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
+            yield from self._iterate_result_chunk(
+                result_chunk,
+                *result_metadata,
+                tunnel_via_server=tunnel_via_server,
+                reader_type=reader_type,
+                chunk_reader_parameters=chunk_reader_parameters,
+            )
 
     @abstractmethod
     def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
