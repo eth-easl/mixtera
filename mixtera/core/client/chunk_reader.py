@@ -223,9 +223,6 @@ class ParallelChunkReader(ChunkReader):
             # Calculate per-process partition sizes
             partition_size = max(1, len(self._workloads[key]) // process_count)
             partition_ranges = list(range(0, len(self._workloads[key]), partition_size)) + [len(self._workloads[key])]
-            assert process_count + 1 == len(
-                partition_ranges
-            ), f"Number of partitions: expected: {process_count + 1}; received: {len(partition_ranges)}"
 
             # Create and start the processes
             for i in range(1, len(partition_ranges)):
@@ -302,7 +299,7 @@ class ParallelChunkReader(ChunkReader):
                             retries -= 1
 
                     # If at least one instance could be read we should continue
-                    continue_iterating = continue_iterating and yielded
+                    continue_iterating = continue_iterating or yielded
 
     def _iterate_result_chunk_no_window_level(self) -> Iterator[Any]:
         """

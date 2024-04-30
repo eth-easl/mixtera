@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 import torch
-from integrationtests.utils import TestMetadataParser, write_jsonl
+from integrationtests.utils import TestMetadataParser, write_single_jsonl
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import Query
@@ -120,7 +120,7 @@ def test_torchds(client: MixteraClient, chunk_size: int, num_workers: int, batch
 
 
 def test_tds(dir: Path) -> None:
-    write_jsonl(dir / "testd.jsonl")
+    write_single_jsonl(dir / "testd.jsonl")
     local_client = MixteraClient(dir)
     local_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     local_client.register_dataset(

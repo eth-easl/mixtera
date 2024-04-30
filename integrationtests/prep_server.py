@@ -12,11 +12,11 @@ def parsing_func(sample):
 
 
 def main() -> None:
-    from utils import TestMetadataParser, write_jsonl
+    from utils import TestMetadataParser, write_single_jsonl
 
     server_dir = Path(sys.argv[1])
     print(f"Prepping directory {server_dir}.")
-    write_jsonl(server_dir / "testd.jsonl")
+    write_single_jsonl(server_dir / "testd.jsonl")
     client = MixteraClient.from_directory(server_dir)
     client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     client.register_dataset(

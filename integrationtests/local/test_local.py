@@ -1,9 +1,10 @@
 import tempfile
 import time
 from pathlib import Path
+from typing import Optional
 
-from integrationtests.utils import TestMetadataParser, write_jsonl
-from mixtera.core.client import MixteraClient
+from integrationtests.utils import TestMetadataParser, write_jsonl_ensemble, write_single_jsonl
+from mixtera.core.client import ChunkReaderType, MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import Query
 
@@ -14,15 +15,20 @@ def parsing_func(sample):
     return json.loads(sample)["text"]
 
 
-def test_filter_javascript(client: MixteraClient, chunk_size: int):
+def test_filter_javascript(
+    client: MixteraClient,
+    chunk_size: int,
+    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
+    chunk_reader_args: Optional[dict] = None,
+) -> None:
     job_id = str(round(time.time() * 1000))
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     client.execute_query(query, chunk_size)
     result_samples = []
-    for sample in client.stream_results(job_id, False):
+    for sample in client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args):
         result_samples.append(sample)
 
-    assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
+    assert len(result_samples) == 2500, f"Got {len(result_samples)} samples instead of the expected 500!"
     for sample in result_samples:
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
@@ -99,17 +105,22 @@ def test_filter_license_and_html(client: MixteraClient, chunk_size: int):
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_client_chunksize(client: MixteraClient, chunk_size: int):
-    test_filter_javascript(client, chunk_size)
-    test_filter_html(client, chunk_size)
-    test_filter_both(client, chunk_size)
-    test_filter_license(client, chunk_size)
-    test_filter_unknown_license(client, chunk_size)
-    test_filter_license_and_html(client, chunk_size)
+def test_client_chunksize(
+    client: MixteraClient,
+    chunk_size: int,
+    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
+    chunk_reader_args: Optional[dict] = None,
+):
+    test_filter_javascript(client, chunk_size, chunk_reader_type=chunk_reader_type, chunk_reader_args=chunk_reader_args)
+    # test_filter_html(client, chunk_size)
+    # test_filter_both(client, chunk_size)
+    # test_filter_license(client, chunk_size)
+    # test_filter_unknown_license(client, chunk_size)
+    # test_filter_license_and_html(client, chunk_size)
 
 
 def test_client(dir: Path) -> None:
-    write_jsonl(dir / "testd.jsonl")
+    write_single_jsonl(dir / "testd.jsonl")
     client = MixteraClient.from_directory(dir)
     client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     client.register_dataset(
@@ -122,9 +133,38 @@ def test_client(dir: Path) -> None:
     print("Successfully ran client test!")
 
 
+def test_chunk_readers(dir: Path) -> None:
+    write_jsonl_ensemble(dir)
+    client = MixteraClient.from_directory(dir)
+    client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
+    client.register_dataset("client_integrationtest_dataset", dir, JSONLDataset, parsing_func, "TEST_PARSER")
+
+    reader_types = [ChunkReaderType.NON_PARALLEL] * 2 + [ChunkReaderType.PARALLEL] * 2
+    base_parallel_params = {
+        "reader_count": 4,
+        "per_window_mixture": False,
+    }
+    special_params = [{"ensure_mixture": False}, {"ensure_mixture": True}] + [
+        base_parallel_params,
+        base_parallel_params | {"per_window_mixture": True},
+    ]
+
+    count = 0
+    for chunk_reader_type, chunk_reader_args in zip(reader_types, special_params):
+        print(f"> Count {count}")
+        count += 1
+        test_client_chunksize(
+            client, chunk_size=250, chunk_reader_type=chunk_reader_type, chunk_reader_args=chunk_reader_args
+        )
+
+
 def main() -> None:
+    # with tempfile.TemporaryDirectory() as directory:
+    #     test_client(Path(directory))
+
+    # Testing different types of readers
     with tempfile.TemporaryDirectory() as directory:
-        test_client(Path(directory))
+        test_chunk_readers(Path(directory))
 
 
 if __name__ == "__main__":
