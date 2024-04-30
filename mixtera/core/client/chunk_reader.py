@@ -2,6 +2,7 @@ import multiprocessing as mp
 import time
 from abc import ABC, abstractmethod
 from queue import Empty
+from random import shuffle
 from typing import Any, Callable, Iterator, Optional, Type
 
 from mixtera.core.datacollection.datasets import Dataset
@@ -16,14 +17,12 @@ READ_TIMEOUT_TIME = 0.1  # 100ms
 
 class ChunkReader(ABC):
     def __init__(
-        self,
-        chunker_index: ChunkerIndex,
-        dataset_type_dict: dict[int, Type[Dataset]],
-        file_path_dict: dict[int, str],
-        parsing_func_dict: dict[int, Callable[[str], str]],
-        server_connection: ServerConnection,
-        batch_size: int = 32,
-        mixture: Optional[Mixture] = None,
+            self,
+            chunker_index: ChunkerIndex,
+            dataset_type_dict: dict[int, Type[Dataset]],
+            file_path_dict: dict[int, str],
+            parsing_func_dict: dict[int, Callable[[str], str]],
+            server_connection: ServerConnection
     ) -> None:
         """
         Initializer for a ChunkReader.
@@ -34,35 +33,13 @@ class ChunkReader(ABC):
             file_path_dict: A mapping from file ID to file path.
             parsing_func_dict: A mapping from dataset ID to parsing function.
             server_connection: The server connection
-            batch_size: the size of a batch
-            mixture: an optional parameter that specifies the mixture
         """
-        self.batch_size = batch_size
         self._chunker_index = chunker_index
-        self._mixture = mixture
 
         self._dataset_type_dict = dataset_type_dict
         self._file_path_dict = file_path_dict
         self._parsing_func_dict = parsing_func_dict
         self._server_connection = server_connection
-
-        # If no mixture is provided, it needs to be inferred
-        if self._mixture is None:
-            total_count = 0
-            partition_masses = {}
-            for property_combination, partition_entry in self._chunker_index.items():
-                count = 0
-                for _0, document_entry in partition_entry.items():
-                    for _1, ranges in document_entry.items():
-                        for base_range in ranges:
-                            count += base_range[1] - base_range[0]
-                partition_masses[property_combination] = count
-                total_count += count
-
-            for key in partition_masses.keys():
-                partition_masses[key] = partition_masses[key] / total_count
-
-            self._mixture = NoopMixture(total_count, partition_masses)
 
     @abstractmethod
     def iterate_result_chunk(self) -> Iterator[Any]:
@@ -81,7 +58,40 @@ class ChunkReader(ABC):
 class StandardChunkReader(ChunkReader):
     """Implementation of a single-process chunk reader that yields instances on a FCFS basis."""
 
-    def iterate_result_chunk(self) -> Iterator[Any]:
+    def __init__(
+            self,
+            chunker_index: ChunkerIndex,
+            dataset_type_dict: dict[int, Type[Dataset]],
+            file_path_dict: dict[int, str],
+            parsing_func_dict: dict[int, Callable[[str], str]],
+            server_connection: ServerConnection,
+            ensure_mixture: bool = False
+    ) -> None:
+        """
+        Initializer for a StandardChunkReader.
+
+        Args:
+            chunker_index: the ChunkerIndex object
+            dataset_type_dict: A mapping from dataset ID to dataset type.
+            file_path_dict: A mapping from file ID to file path.
+            parsing_func_dict: A mapping from dataset ID to parsing function.
+            server_connection: The server connection
+            ensure_mixture: if True, ensures the underlying chunk Mixture by first reading all the data then shuffling
+                it at random and yielding it
+        """
+        super().__init__(
+            chunker_index,
+            dataset_type_dict=dataset_type_dict,
+            file_path_dict=file_path_dict,
+            parsing_func_dict=parsing_func_dict,
+            server_connection=server_connection,
+        )
+        self._ensure_mixture = ensure_mixture
+
+    def _iterate_result_chunk_without_mixture(self) -> Iterator[Any]:
+        """
+        Iterate over the data, yielding instances one by one from the chunk in a FCFS order.
+        """
         for _0, dataset_entries in self._chunker_index.items():
             for did, file_entries in dataset_entries.items():
                 filename_dict = {
@@ -90,20 +100,43 @@ class StandardChunkReader(ChunkReader):
                     filename_dict, self._parsing_func_dict[did], self._server_connection
                 )
 
+    def _iterate_result_chunk_with_mixture(self) -> Iterator[Any]:
+        """
+        Reads the data once fully, the shuffles it to finally yield it. This happens in order to ensure the mixture.
+        """
+        read_instances = []
+        for _0, dataset_entries in self._chunker_index.items():
+            for did, file_entries in dataset_entries.items():
+                filename_dict = {
+                    self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
+                read_instances.extend(self._dataset_type_dict[did].read_ranges_from_files(
+                    filename_dict, self._parsing_func_dict[did], self._server_connection
+                ))
+        shuffle(read_instances)
+        for instance in read_instances:
+            yield instance
+
+    def iterate_result_chunk(self) -> Iterator[Any]:
+        if self._ensure_mixture:
+            yield_source = self._iterate_result_chunk_with_mixture
+        else:
+            yield_source = self._iterate_result_chunk_without_mixture()
+        yield from yield_source()
+
 
 class ParallelChunkReader(ChunkReader):
     """Implementation of a multiprocess based chunk reader that fulfills the requirements of a mixture."""
 
     def __init__(
-        self,
-        chunker_index: ChunkerIndex,
-        dataset_type_dict: dict[int, Type[Dataset]],
-        file_path_dict: dict[int, str],
-        parsing_func_dict: dict[int, Callable[[str], str]],
-        server_connection: ServerConnection,
-        batch_size: int = 128,
-        mixture: Optional[Mixture] = None,
-        reader_count: Optional[int] = None,
+            self,
+            chunker_index: ChunkerIndex,
+            dataset_type_dict: dict[int, Type[Dataset]],
+            file_path_dict: dict[int, str],
+            parsing_func_dict: dict[int, Callable[[str], str]],
+            server_connection: ServerConnection,
+            batch_size: int = 128,
+            mixture: Optional[Mixture] = None,
+            reader_count: Optional[int] = None,
     ):
         """
         Initializer for a ChunkReader.
@@ -124,9 +157,27 @@ class ParallelChunkReader(ChunkReader):
             file_path_dict=file_path_dict,
             parsing_func_dict=parsing_func_dict,
             server_connection=server_connection,
-            batch_size=batch_size,
-            mixture=mixture,
         )
+        self._mixture = mixture
+        self.batch_size = batch_size
+
+        # If no mixture is provided, it needs to be inferred
+        if self._mixture is None:
+            total_count = 0
+            partition_masses = {}
+            for property_combination, partition_entry in self._chunker_index.items():
+                count = 0
+                for _0, document_entry in partition_entry.items():
+                    for _1, ranges in document_entry.items():
+                        for base_range in ranges:
+                            count += base_range[1] - base_range[0]
+                partition_masses[property_combination] = count
+                total_count += count
+
+            for key in partition_masses.keys():
+                partition_masses[key] = partition_masses[key] / total_count
+
+            self._mixture = NoopMixture(total_count, partition_masses)
 
         # Collect the workloads (i.e. did+fid+ranges) and group them by the property combination they belong to
         self._workloads = {}
@@ -181,7 +232,7 @@ class ParallelChunkReader(ChunkReader):
                                 self._file_path_dict,
                                 self._parsing_func_dict,
                                 self._server_connection,
-                                self._workloads[key][partition_ranges[i - 1] : partition_ranges[i]],
+                                self._workloads[key][partition_ranges[i - 1]: partition_ranges[i]],
                             ),
                         ),
                     )
