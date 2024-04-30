@@ -218,7 +218,7 @@ class MixteraClient(ABC):
                 *result_metadata,
                 tunnel_via_server=tunnel_via_server,
                 reader_type=reader_type,
-                chunk_reader_parameters=chunk_reader_parameters,
+                **chunk_reader_parameters,
             )
 
     @abstractmethod
