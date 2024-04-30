@@ -113,8 +113,7 @@ class StandardChunkReader(ChunkReader):
                     filename_dict, self._parsing_func_dict[did], self._server_connection
                 ))
         shuffle(read_instances)
-        for instance in read_instances:
-            yield instance
+        yield from read_instances
 
     def iterate_result_chunk(self) -> Iterator[Any]:
         if self._ensure_mixture:
@@ -134,9 +133,10 @@ class ParallelChunkReader(ChunkReader):
             file_path_dict: dict[int, str],
             parsing_func_dict: dict[int, Callable[[str], str]],
             server_connection: ServerConnection,
-            batch_size: int = 128,
+            window_size: int = 128,
             mixture: Optional[Mixture] = None,
             reader_count: Optional[int] = None,
+            per_window_mixture: bool = False
     ):
         """
         Initializer for a ChunkReader.
@@ -147,9 +147,10 @@ class ParallelChunkReader(ChunkReader):
             file_path_dict: A mapping from file ID to file path.
             parsing_func_dict: A mapping from dataset ID to parsing function.
             server_connection: The server connection
-            batch_size: the size of a batch within which the mixture should be ensured
+            window_size: the size of a window within which the mixture should be maintained
             mixture: an optional parameter that specifies the mixture
             reader_count: the number of parallel readers. If None, it is tuned to the number of CPUs.
+            per_window_mixture: if True, the mixture will be fulfilled within each window_size
         """
         super().__init__(
             chunker_index,
@@ -159,7 +160,8 @@ class ParallelChunkReader(ChunkReader):
             server_connection=server_connection,
         )
         self._mixture = mixture
-        self.batch_size = batch_size
+        self.window_size = window_size
+        self.per_window_mixture = per_window_mixture
 
         # If no mixture is provided, it needs to be inferred
         if self._mixture is None:
@@ -189,8 +191,8 @@ class ParallelChunkReader(ChunkReader):
                     self._workloads[property_combination].append((document_id, file_id, ranges))
 
         # Determine the per-property combination batch counts
-        self._batch_counts = {key: int(batch_size * value) for key, value in self._mixture.get_raw_mixture().items()}
-        self._batch_counts[list(self._batch_counts.keys())[0]] += batch_size - sum(self._batch_counts.values())
+        self._element_counts = {key: int(window_size * value) for key, value in self._mixture.get_raw_mixture().items()}
+        self._element_counts[list(self._element_counts.keys())[0]] += window_size - sum(self._element_counts.values())
 
         # Determine the number of readers to use s.t. readers are not overprovisioned
         self.reader_count = min(
@@ -253,11 +255,16 @@ class ParallelChunkReader(ChunkReader):
             for instance in instance_iterator:
                 queue.put_nowait(instance)
 
-    def iterate_result_chunk(self) -> Iterator[Any]:
+        queue.close()
+
+    def _iterate_result_chunk_window_level_mixture(self) -> Iterator[Any]:
+        """
+        Iterates over the data produced by the parallel readers and tries to build a mixture-correct dataset on the fly.
+        """
         continue_iterating = True
         while continue_iterating:
             continue_iterating = False
-            for property_name, property_count in self._batch_counts.items():
+            for property_name, property_count in self._element_counts.items():
                 for _ in range(property_count):
                     yielded = False
                     retries = RETRY_COUNT
@@ -289,3 +296,26 @@ class ParallelChunkReader(ChunkReader):
 
                     # If at least one instance could be read we should continue
                     continue_iterating = continue_iterating and yielded
+
+    def _iterate_result_chunk_no_window_level(self) -> Iterator[Any]:
+        """
+        This method first waits for all the data to be read by the parallel readers before collecting it and yielding it
+        """
+        results = []
+
+        for _, proc_list in self._processes.items():
+            for q, proc in proc_list:
+                proc.join()
+                while not q.empty():
+                    results.append(q.get_nowait())
+
+        shuffle(results)
+        yield from results
+
+    def iterate_result_chunk(self) -> Iterator[Any]:
+        if self.per_window_mixture:
+            yield_source = self._iterate_result_chunk_window_level_mixture
+        else:
+            yield_source = self._iterate_result_chunk_no_window_level
+        yield from yield_source()
+

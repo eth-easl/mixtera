@@ -277,7 +277,7 @@ class MixteraClient(ABC):
                 )
 
         reader = StandardChunkReader(
-            result_chunk, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection
+            result_chunk, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection, ensure_mixture=True
         )
         yield from reader.iterate_result_chunk()
 
