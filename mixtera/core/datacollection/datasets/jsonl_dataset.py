@@ -41,7 +41,7 @@ class JSONLDataset(Dataset):
             yield from JSONLDataset._read_ranges_from_file(file, range_list, parsing_func, server_connection)
 
     @staticmethod
-    def _read_ranges_from_file(
+    def _read_ranges_from_file(  # pylint: disable=contextmanager-generator-missing-cleanup
         file: str,
         range_list: list[tuple[int, int]],
         parsing_func: Callable[[str], str],

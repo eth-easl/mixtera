@@ -16,7 +16,7 @@ URL_GITHUB = "https://github.com/eth-easl/mixtera"
 URL_ISSUES = "https://github.com/eth-easl/mixtera"
 EMAIL = "maximilian.boether@inf.ethz.ch"
 AUTHOR = "See contributing.md"
-REQUIRES_PYTHON = ">=3.12"
+REQUIRES_PYTHON = ">=3.11"
 KEYWORDS = [""]
 REQUIRED = [""]
 EXTRAS = {}
