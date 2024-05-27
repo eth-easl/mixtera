@@ -211,70 +211,36 @@ class QueryResult:
         # dataset_id -> file_id -> list[intervals]
         current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
 
-        for dataset_id, document_entries in target_ranges.items():  # pylint: disable=too-many-nested-blocks
+        for dataset_id, document_entries in target_ranges.items():
             for file_id, ranges in document_entries.items():
                 for base_range in ranges:
                     current_range = (base_range[0], base_range[1])
-                    range_cardinality = current_range[1] - current_range[0]
-                    if current_cardinality + range_cardinality < component_cardinality:
-                        # This is the case where the size of the current_range together with the size of the chunk
-                        # we are currently building is still less than the target component_cardinality; the
-                        # current_range is simply added to the chunk we are building and we move on to the next range
-                        current_partition[dataset_id][file_id].append(current_range)
-                        current_cardinality += range_cardinality
-                    else:
-                        # This is the case where the current_range's size added to the size of the chunk being built
-                        # Goes above the target component_cardinality. We do the following things in this case:
-                        #   1. Measure the difference, i.e. the size of the range that stays with this chunk and
-                        #      the complement that will end up in the next chunk
-                        #   2. The current_range is then split using this difference. The first part is added to the
-                        #      current chunk. The total number of instances is now equal to component_cardinality
-                        diff = current_cardinality + range_cardinality - component_cardinality
-                        current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
-                        component_chunks.append(defaultdict_to_dict(current_partition))
+                    continue_processing = current_range[1] > current_range[0]
+                    while continue_processing:
+                        range_cardinality = current_range[1] - current_range[0]
+                        if current_cardinality + range_cardinality < component_cardinality:
+                            # This is the case when the remaining part of the range is smaller than the
+                            # current_partition. We have now completed processing the original range, and can move on
+                            # to the next which is given by the innermost for loop (i.e. the one looping over 'ranges').
+                            current_partition[dataset_id][file_id].append(current_range)
+                            current_cardinality += range_cardinality
+                            continue_processing = False
+                        else:
+                            # This is the case where the current range is greater than the size of a chunk. We take as
+                            # much as needed from the current range to add to create the chunk (which is now fully
+                            # occupied by this range), create a new chunk, and split the current range such that we
+                            # do not consider the range added to the previous chunk.
+                            diff = current_cardinality + range_cardinality - component_cardinality
+                            current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
+                            component_chunks.append(defaultdict_to_dict(current_partition))
 
-                        #   3. We create the next chunk object; we also update the current_range such that it now
-                        #      points to the complement (i.e. the part that was not added to the previous chunk).
-                        current_range = (current_range[1] - diff, current_range[1])
-                        current_partition = defaultdict(lambda: defaultdict(list))
-                        current_cardinality = 0
+                            # Prepare the rest of the range and new component
+                            current_range = (current_range[1] - diff, current_range[1])
+                            current_partition = defaultdict(lambda: defaultdict(list))
+                            current_cardinality = 0
 
-                        #   4. We still have to process the complement of the current_range (i.e. the part that we
-                        #      did not add to the previous chunk). There are a few possibilities here: (1) the remaining
-                        #      range is of size 0 - this happens when current_range was exactly as large as we needed -
-                        #      in order to close the previous chunk; in other words, diff == 0 (2) the remaining range
-                        #      has a non-zero size; the non-zero size may mean greater than the size of a chunk or less
-                        #      than then chunk. The while loop below handles case (2)
-                        continue_processing = current_range[1] > current_range[0]
-                        while continue_processing:
-                            range_cardinality = current_range[1] - current_range[0]
-                            if current_cardinality + range_cardinality < component_cardinality:
-                                # 5. This is the case when the remaining part of the range is smaller than the
-                                #    current_partition. This is similar to step 1. We have now completed processing
-                                #    the original range, and can move on to the next which is given by the inner
-                                #    most for loop (i.e. the one looping over 'ranges').
-                                current_partition[dataset_id][file_id].append(current_range)
-                                current_cardinality += range_cardinality
-                                continue_processing = False
-                            else:
-                                # 6. This is the case where the current range is greater than the size of a chunk. We
-                                #    take as much as needed from the current range to add to create the chunk (which
-                                #    is now fully occupied by this range), create a new chunk, and split the current
-                                #    range such that we do not consider the range added to the previous chunk. This is
-                                #    similar to steps 1, 2, and 3, but we are still porocessing a single chunk.
-                                diff = current_cardinality + range_cardinality - component_cardinality
-                                current_partition[dataset_id][file_id].append(
-                                    (current_range[0], current_range[1] - diff)
-                                )
-                                component_chunks.append(defaultdict_to_dict(current_partition))
-
-                                # Prepare the rest of the range and new component
-                                current_range = (current_range[1] - diff, current_range[1])
-                                current_partition = defaultdict(lambda: defaultdict(list))
-                                current_cardinality = 0
-
-                                # Stop if range has been exhausted perfectly
-                                continue_processing = current_range[1] > current_range[0]
+                            # Stop if range has been exhausted perfectly
+                            continue_processing = current_range[1] > current_range[0]
 
         if current_cardinality > 0:
             component_chunks.append(defaultdict_to_dict(current_partition))
