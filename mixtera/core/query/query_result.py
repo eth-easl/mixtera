@@ -87,8 +87,9 @@ class QueryResult:
                 "dataset_id": {
                     "file_id": {
                         portion.Interval: {
-                            feature_1_name: [feature_1_value, ...],
+                            feature_1_name: [feature_1_value_0, ...],
                             ...
+                            feature_n_name: [feature_n_value_0, ...],
                         },
                         ...
                     },
@@ -120,11 +121,6 @@ class QueryResult:
                                     interval_dict[intersection_range].values()[0], intersection_properties
                                 )
 
-        # TODO(DanGraur): Add option to parallelize: (1) find count of (prop, value, dset, file) tuples (2) divide these
-        #                 by the nr of threads/procs; give each proc one of these ranges (3) each proc produces
-        #                 dset, file -> list[(range, prop)] data structures (4) count nr of files; divide by proc count
-        #                 and disseminate to procs (5) each proc merges the props and intervals per files received.
-        #                 (6) merge into a single data structure. This process is a 2-stage map-reduce.
         return inverted_dictionary
 
     @staticmethod
@@ -137,6 +133,7 @@ class QueryResult:
                     file_0_id: [
                         [lo_bound_0, hi_bound_0],
                         ...
+                        [lo_bound_n, hi_bound_n],
                     ],
                     ...
                 },
@@ -145,7 +142,8 @@ class QueryResult:
             ...
         }
 
-        The ChunkerIndex object is useful for creating mixture chunks.
+        The ChunkerIndex object is useful for creating mixture chunks. It is guaranteed that all generated intervals
+        are disjoint, and only represent one possible combination of properties and their values.
 
         Args:
             inverted_index: an InvertedIndex object.
@@ -158,19 +156,16 @@ class QueryResult:
         for document_id, document_entries in inverted_index.items():
             for file_id, file_entries in document_entries.items():
                 for intervals, interval_properties in file_entries.items():
-                    # intervals can be a simplified interval (e.g. '[-7,-2) | [11,15)') so we need a for loop
+                    # Intervals can be a simplified interval (e.g. '[-7,-2) | [11,15)') so we need a for loop
                     for interval in intervals:
-                        # Create a key for this interval; only the first value for a property is considered here
+                        # Create a key that identifies the properties and values covered in this interval
                         property_names = list(interval_properties.keys())
                         property_values = [interval_properties[property_name] for property_name in property_names]
                         hashable_key = generate_hashable_search_key(property_names, property_values)
 
-                        # Add the interval to the chunk index
+                        # Add the interval to the chunk index based on the generated key
                         chunker_index[hashable_key][document_id][file_id].append([interval.lower, interval.upper])
 
-        # TODO(DanGraur): Add option to parallelize: (1) count number of files (2) disseminate to procs equally;
-        #                 each proc handles the list reduction and converts to a chunker index (3) chunker indexes are
-        #                 returned and merged by main proc
         return chunker_index
 
     @staticmethod
@@ -178,9 +173,11 @@ class QueryResult:
         chunker_index: ChunkerIndex, component_key: str, component_cardinality: int
     ) -> list[ChunkerIndexDatasetEntries]:
         """
-        This method per chunks for each component of a mixture (e.g. 25% medicine + english) given a key into
-        the chunking index and the cardinality (in number of instances) for the component
-        (e.g. 25% --> 25 instances).
+        This method computes the partial chunks for each component of a mixture. A component here is considered one
+        of the chunk's fundamental property value combinations (e.g. 25% of a chunk is Medicine in English). The method
+        identifies the target intervals using the passed component_key parameter (for the aforementioned example,
+        this would be language:english;topic:medicine). The cardinality of a partial chunk is given by the
+        cardinality of the chunk multiplied with the fraction of this property combination.
 
         Args:
             chunker_index: The chunking index
@@ -202,11 +199,16 @@ class QueryResult:
                 },
                 ...
             ]
+
+            Each chunk has the same property combination. In the given example, all dictionaries in the list contain
+            ranges that identify component_cardinality rows with the property combination specified by component_key.
         """
         component_chunks = []
         target_ranges = chunker_index[component_key]
 
         current_cardinality = 0
+
+        # dataset_id -> file_id -> list[intervals]
         current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
 
         for dataset_id, document_entries in target_ranges.items():  # pylint: disable=too-many-nested-blocks
@@ -215,28 +217,51 @@ class QueryResult:
                     current_range = (base_range[0], base_range[1])
                     range_cardinality = current_range[1] - current_range[0]
                     if current_cardinality + range_cardinality < component_cardinality:
+                        # This is the case where the size of the current_range together with the size of the chunk
+                        # we are currently building is still less than the target component_cardinality; the
+                        # current_range is simply added to the chunk we are building and we move on to the next range
                         current_partition[dataset_id][file_id].append(current_range)
                         current_cardinality += range_cardinality
                     else:
-                        # Add the partial range and the full component
+                        # This is the case where the current_range's size added to the size of the chunk being built
+                        # Goes above the target component_cardinality. We do the following things in this case:
+                        #   1. Measure the difference, i.e. the size of the range that stays with this chunk and
+                        #      the complement that will end up in the next chunk
+                        #   2. The current_range is then split using this difference. The first part is added to the
+                        #      current chunk. The total number of instances is now equal to component_cardinality
                         diff = current_cardinality + range_cardinality - component_cardinality
                         current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
                         component_chunks.append(defaultdict_to_dict(current_partition))
 
-                        # Prepare the rest of the range and new component
+                        #   3. We create the next chunk object; we also update the current_range such that it now
+                        #      points to the complement (i.e. the part that was not added to the previous chunk).
                         current_range = (current_range[1] - diff, current_range[1])
                         current_partition = defaultdict(lambda: defaultdict(list))
                         current_cardinality = 0
 
-                        # Process the remaining range
+                        #   4. We still have to process the complement of the current_range (i.e. the part that we
+                        #      did not add to the previous chunk). There are a few possibilities here: (1) the remaining
+                        #      range is of size 0 - this happens when current_range was exactly as large as we needed -
+                        #      in order to close the previous chunk; in other words, diff == 0 (2) the remaining range
+                        #      has a non-zero size; the non-zero size may mean greater than the size of a chunk or less
+                        #      than then chunk. The while loop below handles case (2)
                         continue_processing = current_range[1] > current_range[0]
                         while continue_processing:
                             range_cardinality = current_range[1] - current_range[0]
                             if current_cardinality + range_cardinality < component_cardinality:
+                                # 5. This is the case when the remaining part of the range is smaller than the
+                                #    current_partition. This is similar to step 1. We have now completed processing
+                                #    the original range, and can move on to the next which is given by the inner
+                                #    most for loop (i.e. the one looping over 'ranges').
                                 current_partition[dataset_id][file_id].append(current_range)
                                 current_cardinality += range_cardinality
                                 continue_processing = False
                             else:
+                                # 6. This is the case where the current range is greater than the size of a chunk. We
+                                #    take as much as needed from the current range to add to create the chunk (which
+                                #    is now fully occupied by this range), create a new chunk, and split the current
+                                #    range such that we do not consider the range added to the previous chunk. This is
+                                #    similar to steps 1, 2, and 3, but we are still porocessing a single chunk.
                                 diff = current_cardinality + range_cardinality - component_cardinality
                                 current_partition[dataset_id][file_id].append(
                                     (current_range[0], current_range[1] - diff)
@@ -256,30 +281,6 @@ class QueryResult:
 
         return component_chunks
 
-    def _temp_chunker(self) -> list[ChunkerIndex]:
-        """
-        This is a dummy method for implementing chunking added here to not break the unit tests.
-        """
-        inverted_index: InvertedIndex = self._invert_result(self.results)
-        chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
-        # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
-        #                 (3) add unit test for it (4) [separately of this] add multiprocessing to inverted/chunk index
-
-        mixture = self._mixture.get_mixture()  # type: ignore[union-attr]
-        mixture_keys = mixture.keys()
-        component_chunks = [
-            self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
-        ]
-
-        chunks = []
-        for components in zip(*component_chunks):
-            chunk = {}
-            for component in zip(mixture_keys, components):
-                chunk[component[0]] = component[1]
-            chunks.append(chunk)
-
-        return chunks
-
     def chunking(self) -> None:
         """
         Implements the chunking logic. This method populates the self._chunks variable with chunks fulfilling the
@@ -288,8 +289,6 @@ class QueryResult:
         """
         inverted_index: InvertedIndex = self._invert_result(self.results)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
-        # TODO(DanGraur): (1) add logic that stores some mixture data structure (2) add logic that can generate chunks
-        #                 (3) add unit test for it (4) [separately of this] add multiprocessing to inverted/chunk index
 
         if self._mixture is not None:
             # If we have a mixture, we use that to generate the chunks
