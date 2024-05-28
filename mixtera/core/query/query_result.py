@@ -240,19 +240,28 @@ class QueryResult:
         inverted_index: InvertedIndex = self._invert_result(self.results)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
 
-        # If we have a mixture, we use that to generate the chunks
         mixture = self._mixture.get_mixture()
-        mixture_keys = mixture.keys()
-        component_chunks = [
-            self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
-        ]
 
-        # Chunks will be composed using multiple properties
-        for components in zip(*component_chunks):
-            chunk = {}
-            for component in zip(mixture_keys, components):
-                chunk[component[0]] = component[1]
-            self._chunks.append(chunk)
+        if mixture:
+            mixture_keys = mixture.keys()
+            component_chunks = [
+                self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
+            ]
+
+            # Chunks will be composed using multiple properties
+            for components in zip(*component_chunks):
+                chunk = {}
+                for component in zip(mixture_keys, components):
+                    chunk[component[0]] = component[1]
+                self._chunks.append(chunk)
+        else:
+            # Our mixture is arbitrary, so we create chunks from each individual part of our index
+            f_alias = self._generate_per_mixture_component_chunks
+            for key in chunker_index.keys():
+                temp = [
+                    {key: x} for x in f_alias(chunker_index, key, self._mixture.chunk_size)
+                ]  # type: ignore[arg-type]
+                self._chunks.extend(temp)
 
     @property
     def chunk_size(self) -> int:

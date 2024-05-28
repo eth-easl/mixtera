@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import portion as P
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
-from mixtera.core.query import Operator, Query, QueryPlan, StaticMixture
+from mixtera.core.query import ArbitraryMixture, Operator, Query, QueryPlan, StaticMixture
 from mixtera.utils import defaultdict_to_dict
 
 
@@ -142,7 +142,7 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query("job_id").mockoperator("test")
-        assert self.client.execute_query(query, 1)
+        assert self.client.execute_query(query, ArbitraryMixture(1))
         query_result = query.results
         # res = list(query_result)
         # res = [x._index for x in res]
@@ -221,7 +221,7 @@ class TestQuery(unittest.TestCase):
         }
 
         query = Query.for_job("job_id").complexmockoperator("test")
-        assert self.client.execute_query(query, 1)
+        assert self.client.execute_query(query, ArbitraryMixture(1))
         inverted_index = query.results._invert_result(query.results.results)
 
         # True result vs reference
@@ -284,7 +284,7 @@ class TestQuery(unittest.TestCase):
         }
 
         query = Query.for_job("job_id").complexmockoperator("test")
-        assert self.client.execute_query(query, 1)
+        assert self.client.execute_query(query, ArbitraryMixture(1))
         inverted_index = query.results._invert_result(query.results.results)
         chunk_index = query.results._create_chunker_index(inverted_index)
         print(defaultdict_to_dict(chunk_index))
@@ -660,7 +660,7 @@ class TestQuery(unittest.TestCase):
         ]
 
         query = Query.for_job("job_id").complexmockoperator("test")
-        assert self.client.execute_query(query, chunk_size=7)
+        assert self.client.execute_query(query, ArbitraryMixture(7))
         chunks = query.results._chunks
 
         print(chunks)

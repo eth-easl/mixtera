@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-from mixtera.core.query import Query, StaticMixture
+from mixtera.core.query import ArbitraryMixture, Query
 
 
 class TestQueryE2E(unittest.TestCase):
@@ -66,7 +66,7 @@ class TestQueryE2E(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
-        mixture = StaticMixture(1, {"language:Go": 1})
+        mixture = ArbitraryMixture(1)
         query = Query.for_job("job_id").select(("language", "==", "Go"))
         assert self.client.execute_query(query, mixture)
         res = query.results
@@ -75,7 +75,7 @@ class TestQueryE2E(unittest.TestCase):
             break
 
     def test_union(self):
-        mixture = StaticMixture(1, {"language:Go": 1})
+        mixture = ArbitraryMixture(1)
         query_1 = Query.for_job("job_id").select(("language", "==", "Go"))
         query_2 = Query.for_job("job_id")
         query_2.select(("language", "==", "CSS"))
@@ -97,7 +97,7 @@ class TestQueryE2E(unittest.TestCase):
             [
                 {"language:Go": {1: {self.file1_id: [(0, 1)]}}},
                 {"language:Go": {1: {self.file1_id: [(1, 2)]}}},
-                # {"language:CSS": {1: {self.file2_id: [(0, 1)]}}},
+                {"language:CSS": {1: {self.file2_id: [(0, 1)]}}},
             ],
         )
         # check metadata

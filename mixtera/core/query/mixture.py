@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-
 # class MixtureKey(ABC):
 #
 #     def __eq__(self, other):
@@ -43,7 +42,7 @@ class Mixture(ABC):
 
     def __str__(self):
         """String representation of this mixture object."""
-        raise NotImplementedError("Method must be implemented in subclass!")
+        return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}}}'
 
     @abstractmethod
     def get_mixture(self) -> dict[str, int]:
