@@ -23,30 +23,14 @@ class QueryResult:
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    def __init__(
-        self,
-        mdc: MixteraDataCollection,
-        results: Index,
-        chunk_size: Optional[int] = 1,
-        mixture: Optional[Mixture] = None,
-    ) -> None:
+    def __init__(self, mdc: MixteraDataCollection, results: Index, mixture: Mixture) -> None:
         """
         Args:
             mdc (LocalDataCollection): The LocalDataCollection object.
             results (IndexType): The results of the query.
-            chunk_size (int): The chunk size of the results. This parameter is mutually exclusive with
-                the mixture parameter.
-            mixture: A mixture object defining the mixture to be reflected in the chunks. This parameter is mutually
-                exclusive with the chunk_size parameter.
+            mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
-        if mixture is not None and chunk_size is not None:
-            raise AttributeError(
-                "Both mixture and chunk_size are specified! Only one of these parameter can be specified!"
-            )
-
-        self._chunk_size = chunk_size
         self._mixture = mixture
-
         self.results = results
         self._meta = self._parse_meta(mdc)
         self._chunks: list[ChunkerIndexDatasetEntries] = []
@@ -256,33 +240,23 @@ class QueryResult:
         inverted_index: InvertedIndex = self._invert_result(self.results)
         chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
 
-        if self._mixture is not None:
-            # If we have a mixture, we use that to generate the chunks
-            mixture = self._mixture.get_mixture()
-            mixture_keys = mixture.keys()
-            component_chunks = [
-                self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
-            ]
+        # If we have a mixture, we use that to generate the chunks
+        mixture = self._mixture.get_mixture()
+        mixture_keys = mixture.keys()
+        component_chunks = [
+            self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
+        ]
 
-            # Chunks will be composed using multiple properties
-            for components in zip(*component_chunks):
-                chunk = {}
-                for component in zip(mixture_keys, components):
-                    chunk[component[0]] = component[1]
-                self._chunks.append(chunk)
-        else:
-            # Each chunk stems from a single property
-            # Aliasing has to be done to avoid formatters complaining of line lengths
-            f_alias = self._generate_per_mixture_component_chunks
-            for key in chunker_index.keys():
-                temp = [{key: x} for x in f_alias(chunker_index, key, self._chunk_size)]  # type: ignore[arg-type]
-                self._chunks.extend(temp)
+        # Chunks will be composed using multiple properties
+        for components in zip(*component_chunks):
+            chunk = {}
+            for component in zip(mixture_keys, components):
+                chunk[component[0]] = component[1]
+            self._chunks.append(chunk)
 
     @property
     def chunk_size(self) -> int:
-        if self._mixture is not None:
-            return self._mixture.chunk_size
-        return self._chunk_size  # type: ignore[return-value]
+        return self._mixture.chunk_size
 
     @property
     def dataset_type(self) -> dict[int, Type[Dataset]]:

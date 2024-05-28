@@ -1,6 +1,6 @@
 import multiprocessing as mp
 from pathlib import Path
-from typing import Callable, Generator, Optional, Type
+from typing import Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
@@ -25,7 +25,7 @@ class LocalStub(MixteraClient):
 
         self._mdc = MixteraDataCollection(self.directory)
         self._training_query_map_lock = mp.Lock()
-        self._training_query_map: dict[str, tuple[Query, int]] = {}  # (query, chunk_size)
+        self._training_query_map: dict[str, tuple[Query, Mixture]] = {}  # (query, mixture_object)
 
     def register_dataset(
         self,
@@ -53,9 +53,9 @@ class LocalStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         return self._mdc.remove_dataset(identifier)
 
-    def execute_query(self, query: Query, chunk_size: Optional[int] = None, mixture: Optional[Mixture] = None) -> bool:
-        query.execute(self._mdc, chunk_size=chunk_size, mixture=mixture)
-        return self._register_query(query, chunk_size)  # type: ignore[arg-type]
+    def execute_query(self, query: Query, mixture: Mixture) -> bool:
+        query.execute(self._mdc, mixture)
+        return self._register_query(query, mixture)
 
     def is_remote(self) -> bool:
         return False
@@ -98,15 +98,15 @@ class LocalStub(MixteraClient):
         query_result = self._get_query_result(job_id)
         return query_result.dataset_type, query_result.parsing_func, query_result.file_path
 
-    def _register_query(self, query: "Query", chunk_size: int) -> bool:
+    def _register_query(self, query: "Query", mixture: Mixture) -> bool:
         if query.job_id in self._training_query_map:
             logger.warning(f"We already have a query for job {query.job_id}!")
             return False
 
         with self._training_query_map_lock:
-            self._training_query_map[query.job_id] = (query, chunk_size)
+            self._training_query_map[query.job_id] = (query, mixture)
 
-        logger.info(f"Registered query {str(query)} with chunk_size {chunk_size}" + f" for job {query.job_id}.")
+        logger.info(f"Registered query {str(query)} for job {query.job_id}, with mixture {mixture}")
 
         return True
 

@@ -13,6 +13,10 @@ class Mixture(ABC):
         """
         self.chunk_size = chunk_size
 
+    def __str__(self):
+        """String representation of this mixture object."""
+        raise NotImplementedError("Method must be implemented in subclass!")
+
     @abstractmethod
     def get_mixture(self) -> dict[str, int]:
         """
@@ -40,6 +44,10 @@ class NoopMixture(Mixture):
         diff = chunk_size - sum(self._mixture.values())
         if diff > 0:
             self._mixture[list(self._mixture.keys())[0]] += diff
+
+    def __str__(self):
+        """String representation of this mixture object."""
+        return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
 
     def get_mixture(self) -> dict[str, int]:
         return self._mixture
