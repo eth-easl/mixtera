@@ -1,6 +1,34 @@
 from abc import ABC, abstractmethod
 
 
+# class MixtureKey(ABC):
+#
+#     def __eq__(self, other):
+#         raise NotImplementedError("Method must be implemented in subclass!")
+#
+#     def __hash__(self):
+#         raise NotImplementedError("Method must be implemented in subclass!")
+
+# class StringMixtureKey(MixtureKey):
+#     """
+#     The StringMixtureKey represents a chunk index key which receives one and only one value per property. Equality
+#     between two keys implies that they have the same exact keys and value for each key. This type of key also accepts
+#     a single property with the name "ANY"
+#     """
+#
+#     def __init__(self, property_names: list[str], property_values: list[list[str | int | float]]) -> None:
+#         """
+#         Creates a StringMixtureKey object.
+#
+#         Args:
+#             property_names: a list with the property names
+#             property_values: a list of lists with the property values
+#
+#         Returns:
+#             A string that can be used in a ChunkerIndex to identify ranges fulfilling a certain property
+#         """
+
+
 class Mixture(ABC):
     """Base Mixture class."""
 
@@ -33,10 +61,30 @@ class Mixture(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
 
+class ArbitraryMixture(Mixture):
+    """This is a placeholder mixture that allows for chunks to be created without any particular mixture."""
+
+    def get_mixture(self) -> dict[str, int]:
+        return {}
+
+
 class StaticMixture(Mixture):
     """Mixture class that simply stores a predefined mixture."""
 
     def __init__(self, chunk_size: int, mixture: dict[str, float]) -> None:
+        """
+        Initializer for StaticMixture.
+
+        Args:
+            chunk_size: the size of a chunk in number of instances
+            mixture: an optional dictionary that points from mixture components to concentration/mass in mixture:
+                {
+                   "property0:value0;property1:value1;..." : 0.2,
+                   "property0:value1;property1:value1" : 0.1,
+                   "property0:value2": 0.35
+                   ...
+                }
+        """
         super().__init__(chunk_size)
         self._mixture = {key: int(chunk_size * val) for key, val in mixture.items()}
 
