@@ -33,7 +33,7 @@ class Mixture(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
 
-class NoopMixture(Mixture):
+class StaticMixture(Mixture):
     """Mixture class that simply stores a predefined mixture."""
 
     def __init__(self, chunk_size: int, mixture: dict[str, float]) -> None:

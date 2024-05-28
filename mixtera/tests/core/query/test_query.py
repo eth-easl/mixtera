@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import portion as P
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
-from mixtera.core.query import NoopMixture, Operator, Query, QueryPlan
+from mixtera.core.query import Operator, Query, QueryPlan, StaticMixture
 from mixtera.utils import defaultdict_to_dict
 
 
@@ -461,7 +461,7 @@ class TestQuery(unittest.TestCase):
 
         query = Query.for_job("job_id").complexmockoperator("test")
 
-        mixture = NoopMixture(10, mixture_concentration)
+        mixture = StaticMixture(10, mixture_concentration)
         assert self.client.execute_query(query, mixture=mixture)
         chunks = query.results._chunks
 
