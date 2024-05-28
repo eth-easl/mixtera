@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-from mixtera.core.query import Query
+from mixtera.core.query import Query, StaticMixture
 
 
 class TestQueryE2E(unittest.TestCase):
@@ -66,31 +66,38 @@ class TestQueryE2E(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
+        mixture = StaticMixture(1, {"language:Go": 1})
         query = Query.for_job("job_id").select(("language", "==", "Go"))
-        assert self.client.execute_query(query, 1)
+        assert self.client.execute_query(query, mixture)
         res = query.results
         for x in res:
             self.assertEqual(x, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
             break
 
     def test_union(self):
+        mixture = StaticMixture(1, {"language:Go": 1})
         query_1 = Query.for_job("job_id").select(("language", "==", "Go"))
         query_2 = Query.for_job("job_id")
         query_2.select(("language", "==", "CSS"))
         query_2 = query_2.union(query_1)
-        assert self.client.execute_query(query_2, 1)
+        assert self.client.execute_query(query_2, mixture)
         query_result = query_2.results
         res = list(query_result)
 
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
+
+        # TODO(#66): Using only mixtures, and removing the chunk size introduces the problem of not being able to
+        #            support properties that can accept any value in the current implementation. To support these
+        #            these properties chunk indexing will need to have a more complex behavior where keywords like ANY
+        #            (e.g. language:ANY) can match against any property value.
+        print(res)
         self.assertCountEqual(
             res,
             [
                 {"language:Go": {1: {self.file1_id: [(0, 1)]}}},
                 {"language:Go": {1: {self.file1_id: [(1, 2)]}}},
-                # {"language:CSS": {1: {self.file1_id: [(1, 2)]}}},
-                {"language:CSS": {1: {self.file2_id: [(0, 1)]}}},
+                # {"language:CSS": {1: {self.file2_id: [(0, 1)]}}},
             ],
         )
         # check metadata
