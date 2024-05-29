@@ -31,6 +31,7 @@ class QueryResult:
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
         # Prepare structures for iterable chunking
+        self._generator = None
         self._mixture = mixture
         self.results = results
         self._inverted_index: InvertedIndex = self._invert_result(self.results)
@@ -240,7 +241,7 @@ class QueryResult:
         with self._lock:
             self._mixture = mixture
 
-    def _chunk_generator(self) -> Coroutine[ChunkerIndexDatasetEntries, Mixture, None]:
+    def _chunk_generator(self) -> Generator[ChunkerIndexDatasetEntries, Mixture, None]:
         """
         Implements the chunking logic. This method yields chunks relative to self._mixture object (if it exists).
         If no such mixture object exists, it creates a chunks with arbitrary mixtures.
@@ -298,15 +299,20 @@ class QueryResult:
         return self._meta["parsing_func"]
 
     def __iter__(self) -> "QueryResult":
+        with self._lock:
+            self._generator = self._chunk_generator()
+            next(self._generator)  # Required to start the coroutine
         return self
 
     def __next__(self) -> IndexType:
         """Iterate over the results of the query with a chunk size thread-safe.
         This method is very dummy right now without ensuring the correct mixture.
         """
-        generator = self._chunk_generator()
         with self._lock:
-            yield generator.send(self._mixture)
+            next_value = self._generator.send(self._mixture)
+            if next_value is None:
+                raise StopIteration()
+            return next_value
 
     def __getstate__(self) -> dict:
         # _meta is not pickable using the default pickler (used by torch),
