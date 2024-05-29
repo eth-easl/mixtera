@@ -1,10 +1,9 @@
 import multiprocessing as mp
 from collections import defaultdict
-from typing import Any, Callable, Optional, Type, Generator, Coroutine
+from typing import Any, Callable, Generator, Type
 
 import dill
 import portion
-from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, IndexType, InvertedIndex
@@ -249,10 +248,14 @@ class QueryResult:
         # Variables for an arbitrary mixture
         chunker_index_keys_idx = 0
         chunker_index_keys = list(self._chunker_index.keys())
+        component_iterators = {
+            key: self._generate_per_mixture_component_chunks(self._chunker_index, key, self._mixture.chunk_size)
+            for key in self._chunker_index.keys()
+        }
 
+        base_mixture = yield
         while True:
             # Get the mixture from the caller as it might have changed
-            base_mixture = (yield)
             mixture = base_mixture.get_mixture()
 
             if mixture:
@@ -260,17 +263,13 @@ class QueryResult:
                 #   1. All the chunk's components can yield --> we will be able to build a chunk, or
                 #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
                 #      and the coroutine will pass the exception upstream to __next__
-                yield {
-                    key: next(self._generate_per_mixture_component_chunks(
-                        self._chunker_index, key, mixture[key])) for key in mixture.keys()
-                }
+                base_mixture = yield {key: next(component_iterators[key]) for key in mixture.keys()}
             else:
                 chunk = None
                 while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
                     key = chunker_index_keys[chunker_index_keys_idx]
                     try:
-                        chunk = next(self._generate_per_mixture_component_chunks(
-                            self._chunker_index, key, self._mixture.chunk_size))
+                        chunk = next(component_iterators[key])
                     except StopIteration:
                         # The current key is exhausted; will need to produce chunks from the next available key
                         chunker_index_keys_idx += 1
@@ -280,7 +279,7 @@ class QueryResult:
                     raise StopIteration()
 
                 # Chunk has been successfully generated
-                yield {chunker_index_keys[chunker_index_keys_idx]: chunk}
+                base_mixture = yield {chunker_index_keys[chunker_index_keys_idx]: chunk}
 
     @property
     def chunk_size(self) -> int:
@@ -309,10 +308,11 @@ class QueryResult:
         This method is very dummy right now without ensuring the correct mixture.
         """
         with self._lock:
-            next_value = self._generator.send(self._mixture)
-            if next_value is None:
-                raise StopIteration()
-            return next_value
+            return self._generator.send(self._mixture)
+            # print(next_value)
+            # if next_value is None:
+            #     raise StopIteration()
+            # return next_value
 
     def __getstate__(self) -> dict:
         # _meta is not pickable using the default pickler (used by torch),

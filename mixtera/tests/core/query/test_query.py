@@ -144,8 +144,6 @@ class TestQuery(unittest.TestCase):
         query = Query("job_id").mockoperator("test")
         assert self.client.execute_query(query, ArbitraryMixture(1))
         query_result = query.results
-        # res = list(query_result)
-        # res = [x._index for x in res]
         gt_meta = {
             "dataset_type": {"did": "test_dataset_type"},
             "file_path": {"fid": "test_file_path"},
@@ -287,7 +285,6 @@ class TestQuery(unittest.TestCase):
         assert self.client.execute_query(query, ArbitraryMixture(1))
         inverted_index = query.results._invert_result(query.results.results)
         chunk_index = query.results._create_chunker_index(inverted_index)
-        print(defaultdict_to_dict(chunk_index))
         self.assertDictEqual(defaultdict_to_dict(chunk_index), reference_result)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
@@ -437,7 +434,7 @@ class TestQuery(unittest.TestCase):
 
         mixture = StaticMixture(10, mixture_concentration)
         assert self.client.execute_query(query, mixture=mixture)
-        chunks = query.results._chunks
+        chunks = list(iter(query.results))
 
         def _subchunk_counter(chunk, key):
             count = 0
@@ -661,9 +658,7 @@ class TestQuery(unittest.TestCase):
 
         query = Query.for_job("job_id").complexmockoperator("test")
         assert self.client.execute_query(query, ArbitraryMixture(7))
-        chunks = query.results._chunks
-
-        print(chunks)
+        chunks = list(iter(query.results))
 
         def _subchunk_counter(chunk, key):
             count = 0

@@ -69,7 +69,7 @@ class TestQueryE2E(unittest.TestCase):
         mixture = ArbitraryMixture(1)
         query = Query.for_job("job_id").select(("language", "==", "Go"))
         assert self.client.execute_query(query, mixture)
-        res = query.results
+        res = list(iter(query.results))
         for x in res:
             self.assertEqual(x, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
             break
@@ -82,16 +82,11 @@ class TestQueryE2E(unittest.TestCase):
         query_2 = query_2.union(query_1)
         assert self.client.execute_query(query_2, mixture)
         query_result = query_2.results
-        res = list(query_result)
+        res = list(iter(query_result))
 
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
 
-        # TODO(#66): Using only mixtures, and removing the chunk size introduces the problem of not being able to
-        #            support properties that can accept any value in the current implementation. To support these
-        #            these properties chunk indexing will need to have a more complex behavior where keywords like ANY
-        #            (e.g. language:ANY) can match against any property value.
-        print(res)
         self.assertCountEqual(
             res,
             [
