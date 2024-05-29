@@ -263,7 +263,11 @@ class QueryResult:
                 #   1. All the chunk's components can yield --> we will be able to build a chunk, or
                 #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
                 #      and the coroutine will pass the exception upstream to __next__
-                base_mixture = yield {key: next(component_iterators[key]) for key in mixture.keys()}
+                try:
+                    chunk = {key: next(component_iterators[key]) for key in mixture.keys()}
+                except StopIteration:
+                    return
+                base_mixture = yield chunk
             else:
                 chunk = None
                 while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
@@ -276,7 +280,7 @@ class QueryResult:
 
                 if chunk is None:
                     # There were no more available chunks; we mark the end of this query result with StopIteration
-                    raise StopIteration()
+                    return
 
                 # Chunk has been successfully generated
                 base_mixture = yield {chunker_index_keys[chunker_index_keys_idx]: chunk}
