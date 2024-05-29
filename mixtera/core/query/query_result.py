@@ -30,17 +30,18 @@ class QueryResult:
             results (IndexType): The results of the query.
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
+        # Prepare structures for iterable chunking
         self._mixture = mixture
-        self.results = results
+        self._inverted_index: InvertedIndex = self._invert_result(self.results)
+        self._chunker_index: ChunkerIndex = self._create_chunker_index(self._inverted_index)
+
+        # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
-        self._chunks: list[ChunkerIndexDatasetEntries] = []
-        self.chunking()
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
         self._manager = mp.Manager()
         self._lock = self._manager.Lock()
         self._index = self._manager.Value("i", 0)
-        logger.debug(f"Instantiated QueryResult with {len(self._chunks)} chunks.")
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
         dataset_ids = set()
@@ -169,7 +170,7 @@ class QueryResult:
             component_cardinality: number of instances required for the component of the mixture
 
         Returns:
-            A list of component chunks. The list has the following format:
+            Yields component chunks. The list has the following format:
             [
                 {
                     dataset_0_id: {
@@ -187,7 +188,6 @@ class QueryResult:
             Each chunk has the same property combination. In the given example, all dictionaries in the list contain
             ranges that identify component_cardinality rows with the property combination specified by component_key.
         """
-        component_chunks = []
         target_ranges = chunker_index[component_key]
 
         current_cardinality = 0
@@ -216,7 +216,7 @@ class QueryResult:
                             # do not consider the range added to the previous chunk.
                             diff = current_cardinality + range_cardinality - component_cardinality
                             current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
-                            component_chunks.append(defaultdict_to_dict(current_partition))
+                            yield defaultdict_to_dict(current_partition)
 
                             # Prepare the rest of the range and new component
                             current_range = (current_range[1] - diff, current_range[1])
@@ -227,41 +227,48 @@ class QueryResult:
                             continue_processing = current_range[1] > current_range[0]
 
         if current_cardinality > 0:
-            component_chunks.append(defaultdict_to_dict(current_partition))
+            yield defaultdict_to_dict(current_partition)
 
-        return component_chunks
-
-    def chunking(self) -> None:
+    def update_mixture(self, mixture: Mixture) -> None:
         """
-        Implements the chunking logic. This method populates the self._chunks variable with chunks fulfilling the
-        requirements specified by the self._mixture object (if it exists). Otherwise, simply produces chunks of given
-        chunk size using any data.
+        Updates the mixture to be used for future chunks
+
+        Args:
+            mixture: the new mixture object
         """
-        inverted_index: InvertedIndex = self._invert_result(self.results)
-        chunker_index: ChunkerIndex = self._create_chunker_index(inverted_index)
+        with self._lock:
+            self._mixture = mixture
 
-        mixture = self._mixture.get_mixture()
+    def _chunk_generator(self) -> ChunkerIndexDatasetEntries:
+        """
+        Implements the chunking logic. This method yields chunks relative to self._mixture object (if it exists).
+        If no such mixture object exists, it creates a chunks with arbitrary mixtures.
+        """
+        # mixture = self._mixture.get_mixture()  # The mixture object should be updated here
 
-        if mixture:
-            mixture_keys = mixture.keys()
-            component_chunks = [
-                self._generate_per_mixture_component_chunks(chunker_index, key, mixture[key]) for key in mixture_keys
-            ]
+        while True:
+            # Get the mixture from the caller as it might have changed
+            base_mixture = (yield)
+            mixture = base_mixture.get_mixture()
 
-            # Chunks will be composed using multiple properties
-            for components in zip(*component_chunks):
-                chunk = {}
-                for component in zip(mixture_keys, components):
-                    chunk[component[0]] = component[1]
-                self._chunks.append(chunk)
-        else:
-            # Our mixture is arbitrary, so we create chunks from each individual part of our index
-            f_alias = self._generate_per_mixture_component_chunks
-            for key in chunker_index.keys():
-                temp = [
-                    {key: x} for x in f_alias(chunker_index, key, self._mixture.chunk_size)
-                ]  # type: ignore[arg-type]
-                self._chunks.extend(temp)
+            if mixture:
+                mixture_keys = mixture.keys()
+                component_chunks = [
+                    self._generate_per_mixture_component_chunks(self._chunker_index, key, mixture[key]) for key in mixture_keys
+                ]
+
+                # Chunks will be composed using multiple properties
+                for components in zip(*component_chunks):
+                    chunk = {}
+                    for component in zip(mixture_keys, components):
+                        chunk[component[0]] = component[1]
+                    yield chunk
+            else:
+                # Our mixture is arbitrary, so we create chunks from each individual part of our index
+                for key in self._chunker_index.keys():  # This needs to be kept in its own state variable
+                    for chunk in self._generate_per_mixture_component_chunks(
+                            self._chunker_index, key, self._mixture.chunk_size):
+                        yield {key: chunk}
 
     @property
     def chunk_size(self) -> int:
@@ -286,16 +293,9 @@ class QueryResult:
         """Iterate over the results of the query with a chunk size thread-safe.
         This method is very dummy right now without ensuring the correct mixture.
         """
-        local_index: Optional[int] = None
+        generator = self._chunk_generator()
         with self._lock:
-            if self._index.value < len(self._chunks):
-                local_index = self._index.value
-                self._index.value += 1
-        # We exit the scope of the lock as early as possible.
-        # For now the actual slicing does not need to be locked.
-
-        if local_index is not None:
-            return self._chunks[local_index]
+            yield generator.send(self._mixture)
 
         raise StopIteration
 
