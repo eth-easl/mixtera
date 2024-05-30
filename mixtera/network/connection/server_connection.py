@@ -16,7 +16,7 @@ from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.index import IndexType
-    from mixtera.core.query import Query
+    from mixtera.core.query import Mixture, Query
 
 
 class ServerConnection:
@@ -110,13 +110,13 @@ class ServerConnection:
 
         return None, None
 
-    async def _execute_query(self, query: "Query", chunk_size: int) -> bool:
+    async def _execute_query(self, query: "Query", mixture: "Mixture") -> bool:
         """
         Asynchronously executes a query on the server and receives a confirmation of success.
 
         Args:
             query (Query): The query object to be executed.
-            chunk_size (int): The size of the chunks in which results should be returned.
+            mixture: mixture object required by for chunking the result
 
         Returns:
             A boolean indicating whether the query was successfully registered with the server.
@@ -130,7 +130,8 @@ class ServerConnection:
         await write_int(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce metadata
-        await write_int(chunk_size, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_pickeled_object(mixture, NUM_BYTES_FOR_SIZES, writer)
+        # await write_int(mixture, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce query
         await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
@@ -139,18 +140,18 @@ class ServerConnection:
         logger.debug(f"Got success = {success} from server.")
         return success
 
-    def execute_query(self, query: "Query", chunk_size: int) -> bool:
+    def execute_query(self, query: "Query", mixture: "Mixture") -> bool:
         """
         Executes a query on the server and returns whether it was successful.
 
         Args:
             query (Query): The query object to be executed.
-            chunk_size (int): The size of the chunks in which results should be returned.
+            mixture: Mixture object required for chunking.
 
         Returns:
             A boolean indicating whether the query was successfully registered with the server.
         """
-        success = run_async_until_complete(self._execute_query(query, chunk_size))
+        success = run_async_until_complete(self._execute_query(query, mixture))
         return success
 
     async def _get_query_result_meta(self, job_id: str) -> Optional[dict]:

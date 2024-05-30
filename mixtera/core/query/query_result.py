@@ -157,7 +157,7 @@ class QueryResult:
     @staticmethod
     def _generate_per_mixture_component_chunks(
         chunker_index: ChunkerIndex, component_key: str
-    ) -> Generator[ChunkerIndexDatasetEntries, None, None]:
+    ) -> Generator[ChunkerIndexDatasetEntries, int, None]:
         """
         This method computes the partial chunks for each component of a mixture. A component here is considered one
         of the chunk's fundamental property value combinations (e.g. 25% of a chunk is Medicine in English). The method
@@ -165,10 +165,11 @@ class QueryResult:
         this would be language:english;topic:medicine). The cardinality of a partial chunk is given by the
         cardinality of the chunk multiplied with the fraction of this property combination.
 
+        This method is a coroutine that accepts an integer indicating the size of this component in a chunk as input.
+
         Args:
             chunker_index: The chunking index
             component_key: chunking index key
-            component_cardinality: number of instances required for the component of the mixture
 
         Returns:
             Yields component chunks. The list has the following format:
@@ -245,8 +246,10 @@ class QueryResult:
 
     def _chunk_generator(self) -> Generator[ChunkerIndexDatasetEntries, Mixture, None]:
         """
-        Implements the chunking logic. This method yields chunks relative to self._mixture object (if it exists).
-        If no such mixture object exists, it creates a chunks with arbitrary mixtures.
+        Implements the chunking logic. This method yields chunks relative to  a mixture object.
+
+        This method is a coroutine that accepts a mixture object that dictates the size of each chunk, and optionally
+        the mixture within each chunk.
         """
         # Variables for an arbitrary mixture
         chunker_index_keys_idx = 0
