@@ -156,7 +156,7 @@ class QueryResult:
 
     @staticmethod
     def _generate_per_mixture_component_chunks(
-        chunker_index: ChunkerIndex, component_key: str, component_cardinality: int
+        chunker_index: ChunkerIndex, component_key: str
     ) -> Generator[ChunkerIndexDatasetEntries, None, None]:
         """
         This method computes the partial chunks for each component of a mixture. A component here is considered one
@@ -191,6 +191,7 @@ class QueryResult:
         """
         target_ranges = chunker_index[component_key]
 
+        component_cardinality = yield
         current_cardinality = 0
 
         # dataset_id -> file_id -> list[intervals]
@@ -217,7 +218,7 @@ class QueryResult:
                             # do not consider the range added to the previous chunk.
                             diff = current_cardinality + range_cardinality - component_cardinality
                             current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
-                            yield defaultdict_to_dict(current_partition)
+                            component_cardinality = yield defaultdict_to_dict(current_partition)
 
                             # Prepare the rest of the range and new component
                             current_range = (current_range[1] - diff, current_range[1])
@@ -228,6 +229,8 @@ class QueryResult:
                             continue_processing = current_range[1] > current_range[0]
 
         if current_cardinality > 0:
+            # Normally we would want to record the component cardinality here as well, but since this is the last
+            # generated batch, it does not make sense to capture it as there is no other data left
             yield defaultdict_to_dict(current_partition)
 
     def update_mixture(self, mixture: Mixture) -> None:
@@ -248,10 +251,14 @@ class QueryResult:
         # Variables for an arbitrary mixture
         chunker_index_keys_idx = 0
         chunker_index_keys = list(self._chunker_index.keys())
+
+        # Create coroutines for component iterators and advance them to the first yield
         component_iterators = {
-            key: self._generate_per_mixture_component_chunks(self._chunker_index, key, self._mixture.chunk_size)
+            key: self._generate_per_mixture_component_chunks(self._chunker_index, key)
             for key in self._chunker_index.keys()
         }
+        for _, component_iterator in component_iterators.items():
+            next(component_iterator)
 
         base_mixture = yield
         while True:
@@ -264,7 +271,7 @@ class QueryResult:
                 #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
                 #      and the coroutine will pass the exception upstream to __next__
                 try:
-                    chunk = {key: next(component_iterators[key]) for key in mixture.keys()}
+                    chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
                 except StopIteration:
                     return
                 base_mixture = yield chunk
@@ -273,7 +280,7 @@ class QueryResult:
                 while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
                     key = chunker_index_keys[chunker_index_keys_idx]
                     try:
-                        chunk = next(component_iterators[key])
+                        chunk = component_iterators[key].send(base_mixture.chunk_size)
                     except StopIteration:
                         # The current key is exhausted; will need to produce chunks from the next available key
                         chunker_index_keys_idx += 1
