@@ -118,8 +118,9 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
                 call(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
             ]
         )
-        mock_write_pickeled_object.assert_awaited_once_with(mixture_mock, NUM_BYTES_FOR_SIZES, mock_writer)
-        mock_write_pickeled_object.assert_awaited_once_with(query_mock, NUM_BYTES_FOR_SIZES, mock_writer)
+        mock_write_pickeled_object.assert_any_await(mixture_mock, NUM_BYTES_FOR_SIZES, mock_writer)
+        mock_write_pickeled_object.assert_any_await(query_mock, NUM_BYTES_FOR_SIZES, mock_writer)
+        self.assertEqual(mock_write_pickeled_object.await_count, 2)
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
