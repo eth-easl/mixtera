@@ -23,6 +23,33 @@ class MockOperator(Operator):
         self.results.append_entry("field", "value", "did", "fid", (0, 2))
 
 
+class SimpleMockOperator(Operator):
+    def __init__(self, name, len_results: int = 1):
+        super().__init__()
+        self.name = name
+        self.len_results = len_results
+
+    def display(self, level):
+        print("-" * level + self.name)
+
+    def execute(self, mdc):
+        del mdc
+        self.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        self.results._index = {
+            "language": {
+                "english": {
+                    0: {0: [(50, 150)]},
+                },
+                "french": {
+                    0: {
+                        0: [(0, 100), (150, 200)],
+                        1: [(0, 100)],
+                    }
+                },
+            },
+        }
+
+
 class ComplexMockOperator(Operator):
     def __init__(self, name, len_results: int = 1):
         super().__init__()
@@ -72,6 +99,7 @@ class ComplexMockOperator(Operator):
 
 
 Query.register(MockOperator)
+Query.register(SimpleMockOperator)
 Query.register(ComplexMockOperator)
 
 
@@ -286,6 +314,128 @@ class TestQuery(unittest.TestCase):
         inverted_index = query.results._invert_result(query.results.results)
         chunk_index = query.results._create_chunker_index(inverted_index)
         self.assertDictEqual(defaultdict_to_dict(chunk_index), reference_result)
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_create_chunking_with_simple_static_mixture(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        reference_chunks = [
+            {"language:french": {0: {0: [(0, 12)]}}, "language:english": {0: {0: [(50, 54)]}}},
+            {"language:french": {0: {0: [(12, 24)]}}, "language:english": {0: {0: [(54, 58)]}}},
+            {"language:french": {0: {0: [(24, 36)]}}, "language:english": {0: {0: [(58, 62)]}}},
+            {"language:french": {0: {0: [(36, 48)]}}, "language:english": {0: {0: [(62, 66)]}}},
+            {"language:french": {0: {0: [(48, 50), (150, 160)]}}, "language:english": {0: {0: [(66, 70)]}}},
+            {"language:french": {0: {0: [(160, 172)]}}, "language:english": {0: {0: [(70, 74)]}}},
+            {"language:french": {0: {0: [(172, 184)]}}, "language:english": {0: {0: [(74, 78)]}}},
+            {"language:french": {0: {0: [(184, 196)]}}, "language:english": {0: {0: [(78, 82)]}}},
+            {"language:french": {0: {0: [(196, 200)], 1: [(0, 8)]}}, "language:english": {0: {0: [(82, 86)]}}},
+            {"language:french": {0: {1: [(8, 20)]}}, "language:english": {0: {0: [(86, 90)]}}},
+            {"language:french": {0: {1: [(20, 32)]}}, "language:english": {0: {0: [(90, 94)]}}},
+            {"language:french": {0: {1: [(32, 44)]}}, "language:english": {0: {0: [(94, 98)]}}},
+            {"language:french": {0: {1: [(44, 56)]}}, "language:english": {0: {0: [(98, 100), (100, 102)]}}},
+            {"language:french": {0: {1: [(56, 68)]}}, "language:english": {0: {0: [(102, 106)]}}},
+            {"language:french": {0: {1: [(68, 80)]}}, "language:english": {0: {0: [(106, 110)]}}},
+            {"language:french": {0: {1: [(80, 92)]}}, "language:english": {0: {0: [(110, 114)]}}},
+            {"language:french": {0: {1: [(92, 100)]}}, "language:english": {0: {0: [(114, 118)]}}},
+        ]
+
+        reference_chunker_index = {
+            "language:french": {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
+            "language:english": {0: {0: [[50, 100], [100, 150]]}},
+        }
+
+        mixture_concentration = {
+            "language:french": 0.75,  # 12 instances per batch
+            "language:english": 0.25,  # 4 instances per batch
+        }
+
+        query = Query.for_job("job_id").simplemockoperator("test")
+
+        mixture = StaticMixture(16, mixture_concentration)
+        assert self.client.execute_query(query, mixture=mixture)
+        chunks = list(iter(query.results))
+
+        # Check the structure of the chunker index
+        inverted_index = query.results._invert_result(query.results.results)
+        chunker_index = defaultdict_to_dict(query.results._create_chunker_index(inverted_index))
+        self.assertDictEqual(defaultdict_to_dict(chunker_index), reference_chunker_index)
+
+        # Check the equality of the chunks
+        for i, chunk in enumerate(chunks):
+            self.assertDictEqual(reference_chunks[i], chunk)
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_create_chunking_with_simple_dynamic_mixture(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        reference_chunks = [
+            # Mixture should contain 12 'language:french' instances and 4 'language:english' instances
+            {"language:french": {0: {0: [(0, 12)]}}, "language:english": {0: {0: [(50, 54)]}}},
+            {"language:french": {0: {0: [(12, 24)]}}, "language:english": {0: {0: [(54, 58)]}}},
+            {"language:french": {0: {0: [(24, 36)]}}, "language:english": {0: {0: [(58, 62)]}}},
+            {"language:french": {0: {0: [(36, 48)]}}, "language:english": {0: {0: [(62, 66)]}}},
+            {"language:french": {0: {0: [(48, 50), (150, 160)]}}, "language:english": {0: {0: [(66, 70)]}}},
+            {"language:french": {0: {0: [(160, 172)]}}, "language:english": {0: {0: [(70, 74)]}}},
+            {"language:french": {0: {0: [(172, 184)]}}, "language:english": {0: {0: [(74, 78)]}}},
+            {"language:french": {0: {0: [(184, 196)]}}, "language:english": {0: {0: [(78, 82)]}}},
+            {"language:french": {0: {0: [(196, 200)], 1: [(0, 8)]}}, "language:english": {0: {0: [(82, 86)]}}},
+            {"language:french": {0: {1: [(8, 20)]}}, "language:english": {0: {0: [(86, 90)]}}},
+            # Mixture should contain 8 'language:french' instances and 8 'language:english' instances
+            {"language:french": {0: {1: [(20, 28)]}}, "language:english": {0: {0: [(90, 98)]}}},
+            {"language:french": {0: {1: [(28, 36)]}}, "language:english": {0: {0: [(98, 100), (100, 106)]}}},
+            {"language:french": {0: {1: [(36, 44)]}}, "language:english": {0: {0: [(106, 114)]}}},
+            {"language:french": {0: {1: [(44, 52)]}}, "language:english": {0: {0: [(114, 122)]}}},
+            # Mixture should contain 10 'language:french' instances and 10 'language:english' instances
+            {"language:french": {0: {1: [(52, 62)]}}, "language:english": {0: {0: [(122, 132)]}}},
+            {"language:french": {0: {1: [(62, 72)]}}, "language:english": {0: {0: [(132, 142)]}}},
+            {"language:french": {0: {1: [(72, 82)]}}, "language:english": {0: {0: [(142, 150)]}}},
+        ]
+
+        mixture_concentration_1 = {
+            "language:french": 0.75,  # 12 instances per batch
+            "language:english": 0.25,  # 4 instances per batch
+        }
+
+        mixture_concentration_2 = {
+            "language:french": 0.5,  # 8 and 10 instances per batch
+            "language:english": 0.5,  # 8 and 10 instances per batch
+        }
+
+        query = Query.for_job("job_id").simplemockoperator("test")
+
+        mixture_1 = StaticMixture(16, mixture_concentration_1)
+        mixture_2 = StaticMixture(16, mixture_concentration_2)
+        mixture_3 = StaticMixture(20, mixture_concentration_2)
+        assert self.client.execute_query(query, mixture=mixture_1)
+        result_iterator = iter(query.results)
+        chunks = [next(result_iterator) for _ in range(10)]
+        query.results.update_mixture(mixture_2)
+        chunks.extend([next(result_iterator) for _ in range(4)])
+        query.results.update_mixture(mixture_3)
+        chunks.extend([next(result_iterator) for _ in range(3)])
+        self.assertRaises(StopIteration, next, result_iterator)
+
+        # Check the equality of the chunks
+        for i, chunk in enumerate(chunks):
+            self.assertDictEqual(reference_chunks[i], chunk)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
