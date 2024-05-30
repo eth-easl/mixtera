@@ -107,18 +107,18 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_connect_to_server.return_value = mock_reader, mock_writer
         mock_read_int.return_value = 1
         query_mock = MagicMock()
-        chunk_size = 4
+        mixture_mock = MagicMock()
 
-        success = await self.server_connection._execute_query(query_mock, chunk_size)
+        success = await self.server_connection._execute_query(query_mock, mixture_mock)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
         mock_write_int.assert_has_calls(
             [
                 call(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
-                call(chunk_size, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
             ]
         )
+        mock_write_pickeled_object.assert_awaited_once_with(mixture_mock, NUM_BYTES_FOR_SIZES, mock_writer)
         mock_write_pickeled_object.assert_awaited_once_with(query_mock, NUM_BYTES_FOR_SIZES, mock_writer)
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
 

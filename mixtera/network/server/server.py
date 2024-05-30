@@ -51,12 +51,12 @@ class MixteraServer:
             writer (asyncio.StreamWriter): The stream writer to write data to the client.
         """
         logger.debug("Received register query request")
-        chunk_size = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        logger.debug(f"chunk_size = {chunk_size}")
+        mixture = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        logger.debug(f"mixture = {mixture}")
         query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
         async with self._register_query_lock:
-            success = self._local_stub.execute_query(query, chunk_size)
+            success = self._local_stub.execute_query(query, mixture)
         logger.debug(f"Registered query with success = {success} and executed it.")
 
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
@@ -90,7 +90,7 @@ class MixteraServer:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         async with self._result_chunk_generator_map_lock:
             if job_id not in self._result_chunk_generator_map:
-                self._result_chunk_generator_map[job_id] = self._local_stub._get_query_result(job_id)
+                self._result_chunk_generator_map[job_id] = iter(self._local_stub._get_query_result(job_id))
 
         next_chunk = next(self._result_chunk_generator_map[job_id], None)
         await write_pickeled_object(next_chunk, NUM_BYTES_FOR_SIZES, writer)
