@@ -264,7 +264,10 @@ class QueryResult:
             for key in self._chunker_index.keys()
         }
         for _, component_iterator in component_iterators.items():
-            next(component_iterator)
+            try:
+                next(component_iterator)
+            except StopIteration:
+                return
 
         base_mixture = yield
         while True:
