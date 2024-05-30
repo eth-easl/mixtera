@@ -40,7 +40,7 @@ class Mixture(ABC):
         """
         self.chunk_size = chunk_size
 
-    def __str__(self):
+    def __str__(self) -> str:
         """String representation of this mixture object."""
         return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}}}'
 
@@ -92,7 +92,7 @@ class StaticMixture(Mixture):
         if diff > 0:
             self._mixture[list(self._mixture.keys())[0]] += diff
 
-    def __str__(self):
+    def __str__(self) -> str:
         """String representation of this mixture object."""
         return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
 

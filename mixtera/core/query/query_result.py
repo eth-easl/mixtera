@@ -30,11 +30,14 @@ class QueryResult:
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
         # Prepare structures for iterable chunking
-        self._generator = None
         self._mixture = mixture
         self.results = results
         self._inverted_index: InvertedIndex = self._invert_result(self.results)
         self._chunker_index: ChunkerIndex = self._create_chunker_index(self._inverted_index)
+
+        # Prime the generator
+        self._generator: Generator[Any, Mixture, None] = self._chunk_generator()
+        next(self._generator)
 
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
@@ -323,10 +326,6 @@ class QueryResult:
         """
         with self._lock:
             return self._generator.send(self._mixture)
-            # print(next_value)
-            # if next_value is None:
-            #     raise StopIteration()
-            # return next_value
 
     def __getstate__(self) -> dict:
         # _meta is not pickable using the default pickler (used by torch),
