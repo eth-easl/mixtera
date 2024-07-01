@@ -2,7 +2,7 @@ from typing import Any, Generator
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
-from mixtera.core.query import Query
+from mixtera.core.query import Query, Mixture
 from torch.utils.data import IterableDataset  # pylint: disable=import-error,no-name-in-module
 
 
@@ -12,7 +12,7 @@ class MixteraTorchDataset(IterableDataset):
         client: MixteraClient,
         query: Query,
         job_id: str,
-        chunk_size: int,
+        mixture: Mixture,
         node_id: int = 0,
         tunnel_via_server: bool = False,
     ):
@@ -22,13 +22,13 @@ class MixteraTorchDataset(IterableDataset):
         self._query = query
         self._training_id = job_id
         self._node_id = node_id
-        self._chunk_size = chunk_size
+        self._mixture = mixture
         self._tunnel_via_server = tunnel_via_server
 
         if self._node_id == 0:
             logger.info("Since this is node 0, executing query!")
             # Execute query on primary node pre-fork, to share the results among all forked workers
-            self._client.execute_query(query, self._chunk_size)
+            self._client.execute_query(query, self._mixture)
 
     def __getitem__(self, index: int) -> Any:
         raise NotImplementedError("This is just overwritten to satify pylint.")
