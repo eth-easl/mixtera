@@ -35,17 +35,24 @@ class QueryResult:
         self._inverted_index: InvertedIndex = self._invert_result(self.results)
         self._chunker_index: ChunkerIndex = self._create_chunker_index(self._inverted_index)
 
-        # Prime the generator
-        self._generator: Generator[Any, Mixture, None] = self._chunk_generator()
-        next(self._generator)
-
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
+
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
-        self._manager = mp.Manager()
-        self._lock = self._manager.Lock()
-        self._index = self._manager.Value("i", 0)
+
+        # Cross-node iterator state
+        # self._manager = mp.Manager()
+        # self._lock = self._manager.Lock()
+        # self._index = self._manager.Value("i", 0)
+
+        # Cross-process iterator state
+        self._lock = mp.Lock()
+        self._index = mp.Value("i", 0)
+
+        # Prime the generator
+        self._generator: Generator[Any, tuple[Mixture, int], None] = self._chunk_generator()
+        next(self._generator)
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
         dataset_ids = set()
@@ -247,7 +254,7 @@ class QueryResult:
         with self._lock:
             self._mixture = mixture
 
-    def _chunk_generator(self) -> Generator[ChunkerIndexDatasetEntries, Mixture, None]:
+    def _chunk_generator(self) -> Generator[ChunkerIndexDatasetEntries, tuple[Mixture, int], None]:
         """
         Implements the chunking logic. This method yields chunks relative to  a mixture object.
 
@@ -255,6 +262,7 @@ class QueryResult:
         the mixture within each chunk.
         """
         # Variables for an arbitrary mixture
+        current_chunk_index = 0
         chunker_index_keys_idx = 0
         chunker_index_keys = list(self._chunker_index.keys())
 
@@ -269,7 +277,7 @@ class QueryResult:
             except StopIteration:
                 return
 
-        base_mixture = yield
+        base_mixture, target_chunk_index = yield
         while True:
             # Get the mixture from the caller as it might have changed
             mixture = base_mixture.get_mixture()
@@ -283,7 +291,8 @@ class QueryResult:
                     chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
                 except StopIteration:
                     return
-                base_mixture = yield chunk
+                if current_chunk_index == target_chunk_index:
+                    base_mixture, target_chunk_index = yield chunk
             else:
                 chunk = None
                 while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
@@ -299,7 +308,9 @@ class QueryResult:
                     return
 
                 # Chunk has been successfully generated
-                base_mixture = yield {chunker_index_keys[chunker_index_keys_idx]: chunk}
+                if current_chunk_index == target_chunk_index:
+                    base_mixture, target_chunk_index = yield {chunker_index_keys[chunker_index_keys_idx]: chunk}
+            current_chunk_index += 1
 
     @property
     def chunk_size(self) -> int:
@@ -318,17 +329,16 @@ class QueryResult:
         return self._meta["parsing_func"]
 
     def __iter__(self) -> "QueryResult":
-        with self._lock:
-            self._generator = self._chunk_generator()
-            next(self._generator)  # Required to start the coroutine
         return self
 
     def __next__(self) -> IndexType:
-        """Iterate over the results of the query with a chunk size thread-safe.
-        This method is very dummy right now without ensuring the correct mixture.
-        """
+        """Iterate over the results of the query with a chunk size thread-safe."""
+        with self._index.get_lock():
+            chunk_target_index = self._index.value
+            self._index.value += 1
+
         with self._lock:
-            return self._generator.send(self._mixture)
+            return self._generator.send((self._mixture, chunk_target_index))
 
     def __getstate__(self) -> dict:
         # _meta is not pickable using the default pickler (used by torch),
