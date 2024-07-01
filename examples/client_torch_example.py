@@ -21,7 +21,7 @@ import torch
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.core.query import Query, Mixture, ArbitraryMixture
+from mixtera.core.query import ArbitraryMixture, Mixture, Query
 from mixtera.torch import MixteraTorchDataset
 
 

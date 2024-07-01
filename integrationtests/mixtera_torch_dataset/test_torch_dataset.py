@@ -6,7 +6,7 @@ import torch
 from integrationtests.utils import TestMetadataParser, write_jsonl
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import Query, ArbitraryMixture, Mixture
+from mixtera.core.query import ArbitraryMixture, Mixture, Query
 from mixtera.torch import MixteraTorchDataset
 
 

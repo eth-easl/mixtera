@@ -2,7 +2,7 @@ from typing import Any, Generator
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
-from mixtera.core.query import Query, Mixture
+from mixtera.core.query import Mixture, Query
 from torch.utils.data import IterableDataset  # pylint: disable=import-error,no-name-in-module
 
 
