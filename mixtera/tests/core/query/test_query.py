@@ -196,7 +196,66 @@ class TestQuery(unittest.TestCase):
         query = Query.for_job("job_id").mockoperator("test", len_results=2)
         assert self.client.execute_query(query, ArbitraryMixture(2))
         chunks = list(iter(query.results))
-        self.assertEqual(chunks, [{"field:value":{"did": {"fid": [(0, 2)]}}}])
+        self.assertEqual(chunks, [{"field:value": {"did": {"fid": [(0, 2)]}}}])
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_create_inverted_index_simple(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        reference_result = {
+            0: {
+                0: {
+                    # File 0 in dataset 0 has 3 overlapping has 3 overlapping intervals from a properties perspective:
+                    # [0, 50), [50, 100), [100, 150), [150, 200). We can see that:
+                    # 1. [100, 150) is both english and french
+                    # 2. [0, 50) and [150, 200) are only french
+                    # 3. [100, 150) is only english
+                    P.closedopen(0, 50) | P.closedopen(150, 200): {"language": ["french"]},
+                    P.closedopen(50, 100): {"language": ["english", "french"]},
+                    P.closedopen(100, 150): {"language": ["english"]},
+                },
+                1: {
+                    # File 1 in dataset 0 only exists for the language:french combination, hence interval [0, 100) is
+                    # only assigned to this property
+                    P.closedopen(0, 100): {"language": ["french"]}
+                },
+            }
+        }
+
+        query = Query.for_job("job_id").simplemockoperator("test")
+        assert self.client.execute_query(query, ArbitraryMixture(1))
+        inverted_index = query.results._invert_result(query.results.results)
+
+        # True result vs reference
+        for document_id, doc_entries in inverted_index.items():
+            for file_id, file_entries in doc_entries.items():
+                for intervals, properties in file_entries.items():
+                    self.assertTrue(
+                        document_id in reference_result
+                        and file_id in reference_result[document_id]
+                        and intervals in reference_result[document_id][file_id]
+                    )
+                    self.assertDictEqual(properties, reference_result[document_id][file_id][intervals])
+
+        # Reference vs True result
+        for document_id, doc_entries in reference_result.items():
+            for file_id, file_entries in doc_entries.items():
+                for intervals, properties in file_entries.items():
+                    self.assertTrue(
+                        document_id in inverted_index
+                        and file_id in inverted_index[document_id]
+                        and intervals in inverted_index[document_id][file_id]
+                    )
+                    self.assertDictEqual(properties, inverted_index[document_id][file_id][intervals].values()[0])
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")

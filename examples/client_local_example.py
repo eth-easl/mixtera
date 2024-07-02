@@ -20,7 +20,7 @@ from typing import Any, Optional
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.core.query import Query, ArbitraryMixture
+from mixtera.core.query import ArbitraryMixture, Query
 
 
 def write_jsonl(path: Path) -> None:
