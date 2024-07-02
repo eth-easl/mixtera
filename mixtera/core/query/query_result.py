@@ -33,7 +33,7 @@ class QueryResult:
         self._mixture = mixture
         self.results = results
         self._inverted_index: InvertedIndex = self._invert_result(self.results)
-        self._chunker_index: ChunkerIndex = self._create_chunker_index(self._inverted_index)
+        self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(self._inverted_index)
 
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
@@ -241,7 +241,7 @@ class QueryResult:
 
         if current_cardinality > 0:
             # Normally we would want to record the component cardinality here as well, but since this is the last
-            # generated batch, it does not make sense to capture it as there is no other data left
+            # generated chunk, it does not make sense to capture it as there is no other data left
             yield defaultdict_to_dict(current_partition)
 
     def update_mixture(self, mixture: Mixture) -> None:

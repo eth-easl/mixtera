@@ -5,6 +5,7 @@ import time
 import numpy as np
 import pytest
 from mixtera.utils import flatten, numpy_to_native_type, ranges, run_async_until_complete, wait_for_key_in_dict
+from mixtera.utils.utils import merge_property_dicts, generate_hashable_search_key
 
 
 def test_flatten():
@@ -107,3 +108,43 @@ def test_timeout():
     end_time = time.time()
     assert not result
     assert end_time - start_time >= 0.5, "Timeout did not work correctly"
+
+
+def test_merge_property_dicts():
+    dict_one = {
+        "a": [1, 2],
+        "b": [2, 3],
+    }
+
+    dict_two = {
+        "b": [1, 2],
+        "c": [1],
+        "d": []
+    }
+
+    merged_with_unique = merge_property_dicts(dict_one, dict_two, unique_lists=True)
+    merged_with_duplicates = merge_property_dicts(dict_one, dict_two, unique_lists=False)
+
+    assert merged_with_unique == {'a': [1, 2], 'b': [1, 2, 3], 'c': [1],
+                                  'd': []}, "Merged w/ unique values is incorrect"
+    assert merged_with_duplicates == {'a': [1, 2], 'b': [1, 2, 2, 3], 'c': [1],
+                                      'd': []}, "Merged w/ duplicates is incorrect"
+
+
+def test_generate_hashable_search_key():
+    properties_one = ["c", "b", "a"]
+    values_one = [['x', 'y', 'z'], list(range(3, -1, -1)), ['m', 'n']]
+
+    properties_two = ["b", "a", "c"]
+    values_two = [['x', 'y', 'z'], list(range(3, -1, -1))]
+
+    properties_three = ["c", "b"]
+    values_three = [['x', 'y', 'z'], list(range(3, -1, -1)), ['m', 'n']]
+
+    key_one = generate_hashable_search_key(properties_one, values_one, sort_lists=True)
+    key_two = generate_hashable_search_key(properties_two, values_two)
+    key_three = generate_hashable_search_key(properties_three, values_three, sort_lists=False)
+
+    assert key_one == "a:m;b:3;c:x", f"Generated key is incorrect; should be 'a:m;b:3;c:x' not {key_one}"
+    assert key_two == "a:3;b:x", f"Generated key is incorrect; should be 'a:3;b:x' not {key_two}"
+    assert key_three == "c:x;b:3", f"Generated key is incorrect; should be 'a:3;b:x' not {key_two}"
