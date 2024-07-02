@@ -26,6 +26,8 @@ fi
 
 function shutdown_server {
   echo "Shutting down server"
+  fuser -k 6666/tcp
+
   if kill -0 "$server_pid" 2>/dev/null; then
     echo "Server is still running, killing it"
     # We need to get the PID of the Python server, which is a child of the bash script
