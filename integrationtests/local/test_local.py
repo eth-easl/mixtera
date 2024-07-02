@@ -15,7 +15,7 @@ def parsing_func(sample):
 
 
 def test_filter_javascript(client: MixteraClient, mixture: Mixture):
-    job_id = str(round(time.time() * 1000))
+    job_id = str(int(1e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     client.execute_query(query, mixture)
     result_samples = []
@@ -28,7 +28,7 @@ def test_filter_javascript(client: MixteraClient, mixture: Mixture):
 
 
 def test_filter_html(client: MixteraClient, mixture: Mixture):
-    job_id = str(round(time.time() * 1000))
+    job_id = str(int(2e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     client.execute_query(query, mixture)
     result_samples = []
@@ -42,7 +42,7 @@ def test_filter_html(client: MixteraClient, mixture: Mixture):
 
 
 def test_filter_both(client: MixteraClient, mixture: Mixture):
-    job_id = str(round(time.time() * 1000))
+    job_id = str(int(3e4 + mixture.chunk_size))
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -60,7 +60,7 @@ def test_filter_both(client: MixteraClient, mixture: Mixture):
 
 
 def test_filter_license(client: MixteraClient, mixture: Mixture):
-    job_id = str(round(time.time() * 1000))
+    job_id = str(int(4e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     client.execute_query(query, mixture)
     result_samples = []
@@ -74,15 +74,14 @@ def test_filter_license(client: MixteraClient, mixture: Mixture):
 
 
 def test_filter_unknown_license(client: MixteraClient, mixture: Mixture):
-    job_id = str(round(time.time() * 1000))
+    job_id = str(int(5e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     client.execute_query(query, mixture)
     assert len(list(client.stream_results(job_id, False))) == 0, "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(client: MixteraClient, mixture: Mixture):
-    # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
-    job_id = str(round(time.time() * 1000))
+    job_id = str(int(6e4 + mixture.chunk_size))
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
