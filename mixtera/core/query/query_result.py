@@ -6,7 +6,7 @@ import dill
 import portion
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, IndexType, InvertedIndex
+from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, InvertedIndex
 from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
 from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
 
@@ -51,7 +51,7 @@ class QueryResult:
         self._index = mp.Value("i", 0)
 
         # Prime the generator
-        self._generator: Generator[Any, tuple[Mixture, int], None] = self._chunk_generator()
+        self._generator: Generator[ChunkerIndex, tuple[Mixture, int], None] = self._chunk_generator()
         next(self._generator)
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
@@ -254,12 +254,14 @@ class QueryResult:
         with self._lock:
             self._mixture = mixture
 
-    def _chunk_generator(self) -> Generator[ChunkerIndexDatasetEntries, tuple[Mixture, int], None]:
+    def _chunk_generator(self) -> Generator[ChunkerIndex, tuple[Mixture, int], None]:
         """
         Implements the chunking logic. This method yields chunks relative to  a mixture object.
 
-        This method is a coroutine that accepts a mixture object that dictates the size of each chunk, and optionally
-        the mixture within each chunk.
+        This method is a coroutine that accepts a mixture object that dictates the size of each chunk and potentially
+        the mixture itself. The coroutine also accepts a target index specifying which chunk should be yielded next.
+        This latter parameter is useful when chunking in a multiprocessed environment and at most once visitation
+        guarantees are required.
         """
         # Variables for an arbitrary mixture
         current_chunk_index = 0
@@ -280,7 +282,7 @@ class QueryResult:
         base_mixture, target_chunk_index = yield
         while True:
             # Get the mixture from the caller as it might have changed
-            mixture = base_mixture.get_mixture()
+            mixture = base_mixture.mixture_in_rows()
 
             if mixture:
                 # Try to fetch a chunk part from each of the components. Here one of two things will happen:
@@ -331,8 +333,8 @@ class QueryResult:
     def __iter__(self) -> "QueryResult":
         return self
 
-    def __next__(self) -> IndexType:
-        """Iterate over the results of the query with a chunk size thread-safe."""
+    def __next__(self) -> ChunkerIndex:
+        """Iterate over the results of the query."""
         with self._index.get_lock():
             chunk_target_index = self._index.value
             self._index.value += 1

@@ -15,7 +15,7 @@ from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection.index import IndexType
+    from mixtera.core.datacollection.index import ChunkerIndex
     from mixtera.core.query import Mixture, Query
 
 
@@ -129,9 +129,8 @@ class ServerConnection:
         # Announce we want to register a query
         await write_int(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        # Announce metadata
+        # Announce mixture
         await write_pickeled_object(mixture, NUM_BYTES_FOR_SIZES, writer)
-        # await write_int(mixture, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce query
         await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
@@ -179,7 +178,7 @@ class ServerConnection:
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
     # TODO(#35): Use some ResultChunk type
-    async def _get_next_result(self, job_id: str) -> Optional["IndexType"]:
+    async def _get_next_result(self, job_id: str) -> Optional["ChunkerIndex"]:
         """
         Asynchronously retrieves the next result chunk of a query from the server.
 
@@ -187,7 +186,7 @@ class ServerConnection:
             job_id (str): The identifier of the job for which the next result chunk is requested.
 
         Returns:
-            An IndexType object representing the next result chunk,
+            An ChunkerIndex object representing the next result chunk,
             or None if there are no more results or the connection fails.
         """
         reader, writer = await self._connect_to_server()
@@ -204,7 +203,7 @@ class ServerConnection:
         # Get meta object
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
-    def _stream_result_chunks(self, job_id: str) -> Generator["IndexType", None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator["ChunkerIndex", None, None]:
         """
         Streams the result chunks of a query job from the server.
 
@@ -212,7 +211,7 @@ class ServerConnection:
             job_id (str): The identifier of the job whose result chunks are to be streamed.
 
         Yields:
-            IndexType objects, each representing a chunk of the query results.
+            ChunkerIndex objects, each representing a chunk of the query results.
         """
         # TODO(#62): We might want to prefetch here
         while (next_result := run_async_until_complete(self._get_next_result(job_id))) is not None:

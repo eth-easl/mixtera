@@ -170,4 +170,3 @@ def generate_hashable_search_key(
     if sort_lists:
         zipped.sort(key=lambda x: x[0])
     return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
-    # return ";".join([f"{x}:{','.join([str(yy) for yy in y])}" for x, y in zipped])  # Take all values

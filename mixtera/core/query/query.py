@@ -73,8 +73,7 @@ class Query:
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
             mdc: The MixteraDataCollection object required to execute the query
-            mixture: A mixture object defining the mixture to be reflected in the chunks. This parameter is mutually
-                exclusive with the chunk_size parameter.
+            mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
         logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
         self.root.post_order_traverse(mdc)

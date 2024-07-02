@@ -1,10 +1,10 @@
 import asyncio
 from pathlib import Path
-from typing import Generator
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
 from mixtera.core.filesystem.filesystem import FileSystem
+from mixtera.core.query import QueryResult
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
     read_int,
@@ -35,7 +35,7 @@ class MixteraServer:
         self._port = port
         self._directory = directory
         self._local_stub: LocalStub = LocalStub(self._directory)
-        self._result_chunk_generator_map: dict[str, Generator[str, None, None]] = {}
+        self._result_chunk_generator_map: dict[str, QueryResult] = {}
         self._result_chunk_generator_map_lock = asyncio.Lock()
         self._register_query_lock = asyncio.Lock()
 
@@ -90,7 +90,7 @@ class MixteraServer:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         async with self._result_chunk_generator_map_lock:
             if job_id not in self._result_chunk_generator_map:
-                self._result_chunk_generator_map[job_id] = iter(self._local_stub._get_query_result(job_id))
+                self._result_chunk_generator_map[job_id] = self._local_stub._get_query_result(job_id)
 
         next_chunk = next(self._result_chunk_generator_map[job_id], None)
         await write_pickeled_object(next_chunk, NUM_BYTES_FOR_SIZES, writer)

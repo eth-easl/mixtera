@@ -177,12 +177,26 @@ class TestQuery(unittest.TestCase):
             "file_path": {"fid": "test_file_path"},
         }
 
-        # self.assertEqual(
-        #     res, [{"field": {"value": {"did": {"fid": [(0, 1)]}}}}, {"field": {"value": {"did": {"fid": [(1, 2)]}}}}]
-        # )
-
         self.assertEqual(query_result.dataset_type, gt_meta["dataset_type"])
         self.assertEqual(query_result.file_path, gt_meta["file_path"])
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_execute_chunksize_two(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        query = Query.for_job("job_id").mockoperator("test", len_results=2)
+        assert self.client.execute_query(query, ArbitraryMixture(2))
+        chunks = list(iter(query.results))
+        self.assertEqual(chunks, [{"field:value":{"did": {"fid": [(0, 2)]}}}])
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
