@@ -13,7 +13,7 @@ from mixtera.utils.utils import merge_property_dicts
 # index's entries. As a consequence, we want to eventually transform the result of a query - which is a conventional
 # index - into another index - called a chunker index - that has two important qualities: (1) it allows us to index
 # row ranges by concrete property-value combinations which are required for a specific mixture and (2) it deduplicates
-# the data, which ensures at-most-once visitation guarantees are maintained.
+# the data, which ensures at-most-once visitation guarantees.
 
 # As part of the chunker index construction, we generate an inverted index with the following structure:
 # {
@@ -32,7 +32,7 @@ from mixtera.utils.utils import merge_property_dicts
 # }
 
 # The inverted index turns the conventional index on its head, by moving properties and their values to the last level,
-# and moving dataset and file ids at the first level. Importantly, the inverted index, takes care of the set algebra
+# and moving dataset and file ids at the first level. Importantly, the inverted index takes care of the set algebra
 # required in order to split the conventional index's cross property row ranges into disjoint intervals to which common
 # properties and property values are merged and assigned. From this we can eventually build a chunker index.
 
@@ -65,7 +65,7 @@ raw_index = {
 
 
 # Let's define a shorthand helper method that creates [x, y) intervals in portion for indexing using our raw_index
-def make_key(property_name, property_value, file_id, range_idx, dataset_id=0):
+def make_key(property_name, property_value, range_idx, file_id=0, dataset_id=0):
     raw_interval = raw_index[property_name][property_value][dataset_id][file_id][range_idx]
     return P.closedopen(*raw_interval)
 
@@ -73,18 +73,18 @@ def make_key(property_name, property_value, file_id, range_idx, dataset_id=0):
 # Let's start building the inverted index
 
 ## Let's create our first interval, which will implicitly serve as a key
-current_key = make_key("language", "english", 0, 0)
+current_key = make_key("language", "english", 0)
 print(" 1>", current_key)  # This should print '[50,150)'
 
-# To this index, we assign the property and property value we are currently at (language:english)
+# To this interval, we assign the property and property value we are currently at (language:english)
 inverted_index[0][0][current_key] = {"language": ["english"]}
 print(" 2>", inverted_index)
 
 
 ## Now that we added that property-value pair, let's move on to the next, which is 'language:french'
 
-# We start with file 0
-current_key = make_key("language", "french", 0, 0)
+# We start with the first range in file 0
+current_key = make_key("language", "french", 0)
 print(" 3>", current_key)  # This should print '[0,100)'
 
 # Here is where the magic of portion and the interval dict comes into play. We can use this interval to index into the
@@ -107,7 +107,8 @@ print(" 5>", inverted_index)
 # only [50, 100) was an intersection. Each iteration in the loop will produce an (intersection_interval, old_properties)
 # pair. Recall that indexing an IntervalDict with an interval will produce a dict of intersecting intervals and their
 # associated values. What we do here is fairly straight forward. We overwrite intersection intervals with the merged
-# property-value dictionaries.
+# property-value dictionaries of the existing property-values dicts (stored in intersections) and the new property
+# that is currently part of the freshly overwritten interval identified by current_key.
 for interval, intersection_properties in intersections.items():
     print(" 6.1>", interval)
     print(" 6.2>", inverted_index[0][0][interval].values()[0])
@@ -118,10 +119,10 @@ for interval, intersection_properties in intersections.items():
     print(" 6.4>", inverted_index[0][0][interval])
 print(" 6.5>", inverted_index)
 
-# Next we have the case when there is not intersection. This is pretty straight forward and essentially the intersection
+# Next we have the case when there is no intersection. This is pretty straight forward and essentially the intersection
 # loop never needs to be executed
 
-current_key = make_key("language", "french", 0, 1)
+current_key = make_key("language", "french", 1)
 print(" 7>", current_key)  # This should print '[150,200)'
 
 intersections = inverted_index[0][0][current_key]
@@ -136,8 +137,7 @@ inverted_index[0][0][current_key] = {"language": ["french"]}
 print(" 9>", inverted_index)
 
 # We move to the final case, where we intersect (and thus need to update) several intervals within a file
-
-current_key = make_key("language", "german", 0, 0)
+current_key = make_key("language", "german", 0)
 print("10>", current_key)  # This should print '[100,250)'
 
 intersections = inverted_index[0][0][current_key]
