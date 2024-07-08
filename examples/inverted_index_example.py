@@ -1,5 +1,4 @@
 import portion as P
-
 from mixtera.core.datacollection.index.index_collection import create_inverted_index_interval_dict
 from mixtera.utils.utils import merge_property_dicts
 

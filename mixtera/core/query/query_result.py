@@ -41,11 +41,6 @@ class QueryResult:
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
 
-        # Cross-node iterator state
-        # self._manager = mp.Manager()
-        # self._lock = self._manager.Lock()
-        # self._index = self._manager.Value("i", 0)
-
         # Cross-process iterator state
         self._lock = mp.Lock()
         self._index = mp.Value("i", 0)
