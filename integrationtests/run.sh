@@ -26,7 +26,7 @@ fi
 
 function shutdown_server {
   echo "Shutting down server"
-  # fuser -k 6666/tcp
+  fuser -k 6666/tcp
 
   if kill -0 "$server_pid" 2>/dev/null; then
     echo "Server is still running, killing it"
@@ -34,12 +34,12 @@ function shutdown_server {
     python_pid=$(pgrep -P "$server_pid")
     if [ -n "$python_pid" ]; then
       echo "Killing Python server process with PID $python_pid"
-      pkill -15 -P "$python_pid"
+      kill -15 "$python_pid"
       echo "Killed Python server"
     fi
 
     echo "Killing bash script"
-    pkill -15 -P "$server_pid"
+    kill -15 "$server_pid"
     echo "Killed it."
 
   fi
