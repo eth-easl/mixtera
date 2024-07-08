@@ -26,7 +26,7 @@ fi
 
 function shutdown_server {
   echo "Shutting down server"
-  fuser -k 6666/tcp
+  # fuser -k 6666/tcp
 
   if kill -0 "$server_pid" 2>/dev/null; then
     echo "Server is still running, killing it"
