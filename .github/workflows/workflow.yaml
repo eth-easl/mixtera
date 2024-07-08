@@ -40,7 +40,7 @@ jobs:
       - name: Mypy
         run: |
           micromamba run -n mixtera mypy --version
-          micromamba run -n mixtera mypy mixtera
+          micromamba run -n mixtera mypy -v mixtera
 
   pylint:
     timeout-minutes: 5
