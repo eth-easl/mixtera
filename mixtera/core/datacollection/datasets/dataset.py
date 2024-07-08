@@ -15,6 +15,7 @@ class DatasetType(Enum):
     def instantiate(self) -> Type["Dataset"]:
         if self == DatasetType.JSONL_DATASET:
             from mixtera.core.datacollection.datasets import JSONLDataset  # pylint: disable=import-outside-toplevel
+
             return JSONLDataset
         if self == DatasetType.GENERIC_DATASET:
             return Dataset
