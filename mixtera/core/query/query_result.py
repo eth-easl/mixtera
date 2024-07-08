@@ -336,8 +336,8 @@ class QueryResult:
     def __next__(self) -> ChunkerIndex:
         """Iterate over the results of the query."""
         with self._index.get_lock():
-            chunk_target_index = self._index.value
-            self._index.value += 1
+            chunk_target_index = self._index.get_obj().value
+            self._index.get_obj().value += 1
 
         with self._lock:
             return self._generator.send((self._mixture, chunk_target_index))
