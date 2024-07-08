@@ -14,14 +14,9 @@ class DatasetType(Enum):
 
     def instantiate(self) -> Type["Dataset"]:
         if self == DatasetType.JSONL_DATASET:
-            from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-
+            from mixtera.core.datacollection.datasets import JSONLDataset  # pylint: disable=import-outside-toplevel
             return JSONLDataset
-        elif self == DatasetType.CROISSANT_DATASET:
-            from mixtera.core.datacollection.datasets.croissant_dataset import CroissantDataset
-
-            return CroissantDataset
-        elif self == DatasetType.GENERIC_DATASET:
+        if self == DatasetType.GENERIC_DATASET:
             return Dataset
         else:
             raise NotImplementedError(f"Dataset type {self} not yet supported")
@@ -44,8 +39,8 @@ class Dataset(ABC):
         try:
             dataset_type = DatasetType(type_id)
             return dataset_type.instantiate()
-        except ValueError:
-            raise RuntimeError(f"Invalid type id {type_id}")
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid type id {type_id}") from exc
 
     @staticmethod
     @abstractmethod
