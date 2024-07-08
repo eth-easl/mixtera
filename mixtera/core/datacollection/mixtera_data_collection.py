@@ -114,7 +114,7 @@ class MixteraDataCollection:
             logger.error(f"Invalid dataset type: {dtype}")
             valid_types = False
 
-        type_id = dtype.type_id
+        type_id = dtype.type.value
         if type_id == 0:
             logger.error("Cannot use generic Dataset class as dtype.")
             valid_types = False

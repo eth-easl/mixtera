@@ -1,21 +1,21 @@
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
-from mixtera.core.datacollection.datasets.dataset import Dataset
+from mixtera.core.datacollection.datasets.dataset import Dataset, DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network.connection import ServerConnection
 
 
-class CrossaintDataset(Dataset):
-    type_id = 2
+class CroissantDataset(Dataset):
+    type: DatasetType = DatasetType.CROISSANT_DATASET
 
     @staticmethod
     def build_file_index(loc: Path, metadata_parser: MetadataParser) -> None:
-        raise NotImplementedError("CrossaintDataset not yet supported.")
+        raise NotImplementedError("CroissantDataset not yet supported.")
 
     @staticmethod
     def iterate_files(loc: str) -> Iterable[str]:
-        raise NotImplementedError("CrossaintDataset not yet supported.")
+        raise NotImplementedError("CroissantDataset not yet supported.")
 
     @staticmethod
     def read_ranges_from_files(
