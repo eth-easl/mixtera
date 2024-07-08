@@ -3,13 +3,16 @@ from collections import defaultdict
 from enum import Enum
 from typing import Any, Callable, Union
 
+import portion
 from loguru import logger
 from mixtera.core.datacollection.index import (
+    ChunkerIndex,
     Index,
     IndexDatasetEntryRangeType,
     IndexFeatureValueType,
     IndexRangeType,
     IndexType,
+    InvertedIndex,
 )
 from mixtera.utils import merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
@@ -75,6 +78,33 @@ def raw_index_dict_instantiator() -> IndexType:
     Instantiates and returns a raw index dict of `IndexType`.
     """
     return create_top_dict()
+
+
+def create_inverted_index() -> InvertedIndex:
+    """
+    Creates an InvertedIndex type.
+
+    Returns: an InvertedIndex object
+    """
+    return create_mid_dict()
+
+
+def create_inverted_index_interval_dict() -> InvertedIndex:
+    """
+    Creates an inverted index with an interval dict at the leafs.
+
+    Returns: inverted index
+    """
+    return defaultdict(lambda: defaultdict(portion.IntervalDict))
+
+
+def create_chunker_index() -> ChunkerIndex:
+    """
+    Creates an ChunkerIndex type.
+
+    Returns: an ChunkerIndex object
+    """
+    return defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
 
 class InMemoryDictionaryIndex(Index, ABC):

@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Union
 
+import portion
+
 # Compressed hierarchy (i.e. uses ranges)
 IndexRowRangeType = list[tuple[int, int]]
 IndexFileEntryRangeType = dict[int, IndexRowRangeType]
@@ -22,6 +24,16 @@ IndexFileEntryType = dict[int, IndexCommonType]
 IndexDatasetEntryType = dict[int, IndexFileEntryType]
 IndexFeatureValueType = dict[Union[int, float, str], IndexDatasetEntryType]
 IndexType = dict[str, IndexFeatureValueType]
+
+
+# Inverted index: dataset_id -> file_id -> portion.Interval -> property_name -> [property_value_1, ...]
+InvertedIndex = dict[
+    int, dict[str | int, list[tuple[Union[tuple[int, int], portion.Interval], dict[str, Union[int, float, str]]]]]
+]
+
+# Chunker index: hashable_prop_key -> dataset_id -> file_id -> list of ranges
+ChunkerIndexDatasetEntries = dict[int, dict[int | str, IndexRowRangeType]]
+ChunkerIndex = dict[str, ChunkerIndexDatasetEntries]
 
 
 class Index(ABC):

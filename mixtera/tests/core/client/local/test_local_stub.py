@@ -7,7 +7,7 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Query, QueryResult
+from mixtera.core.query import Query, QueryResult, StaticMixture
 
 
 class TestLocalStub(unittest.TestCase):
@@ -54,27 +54,28 @@ class TestLocalStub(unittest.TestCase):
     def test_execute_query(self, mock_mdc):
         query = MagicMock(spec=Query)
         chunk_size = 100
+        mixture = StaticMixture(chunk_size, {"any": 1.0})
         query.job_id = "test_job_id"
         self.local_stub._mdc = mock_mdc
         self.local_stub._register_query = MagicMock(return_value=True)
 
-        result = self.local_stub.execute_query(query, chunk_size)
-
-        query.execute.assert_called_once_with(mock_mdc, chunk_size=chunk_size)
-        self.local_stub._register_query.assert_called_once_with(query, chunk_size)
+        result = self.local_stub.execute_query(query, mixture)
+        query.execute.assert_called_once_with(mock_mdc, mixture)
+        self.local_stub._register_query.assert_called_once_with(query, mixture)
         self.assertTrue(result)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection")
     def test_execute_query_registration_fails(self, mock_mdc):
         query = MagicMock(spec=Query)
         chunk_size = 100
+        mixture = StaticMixture(chunk_size, {"any": 1.0})
         query.job_id = "test_job_id"
         self.local_stub._register_query = MagicMock(return_value=False)
         self.local_stub._mdc = mock_mdc
-        result = self.local_stub.execute_query(query, chunk_size)
+        result = self.local_stub.execute_query(query, mixture)
 
-        query.execute.assert_called_once_with(mock_mdc, chunk_size=chunk_size)
-        self.local_stub._register_query.assert_called_once_with(query, chunk_size)
+        query.execute.assert_called_once_with(mock_mdc, mixture)
+        self.local_stub._register_query.assert_called_once_with(query, mixture)
         self.assertFalse(result)
 
     def test_is_remote(self):

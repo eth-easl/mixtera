@@ -110,3 +110,63 @@ def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Un
       The `to_return` object or a copy of it if `copy` is `True`
     """
     return to_return if not copy else deepcopy(to_return)
+
+
+def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) -> dict:
+    """
+    Merge two dictionaries that contain key-value pairs of the form:
+        {
+            property_name: [property_value_1, ...],
+            ...
+        }
+
+    Args:
+        left: left property dictionary
+        right: right property dictionary
+        unique_lists: if True, the per-property merged list does not contain
+            duplicate values
+
+    Returns:
+        The merged dictionaries. The merge should be side-effect safe.
+    """
+    new_dict = {}
+    intersection = set()
+
+    for k, v in left.items():
+        if k in right:
+            intersection.add(k)
+        else:
+
+            new_dict[k] = v.copy()
+
+    for k, v in right.items():
+        if k not in intersection:
+            new_dict[k] = v.copy()
+        else:
+            if unique_lists:
+                new_dict[k] = list(set(v + left[k]))
+            else:
+                new_dict[k] = v + left[k]
+
+    return new_dict
+
+
+def generate_hashable_search_key(
+    property_names: list[str], property_values: list[list[str | int | float]], sort_lists: bool = True
+) -> str:
+    """
+    Generate a string representation of a set of property names and values. By default,
+    these should be sorted and aligned.
+
+    Args:
+        property_names: a list with the property names
+        property_values: a list of lists with the property values
+        sort_lists: a boolean, indicating whether to sort the two lists (the property_values relative to property_names)
+
+    Returns:
+        A string that can be used in a ChunkerIndex to identify ranges fulfilling a certain property
+    """
+    zipped = list(zip(property_names, property_values))
+    if sort_lists:
+        zipped.sort(key=lambda x: x[0])
+    return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value

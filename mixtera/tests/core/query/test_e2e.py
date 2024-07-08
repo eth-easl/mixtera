@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-from mixtera.core.query import Query
+from mixtera.core.query import ArbitraryMixture, Query
 
 
 class TestQueryE2E(unittest.TestCase):
@@ -66,31 +66,33 @@ class TestQueryE2E(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
+        mixture = ArbitraryMixture(1)
         query = Query.for_job("job_id").select(("language", "==", "Go"))
-        assert self.client.execute_query(query, 1)
-        res = query.results
+        assert self.client.execute_query(query, mixture)
+        res = list(iter(query.results))
         for x in res:
-            self.assertEqual(x._index, {"language": {"Go": {1: {self.file1_id: [(0, 1)]}}}})
+            self.assertEqual(x, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
             break
 
     def test_union(self):
+        mixture = ArbitraryMixture(1)
         query_1 = Query.for_job("job_id").select(("language", "==", "Go"))
         query_2 = Query.for_job("job_id")
         query_2.select(("language", "==", "CSS"))
         query_2 = query_2.union(query_1)
-        assert self.client.execute_query(query_2, 1)
+        assert self.client.execute_query(query_2, mixture)
         query_result = query_2.results
-        res = list(query_result)
-        res = [x._index for x in res]
+        res = list(iter(query_result))
+
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
+
         self.assertCountEqual(
             res,
             [
-                {"language": {"Go": {1: {self.file1_id: [(0, 1)]}}}},
-                {"language": {"Go": {1: {self.file1_id: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {self.file1_id: [(1, 2)]}}}},
-                {"language": {"CSS": {1: {self.file2_id: [(0, 1)]}}}},
+                {"language:Go": {1: {self.file1_id: [(0, 1)]}}},
+                {"language:Go": {1: {self.file1_id: [(1, 2)]}}},
+                {"language:CSS": {1: {self.file2_id: [(0, 1)]}}},
             ],
         )
         # check metadata
