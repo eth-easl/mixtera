@@ -19,8 +19,8 @@ class DatasetType(Enum):
             return JSONLDataset
         if self == DatasetType.GENERIC_DATASET:
             return Dataset
-        else:
-            raise NotImplementedError(f"Dataset type {self} not yet supported")
+
+        raise NotImplementedError(f"Dataset type {self} not yet supported")
 
 
 class Dataset(ABC):
