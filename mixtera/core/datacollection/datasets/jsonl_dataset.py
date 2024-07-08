@@ -4,14 +4,14 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 from loguru import logger
-from mixtera.core.datacollection.datasets import Dataset
+from mixtera.core.datacollection.datasets import Dataset, DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem import FileSystem
 from mixtera.network.connection import ServerConnection
 
 
 class JSONLDataset(Dataset):
-    type_id = 1
+    type: DatasetType = DatasetType.JSONL_DATASET
 
     @staticmethod
     def iterate_files(loc: str) -> Iterable[str]:
