@@ -68,7 +68,7 @@ class LocalStub(MixteraClient):
         execution_mode: ExecutionMode,
         property_type: "PropertyType",
         min_val: float = 0.0,
-        max_val: float = 1,
+        max_val: float = 1.0,
         num_buckets: int = 10,
         batch_size: int = 1,
         dop: int = 1,

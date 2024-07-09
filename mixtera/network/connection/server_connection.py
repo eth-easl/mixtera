@@ -1,12 +1,17 @@
 import asyncio
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional, Type
 
 from loguru import logger
+from mixtera.core.datacollection import PropertyType
+from mixtera.core.datacollection.datasets.dataset import Dataset
+from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
     read_int,
     read_pickeled_object,
     read_utf8_string,
+    write_float,
     write_int,
     write_pickeled_object,
     write_utf8_string,
@@ -239,3 +244,319 @@ class ServerConnection:
             raise RuntimeError("Error while fetching meta results")
 
         return meta["dataset_type"], meta["parsing_func"], meta["file_path"]
+
+    def register_dataset(
+        self,
+        identifier: str,
+        loc: str,
+        dtype: Type["Dataset"],
+        parsing_func: Callable[[str], str],
+        metadata_parser_identifier: str,
+    ) -> bool:
+        """
+        Registers a dataset with the server.
+
+        Args:
+            identifier (str): The identifier of the dataset.
+            loc (str): The location of the dataset.
+            dtype (Type[Dataset]): The dataset class to be registered.
+            parsing_func (Callable[[str], str]): The parsing function to be registered.
+            metadata_parser_identifier (str): The identifier of the metadata parser.
+
+        Returns:
+            A boolean indicating whether the dataset was successfully registered with the server.
+        """
+        return run_async_until_complete(
+            self._register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
+        )
+
+    async def _register_dataset(
+        self,
+        identifier: str,
+        loc: str,
+        dtype: Type["Dataset"],
+        parsing_func: Callable[[str], str],
+        metadata_parser_identifier: str,
+    ) -> bool:
+        """
+        Asynchronously registers a dataset with the server.
+
+        Args:
+            identifier (str): The identifier of the dataset.
+            loc (str): The location of the dataset.
+            dtype (Type[Dataset]): The dataset class to be registered.
+            parsing_func (Callable[[str], str]): The parsing function to be registered.
+            metadata_parser_identifier (str): The identifier of the metadata parser.
+
+        Returns:
+            A boolean indicating whether the dataset was successfully registered with the server.
+        """
+        reader, writer = await self._connect_to_server()
+
+        if reader is None or writer is None:
+            return False
+
+        # Announce we want to register a dataset
+        await write_int(int(ServerTask.REGISTER_DATASET), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce dataset identifier
+        await write_utf8_string(identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce dataset location
+        await write_utf8_string(loc, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce dataset class
+        await write_int(dtype.type.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce parsing function
+        await write_pickeled_object(parsing_func, NUM_BYTES_FOR_SIZES, writer)
+
+        # Announce metadata parser identifier
+        await write_utf8_string(metadata_parser_identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+
+    def register_metadata_parser(self, identifier: str, parser: Type["MetadataParser"]) -> None:
+        """
+        Registers a metadata parser with the server.
+
+        Args:
+            identifier (str): The identifier of the metadata parser.
+            parser (Type[MetadataParser]): The parser class to be registered.
+        """
+        run_async_until_complete(self._register_metadata_parser(identifier, parser))
+
+    async def _register_metadata_parser(self, identifier: str, parser: Type["MetadataParser"]) -> None:
+        """
+        Asynchronously registers a metadata parser with the server.
+
+        Args:
+            identifier (str): The identifier of the metadata parser.
+            parser (Type[MetadataParser]): The parser class to be registered.
+        """
+        reader, writer = await self._connect_to_server()
+
+        if reader is None or writer is None:
+            return
+
+        # Announce we want to register a metadata parser
+        await write_int(int(ServerTask.REGISTER_METADATA_PARSER), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce metadata parser identifier
+        await write_utf8_string(identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce metadata parser class
+        await write_int(parser.type.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+    def check_dataset_exists(self, identifier: str) -> bool:
+        """
+        Checks whether a dataset with the given identifier exists on the server.
+
+        Args:
+            identifier (str): The identifier of the dataset to check.
+
+        Returns:
+            A boolean indicating whether the dataset exists on the server.
+        """
+        return run_async_until_complete(self._check_dataset_exists(identifier))
+
+    async def _check_dataset_exists(self, identifier: str) -> bool:
+        """
+        Asynchronously checks whether a dataset with the given identifier exists on the server.
+
+        Args:
+            identifier (str): The identifier of the dataset to check.
+
+        Returns:
+            A boolean indicating whether the dataset exists on the server.
+        """
+        reader, writer = await self._connect_to_server()
+
+        if reader is None or writer is None:
+            return False
+
+        # Announce we want to check if a dataset exists
+        await write_int(int(ServerTask.CHECK_DATASET_EXISTS), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce dataset identifier
+        await write_utf8_string(identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+
+    def list_datasets(self) -> list[str]:
+        """
+        Lists the datasets available on the server.
+
+        Returns:
+            A list of strings, each representing a dataset identifier.
+        """
+        return run_async_until_complete(self._list_datasets())
+
+    async def _list_datasets(self) -> list[str]:
+        """
+        Asynchronously lists the datasets available on the server.
+
+        Returns:
+            A list of strings, each representing a dataset identifier.
+        """
+        reader, writer = await self._connect_to_server()
+
+        if reader is None or writer is None:
+            return []
+
+        # Announce we want to list datasets
+        await write_int(int(ServerTask.LIST_DATASETS), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+
+    def remove_dataset(self, identifier: str) -> bool:
+        """
+        Removes a dataset from the server.
+
+        Args:
+            identifier (str): The identifier of the dataset to be removed.
+
+        Returns:
+            A boolean indicating whether the dataset was successfully removed from the server.
+        """
+        return run_async_until_complete(self._remove_dataset(identifier))
+
+    async def _remove_dataset(self, identifier: str) -> bool:
+        """
+        Asynchronously removes a dataset from the server.
+
+        Args:
+            identifier (str): The identifier of the dataset to be removed.
+
+        Returns:
+            A boolean indicating whether the dataset was successfully removed from the server.
+        """
+        reader, writer = await self._connect_to_server()
+
+        if reader is None or writer is None:
+            return False
+
+        # Announce we want to remove a dataset
+        await write_int(int(ServerTask.REMOVE_DATASET), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce dataset identifier
+        await write_utf8_string(identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+
+    def add_property(
+        self,
+        property_name: str,
+        setup_func: Callable,
+        calc_func: Callable,
+        execution_mode: ExecutionMode,
+        property_type: "PropertyType",
+        min_val: float = 0.0,
+        max_val: float = 1,
+        num_buckets: int = 10,
+        batch_size: int = 1,
+        dop: int = 1,
+        data_only_on_primary: bool = True,
+    ) -> None:
+        """
+        Adds a property to the server.
+
+        Args:
+            property_name (str): The name of the property.
+            setup_func (Callable): The setup function for the property.
+            calc_func (Callable): The calculation function for the property.
+            execution_mode (ExecutionMode): The execution mode for the property.
+            property_type (PropertyType): The type of the property.
+            min_val (float): The minimum value of the property. Defaults to 0.0.
+            max_val (float): The maximum value of the property. Defaults to 1.
+            num_buckets (int): The number of buckets for the property. Defaults to 10.
+            batch_size (int): The batch size for the property. Defaults to 1.
+            dop (int): The degree of parallelism for the property. Defaults to 1.
+            data_only_on_primary (bool): Whether the property data is only on the primary. Defaults to True.
+        """
+        return run_async_until_complete(
+            self._add_property(
+                property_name,
+                setup_func,
+                calc_func,
+                execution_mode,
+                property_type,
+                min_val,
+                max_val,
+                num_buckets,
+                batch_size,
+                dop,
+                data_only_on_primary,
+            )
+        )
+
+    async def _add_property(
+        self,
+        property_name: str,
+        setup_func: Callable,
+        calc_func: Callable,
+        execution_mode: ExecutionMode,
+        property_type: "PropertyType",
+        min_val: float = 0.0,
+        max_val: float = 1.0,
+        num_buckets: int = 10,
+        batch_size: int = 1,
+        dop: int = 1,
+        data_only_on_primary: bool = True,
+    ) -> None:
+        """
+        Asynchronously adds a property to the server.
+
+        Args:
+            property_name (str): The name of the property.
+            setup_func (Callable): The setup function for the property.
+            calc_func (Callable): The calculation function for the property.
+            execution_mode (ExecutionMode): The execution mode for the property.
+            property_type (PropertyType): The type of the property.
+            min_val (float): The minimum value of the property. Defaults to 0.0.
+            max_val (float): The maximum value of the property. Defaults to 1.
+            num_buckets (int): The number of buckets for the property. Defaults to 10.
+            batch_size (int): The batch size for the property. Defaults to 1.
+            dop (int): The degree of parallelism for the property. Defaults to 1.
+            data_only_on_primary (bool): Whether the property data is only on the primary. Defaults to True.
+        """
+        reader, writer = await self._connect_to_server()
+
+        if reader is None or writer is None:
+            return
+
+        # Announce we want to add a property
+        await write_int(int(ServerTask.ADD_PROPERTY), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce property name
+        await write_utf8_string(property_name, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce setup function
+        await write_pickeled_object(setup_func, NUM_BYTES_FOR_SIZES, writer)
+
+        # Announce calculation function
+        await write_pickeled_object(calc_func, NUM_BYTES_FOR_SIZES, writer)
+
+        # Announce execution mode
+        await write_int(execution_mode.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce property type
+        await write_int(property_type.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce min value
+        await write_float(min_val, writer)
+
+        # Announce max value
+        await write_float(max_val, writer)
+
+        # Announce number of buckets
+        await write_int(num_buckets, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce batch size
+        await write_int(batch_size, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce degree of parallelism
+        await write_int(dop, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Announce data only on primary
+        await write_int(data_only_on_primary, NUM_BYTES_FOR_IDENTIFIERS, writer)

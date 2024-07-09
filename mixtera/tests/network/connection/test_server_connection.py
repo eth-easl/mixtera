@@ -178,3 +178,167 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         )
         mock_write_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.write_pickeled_object")
+    @patch("mixtera.network.connection.server_connection.read_int")
+    async def test_register_dataset(
+        self, mock_read_int, mock_write_pickeled_object, mock_write_int, mock_write_string, mock_connect_to_server
+    ):
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+        mock_read_int.return_value = 1
+        mock_write_pickeled_object.return_value = True
+        identifier = "identifier"
+        loc = "loc"
+        dtype = "dtype"
+        parsing_func = "parsing_func"
+        metadata_parser_identifier = "metadata_parser_identifier"
+
+        success = await self.server_connection._register_dataset(
+            identifier, loc, dtype, parsing_func, metadata_parser_identifier
+        )
+
+        self.assertTrue(success)
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls(
+            [call(int(ServerTask.REGISTER_DATASET), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
+        )
+        mock_write_string.assert_has_calls([call(identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(loc, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(dtype, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(parsing_func, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(metadata_parser_identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_pickeled_object.assert_has_calls([call(dtype, NUM_BYTES_FOR_SIZES, mock_writer)])
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    async def test_register_metadata_parser(self, mock_write_int, mock_write_string, mock_connect_to_server):
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+        identifier = "identifier"
+        parser = "parser"
+
+        self.server_connection._register_metadata_parser(identifier, parser)
+
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls(
+            [call(int(ServerTask.REGISTER_METADATA_PARSER), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
+        )
+        mock_write_string.assert_has_calls([call(identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(parser, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.read_int")
+    async def test_check_dataset_exists(self, mock_read_int, mock_write_string, mock_write_int, mock_connect_to_server):
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+        mock_read_int.return_value = 1
+        identifier = "identifier"
+
+        exists = await self.server_connection._check_dataset_exists(identifier)
+
+        self.assertTrue(exists)
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls(
+            [call(int(ServerTask.CHECK_DATASET_EXISTS), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
+        )
+        mock_write_string.assert_has_calls([call(identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.read_pickeled_object")
+    async def test_list_datasets(self, mock_read_pickeled_object, mock_write_int, mock_connect_to_server):
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+        mock_read_pickeled_object.return_value = ["dataset1", "dataset2"]
+
+        datasets = await self.server_connection._list_datasets()
+
+        self.assertEqual(datasets, ["dataset1", "dataset2"])
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls([call(int(ServerTask.LIST_DATASETS), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    @patch("mixtera.network.connection.server_connection.read_int")
+    async def test_remove_dataset(self, mock_read_int, mock_write_string, mock_write_int, mock_connect_to_server):
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+        mock_read_int.return_value = 1
+        dataset_id = "dataset_id"
+
+        success = await self.server_connection._remove_dataset(dataset_id)
+
+        self.assertTrue(success)
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls([call(int(ServerTask.REMOVE_DATASET), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(dataset_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    @patch("mixtera.network.connection.server_connection.write_pickeled_object")
+    @patch("mixtera.network.connection.server_connection.write_float")
+    async def test_add_property(
+        self, mock_write_float, mock_write_pickeled_object, mock_write_string, mock_write_int, mock_connect_to_server
+    ):
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+        property_name = "property_name"
+        setup_func = "setup_func"
+        calc_func = "calc_func"
+        execution_mode = "execution_mode"
+        property_type = "property_type"
+        min_val = 0.2
+        max_val = 0.8
+        num_buckets = 12
+        batch_size = 2
+        dop = 3
+        data_only_on_primary = False
+
+        self.server_connection._add_property(
+            property_name,
+            setup_func,
+            calc_func,
+            execution_mode,
+            property_type,
+            min_val,
+            max_val,
+            num_buckets,
+            batch_size,
+            dop,
+            data_only_on_primary,
+        )
+
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls([call(int(ServerTask.ADD_PROPERTY), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(property_name, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(setup_func, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(calc_func, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(execution_mode, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_string.assert_has_calls([call(property_type, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_float.assert_has_calls([call(min_val, mock_writer)])
+        mock_write_float.assert_has_calls([call(max_val, mock_writer)])
+        mock_write_int.assert_has_calls([call(num_buckets, mock_writer)])
+        mock_write_int.assert_has_calls([call(batch_size, mock_writer)])
+        mock_write_int.assert_has_calls([call(dop, mock_writer)])
+        mock_write_int.assert_has_calls([call(int(data_only_on_primary), mock_writer)])
+        mock_write_pickeled_object.assert_has_calls([call(property_type, NUM_BYTES_FOR_SIZES, mock_writer)])
+        mock_write_pickeled_object.assert_has_calls([call(execution_mode, NUM_BYTES_FOR_SIZES, mock_writer)])

@@ -1,13 +1,15 @@
 from typing import Any, Optional
 
 from loguru import logger
-from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.core.datacollection.index.parser import MetadataParser, MetadataParserType
 
 
 class RedPajamaMetadataParser(MetadataParser):
     """
     Metadata parser class for the RedPajama dataset.
     """
+
+    type = MetadataParserType.RED_PAJAMA_METADATA_PARSER
 
     target_index_fields = ["language", "publication_date"]
 

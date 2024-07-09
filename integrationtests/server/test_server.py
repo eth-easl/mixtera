@@ -109,6 +109,8 @@ def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool
     test_filter_license(client, mixture, tunnel)
     test_filter_unknown_license(client, mixture, tunnel)
     test_filter_license_and_html(client, mixture, tunnel)
+    test_remove_dataset(client)
+    test_list_datasets(client)
 
 
 def main() -> None:

@@ -3,10 +3,12 @@ from pathlib import Path
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
+from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.core.query import QueryResult
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
+    read_float,
     read_int,
     read_pickeled_object,
     read_utf8_string,
@@ -113,6 +115,118 @@ class MixteraServer:
         }
         await write_pickeled_object(meta, NUM_BYTES_FOR_SIZES, writer)
 
+    async def _register_dataset(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """
+        Registers a dataset with the server.
+
+        This method reads the dataset identifier, location, dataset type, parsing function,
+        and metadata parser identifier from the client, registers the dataset with the LocalStub,
+        and writes back the success status.
+
+        Args:
+            reader (asyncio.StreamReader): The stream reader to read data from the client.
+            writer (asyncio.StreamWriter): The stream writer to write data to the client.
+        """
+        identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        loc = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        dataset_type_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        parsing_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        metadata_parser_identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = self._local_stub.register_dataset(
+            identifier, loc, dataset_type_id, parsing_func, metadata_parser_identifier
+        )
+        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+    async def _register_metadata_parser(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """
+        Registers a metadata parser with the server.
+
+        This method reads the metadata parser identifier and its associated class from the client,
+        registers the parser with the LocalStub, and writes back the success status.
+
+        Args:
+            reader (asyncio.StreamReader): The stream reader to read data from the client.
+            writer (asyncio.StreamWriter): The stream writer to write data to the client.
+        """
+        identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        parser_type_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        parser = MetadataParser.from_type_id(parser_type_id)
+        self._local_stub.register_metadata_parser(identifier, parser)
+        await write_int(1, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+    async def _check_dataset_exists(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """
+        Checks if a dataset with a given identifier exists in the server's file system.
+
+        Args:
+            reader (asyncio.StreamReader): The stream reader to read data from the client.
+            writer (asyncio.StreamWriter): The stream writer to write data to the client.
+        """
+        identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        exists = self._local_stub.check_dataset_exists(identifier)
+        await write_int(int(exists), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+    async def _list_datasets(self, writer: asyncio.StreamWriter) -> None:
+        """
+        Lists all datasets stored in the server's file system.
+
+        Args:
+            reader (asyncio.StreamReader): The stream reader to read data from the client.
+            writer (asyncio.StreamWriter): The stream writer to write data to the client.
+        """
+        datasets = self._local_stub.list_datasets()
+        await write_pickeled_object(datasets, NUM_BYTES_FOR_SIZES, writer)
+
+    async def _remove_dataset(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """
+        Removes a dataset from the server's file system.
+
+        Args:
+            reader (asyncio.StreamReader): The stream reader to read data from the client.
+            writer (asyncio.StreamWriter): The stream writer to write data to the client.
+        """
+        identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = self._local_stub.remove_dataset(identifier)
+        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+    async def _add_property(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """
+        Adds a property to the server's data collection.
+
+        This method reads the property name, setup function, calculation function, execution mode,
+        property type, and additional parameters from the client, adds the property to the LocalStub,
+        and writes back the success status.
+
+        Args:
+            reader (asyncio.StreamReader): The stream reader to read data from the client.
+            writer (asyncio.StreamWriter): The stream writer to write data to the client.
+        """
+        property_name = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        setup_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        calc_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        execution_mode = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        property_type = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        min_val = await read_float(reader)
+        max_val = await read_float(reader)
+        num_buckets = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        batch_size = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        dop = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        data_only_on_primary = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = self._local_stub.add_property(
+            property_name,
+            setup_func,
+            calc_func,
+            execution_mode,
+            property_type,
+            min_val,
+            max_val,
+            num_buckets,
+            batch_size,
+            dop,
+            data_only_on_primary,
+        )
+        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
         Dispatches client requests to the appropriate handlers based on the task ID.
@@ -138,6 +252,18 @@ class MixteraServer:
                 await self._return_result_metadata(reader, writer)
             elif task == ServerTask.GET_NEXT_RESULT_CHUNK:
                 await self._return_next_result_chunk(reader, writer)
+            elif task == ServerTask.REGISTER_DATASET:
+                await self._register_dataset(reader, writer)
+            elif task == ServerTask.REGISTER_METADATA_PARSER:
+                await self._register_metadata_parser(reader, writer)
+            elif task == ServerTask.CHECK_DATASET_EXISTS:
+                await self._check_dataset_exists(reader, writer)
+            elif task == ServerTask.LIST_DATASETS:
+                await self._list_datasets(writer)
+            elif task == ServerTask.REMOVE_DATASET:
+                await self._remove_dataset(reader, writer)
+            elif task == ServerTask.ADD_PROPERTY:
+                await self._add_property(reader, writer)
             else:
                 logger.error(f"Client sent unsupport task {task}")
 
