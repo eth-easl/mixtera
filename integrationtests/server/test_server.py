@@ -144,6 +144,12 @@ def test_server(server_dir: Path) -> None:
     print("Successfully ran server tests!")
 
 
+def prep_server(server_dir: Path) -> None:
+    print(f"Prepping directory {server_dir}.")
+    write_jsonl(server_dir / "testd.jsonl")
+    print("Directory prepped.")
+
+
 def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool):
     test_filter_javascript(client, mixture, tunnel)
     test_filter_html(client, mixture, tunnel)
@@ -151,12 +157,6 @@ def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool
     test_filter_license(client, mixture, tunnel)
     test_filter_unknown_license(client, mixture, tunnel)
     test_filter_license_and_html(client, mixture, tunnel)
-
-
-def prep_server(server_dir: Path) -> None:
-    print(f"Prepping directory {server_dir}.")
-    write_jsonl(server_dir / "testd.jsonl")
-    print("Directory prepped.")
 
 
 def main() -> None:

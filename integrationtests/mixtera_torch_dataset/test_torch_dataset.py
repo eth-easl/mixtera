@@ -1,9 +1,9 @@
+import sys
 import tempfile
-import time
 from pathlib import Path
 
 import torch
-from integrationtests.utils import TestMetadataParser, write_jsonl
+from integrationtests.utils import TestMetadataParser, prep_server, write_jsonl
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
@@ -120,13 +120,14 @@ def test_torchds(client: MixteraClient, mixture: Mixture, num_workers: int, batc
 
 def test_tds(dir: Path) -> None:
     write_jsonl(dir / "testd.jsonl")
+
+    # local tests
     local_client = MixteraClient(dir)
     local_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     local_client.register_dataset(
         "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
-    # local tests
     for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
@@ -141,8 +142,12 @@ def test_tds(dir: Path) -> None:
                     raise e
 
     # server tests (smaller matrix)
-
     server_client = MixteraClient("127.0.0.1", 6666)
+
+    assert server_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
+    assert server_client.register_dataset(
+        "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
+    )
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for num_workers in [0, 8]:
