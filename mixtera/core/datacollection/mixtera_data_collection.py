@@ -302,7 +302,7 @@ class MixteraDataCollection:
         if not self.check_dataset_exists(identifier):
             logger.error(f"Dataset {identifier} does not exist.")
             return False
-        
+
         try:
             delete_indices_query = """
             DELETE FROM indices
@@ -320,9 +320,8 @@ class MixteraDataCollection:
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during deletion: {err}")
             return False
-        
-        return True
 
+        return True
 
     def _get_all_files(self) -> list[tuple[int, int, Type[Dataset], str]]:
         try:
