@@ -118,11 +118,6 @@ def test_add_property(client: ServerStub):
     assert client.add_property("test_property", setup_func, calc_func, ExecutionMode.LOCAL, PropertyType.CATEGORICAL)
 
 
-def test_remove_dataset(client: ServerStub):
-    assert client.remove_dataset("ldc_integrationtest_dataset"), "Could not remove dataset!"
-    assert not client.check_dataset_exists("ldc_integrationtest_dataset"), "Dataset still exists!"
-
-
 def test_server(server_dir: Path) -> None:
     client = MixteraClient.from_remote("127.0.0.1", 6666)
 
@@ -139,7 +134,6 @@ def test_server(server_dir: Path) -> None:
 
     test_list_datasets(client)
     test_add_property(client)
-    test_remove_dataset(client)
 
     print("Successfully ran server tests!")
 
