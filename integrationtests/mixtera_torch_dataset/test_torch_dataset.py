@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import torch
-from integrationtests.utils import TestMetadataParser, prep_server, write_jsonl
+from integrationtests.utils import TestMetadataParser, write_jsonl
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
