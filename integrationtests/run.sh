@@ -113,6 +113,6 @@ if [ $script_exit_status -ne 0 ]; then
 fi
 
 echo "Running mixtera torch dataset tests"
-python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py || script_exit_status=$?
+python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py $WORK_DIR || script_exit_status=$?
 
 echo "Ran all integration tests."

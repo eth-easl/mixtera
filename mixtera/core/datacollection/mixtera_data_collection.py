@@ -317,6 +317,9 @@ class MixteraDataCollection:
             cur.execute(delete_dataset_query, (identifier,))
 
             self._connection.commit()
+
+            #  Reset the index to reflect the changes
+            self._index = self._read_index_from_database()
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during deletion: {err}")
             return False

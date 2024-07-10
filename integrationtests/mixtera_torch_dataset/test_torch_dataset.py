@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import torch
-from integrationtests.utils import TestMetadataParser, write_jsonl
+from integrationtests.utils import TestMetadataParser, prep_dir
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
@@ -118,14 +118,14 @@ def test_torchds(client: MixteraClient, mixture: Mixture, num_workers: int, batc
     test_filter_license_and_html(client, mixture, num_workers, batch_size, tunnel)
 
 
-def test_tds(dir: Path) -> None:
-    write_jsonl(dir / "testd.jsonl")
+def test_tds(local_dir: Path, server_dir: Path) -> None:
+    local_file = prep_dir(local_dir)
 
     # local tests
-    local_client = MixteraClient(dir)
+    local_client = MixteraClient(local_dir)
     local_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     local_client.register_dataset(
-        "ldc_toch_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
+        "ldc_torch_integrationtest_dataset", local_file, JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
     for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:
@@ -142,15 +142,15 @@ def test_tds(dir: Path) -> None:
                     raise e
 
     # server tests (smaller matrix)
+    server_file = prep_dir(server_dir)
     server_client = MixteraClient("127.0.0.1", 6666)
 
     assert server_client.register_metadata_parser("TEST_PARSER_TORCH", TestMetadataParser)
     assert server_client.register_dataset(
-        "ldc_toch_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
+        "ldc_torch_integrationtest_dataset", server_file, JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
     )
 
-    assert server_client.check_dataset_exists("ldc_toch_integrationtest_dataset"), "Dataset does not exist!"
-    print(server_client.list_datasets())
+    assert server_client.check_dataset_exists("ldc_torch_integrationtest_dataset"), "Dataset does not exist!"
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for num_workers in [0, 8]:
@@ -172,8 +172,10 @@ def test_tds(dir: Path) -> None:
 
 
 def main() -> None:
+    server_dir = Path(sys.argv[1])
+
     with tempfile.TemporaryDirectory() as directory:
-        test_tds(Path(directory))
+        test_tds(Path(directory), server_dir)
 
 
 if __name__ == "__main__":
