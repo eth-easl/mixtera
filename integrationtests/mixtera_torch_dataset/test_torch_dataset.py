@@ -149,7 +149,7 @@ def test_tds(dir: Path) -> None:
         "ldc_toch_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
     )
 
-    assert server_client.check_dataset_exists("ldc_integrationtest_dataset"), "Dataset does not exist!"
+    assert server_client.check_dataset_exists("ldc_toch_integrationtest_dataset"), "Dataset does not exist!"
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for num_workers in [0, 8]:
