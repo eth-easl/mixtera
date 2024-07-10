@@ -1,6 +1,6 @@
-from enum import Enum
+from enum import Enum, auto
 
 
 class ExecutionMode(Enum):
     LOCAL = 1
-    RAY = 2
+    RAY = auto()

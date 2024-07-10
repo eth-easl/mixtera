@@ -13,12 +13,13 @@ from tqdm import tqdm
 class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
     def __init__(
         self,
-        dop: int,
+        degree_of_parallelism: int,
         batch_size: int,
         setup_func: Callable[[Any], None],
         calc_func: Callable[[Any, dict[str, np.ndarray]], list[Any]],
     ):
-        self._dop = dop  # TODO(#24): support dop using multiprocessing or so
+        # TODO(#24): support degree_of_parallelism using multiprocessing
+        self._degree_of_parallelism = degree_of_parallelism
         self._setup_func = setup_func
         self._calc_func = calc_func
         self._batch_size = batch_size
@@ -26,7 +27,7 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
         self._batches: list[dict[str, np.ndarray]] = []
         self._setup_func(self)  # We need to explicitly pass self here
 
-        if self._dop > 1:
+        if self._degree_of_parallelism > 1:
             raise NotImplementedError("The LocalPropertyCalculationExecutor currently does not support parallelism.")
 
     def load_data(self, files: list[tuple[int, int, Type[Dataset], str]], data_only_on_primary: bool) -> None:

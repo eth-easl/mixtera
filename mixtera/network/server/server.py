@@ -3,8 +3,9 @@ from pathlib import Path
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
-from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.filesystem.filesystem import FileSystem
+from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import QueryResult
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
@@ -130,11 +131,12 @@ class MixteraServer:
         identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         loc = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         dataset_type_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        from mixtera.core.datacollection.datasets.dataset import Dataset  # pylint: disable=import-outside-toplevel
+
+        dtype = Dataset.from_type_id(dataset_type_id)
         parsing_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         metadata_parser_identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        success = self._local_stub.register_dataset(
-            identifier, loc, dataset_type_id, parsing_func, metadata_parser_identifier
-        )
+        success = self._local_stub.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
     async def _register_metadata_parser(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -149,10 +151,9 @@ class MixteraServer:
             writer (asyncio.StreamWriter): The stream writer to write data to the client.
         """
         identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        parser_type_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        parser = MetadataParser.from_type_id(parser_type_id)
-        self._local_stub.register_metadata_parser(identifier, parser)
-        await write_int(1, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        parser = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        success = self._local_stub.register_metadata_parser(identifier, parser)
+        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
     async def _check_dataset_exists(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -204,13 +205,15 @@ class MixteraServer:
         property_name = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         setup_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         calc_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
-        execution_mode = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        property_type = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        execution_mode_value: int = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        execution_mode = ExecutionMode(execution_mode_value)
+        property_type_value: int = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        property_type = PropertyType(property_type_value)
         min_val = await read_float(reader)
         max_val = await read_float(reader)
         num_buckets = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         batch_size = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        dop = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        degree_of_parallelism = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         data_only_on_primary = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         success = self._local_stub.add_property(
             property_name,
@@ -222,7 +225,7 @@ class MixteraServer:
             max_val,
             num_buckets,
             batch_size,
-            dop,
+            degree_of_parallelism,
             data_only_on_primary,
         )
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)

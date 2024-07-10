@@ -182,7 +182,7 @@ async def read_float(reader: asyncio.StreamReader, timeout: float = 10.0) -> Opt
     """
     # Read 8 bytes from the reader
     bytes_data = await read_bytes(8, reader, timeout=timeout)
-    if len(bytes_data) == 8:
+    if bytes_data is not None and len(bytes_data) == 8:
         # Unpack the bytes into a float using big-endian format
         return struct.unpack(">d", bytes_data)[0]
     return None

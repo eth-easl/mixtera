@@ -13,9 +13,11 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
     def setUp(self):
         self.setup_func = MagicMock()
         self.calc_func = MagicMock()
-        self.dop = 1
+        self.degree_of_parallelism = 1
         self.batch_size = 2
-        self.executor = LocalPropertyCalculationExecutor(self.dop, self.batch_size, self.setup_func, self.calc_func)
+        self.executor = LocalPropertyCalculationExecutor(
+            self.degree_of_parallelism, self.batch_size, self.setup_func, self.calc_func
+        )
 
     def test_initialization_calls_setup(self):
         self.setup_func.assert_called_once_with(self.executor)

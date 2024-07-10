@@ -30,18 +30,21 @@ class LocalStub(MixteraClient):
     def register_dataset(
         self,
         identifier: str,
-        loc: str,
+        loc: str | Path,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
         metadata_parser_identifier: str,
     ) -> bool:
+        if isinstance(loc, Path):
+            loc = str(loc)
+
         return self._mdc.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
 
     def register_metadata_parser(
         self,
         identifier: str,
         parser: Type[MetadataParser],
-    ) -> None:
+    ) -> bool:
         return self._mdc._metadata_factory.add_parser(identifier, parser)
 
     def check_dataset_exists(self, identifier: str) -> bool:
@@ -71,9 +74,9 @@ class LocalStub(MixteraClient):
         max_val: float = 1.0,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
-    ) -> None:
+    ) -> bool:
         return self._mdc.add_property(
             property_name,
             setup_func,
@@ -84,7 +87,7 @@ class LocalStub(MixteraClient):
             max_val=max_val,
             num_buckets=num_buckets,
             batch_size=batch_size,
-            dop=dop,
+            degree_of_parallelism=degree_of_parallelism,
             data_only_on_primary=data_only_on_primary,
         )
 

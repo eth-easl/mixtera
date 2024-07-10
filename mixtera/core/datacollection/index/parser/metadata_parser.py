@@ -1,30 +1,7 @@
 from abc import ABC, abstractmethod
-from enum import IntEnum, auto
-from typing import Any, Optional, Type
+from typing import Any, Optional
 
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryIndex
-
-
-class MetadataParserType(IntEnum):
-    """
-    Enum for metadata parser types.
-    """
-
-    GENERIC_METADATA_PARSER = auto()
-    RED_PAJAMA_METADATA_PARSER = auto()
-
-    def instantiate(self) -> Type["MetadataParser"]:
-        if self == MetadataParserType.RED_PAJAMA_METADATA_PARSER:
-            from mixtera.core.datacollection.index.parser import (  # pylint: disable=import-outside-toplevel
-                RedPajamaMetadataParser,
-            )
-
-            return RedPajamaMetadataParser
-
-        if self == MetadataParserType.GENERIC_METADATA_PARSER:
-            return MetadataParser
-
-        raise NotImplementedError(f"Metadata parser type {self} not yet supported")
 
 
 class MetadataParser(ABC):
@@ -35,25 +12,6 @@ class MetadataParser(ABC):
     the object has completed its parsing job, the `mark_complete` method should
     be called. This compresses the index transparently.
     """
-
-    type: MetadataParserType = MetadataParserType.GENERIC_METADATA_PARSER
-
-    @staticmethod
-    def from_type_id(type_id: int) -> Type["MetadataParser"]:
-        """
-        This method instantiates a metadata parser from an integer type ID (e.g., stored in a DB).
-
-        Args:
-            type_id (int): Type ID that uniquely identifies the metadata parser
-
-        Returns:
-            The class that belongs to the type_id.
-        """
-        try:
-            metadata_parser_type = MetadataParserType(type_id)
-            return metadata_parser_type.instantiate()
-        except ValueError as exc:
-            raise RuntimeError(f"Invalid type id {type_id}") from exc
 
     def __init__(
         self, dataset_id: int, file_id: int, index_type: Optional[IndexTypes] = IndexTypes.IN_MEMORY_DICT_LINES

@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
+import numpy as np
 from mixtera.core.datacollection.index.parser import MetadataParser
 
 
@@ -18,6 +19,14 @@ def write_jsonl(path: Path) -> None:
 
     with open(path, "w") as text_file:
         text_file.write(data)
+
+
+def setup_func(some_class: Any):
+    pass
+
+
+def calc_func(executor: Any, batch: dict[str, np.ndarray]) -> List[Any]:
+    return ["test_category"]
 
 
 class TestMetadataParser(MetadataParser):

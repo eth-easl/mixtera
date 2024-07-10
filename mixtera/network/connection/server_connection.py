@@ -2,9 +2,9 @@ import asyncio
 from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional, Type
 
 from loguru import logger
-from mixtera.core.datacollection import PropertyType
-from mixtera.core.datacollection.datasets.dataset import Dataset
+from mixtera.core.datacollection.datasets.dataset_type import DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
@@ -249,7 +249,7 @@ class ServerConnection:
         self,
         identifier: str,
         loc: str,
-        dtype: Type["Dataset"],
+        dtype: DatasetType,
         parsing_func: Callable[[str], str],
         metadata_parser_identifier: str,
     ) -> bool:
@@ -274,7 +274,7 @@ class ServerConnection:
         self,
         identifier: str,
         loc: str,
-        dtype: Type["Dataset"],
+        dtype: DatasetType,
         parsing_func: Callable[[str], str],
         metadata_parser_identifier: str,
     ) -> bool:
@@ -306,7 +306,7 @@ class ServerConnection:
         await write_utf8_string(loc, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce dataset class
-        await write_int(dtype.type.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(dtype.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce parsing function
         await write_pickeled_object(parsing_func, NUM_BYTES_FOR_SIZES, writer)
@@ -316,7 +316,7 @@ class ServerConnection:
 
         return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
 
-    def register_metadata_parser(self, identifier: str, parser: Type["MetadataParser"]) -> None:
+    def register_metadata_parser(self, identifier: str, parser: Type["MetadataParser"]) -> bool:
         """
         Registers a metadata parser with the server.
 
@@ -324,9 +324,9 @@ class ServerConnection:
             identifier (str): The identifier of the metadata parser.
             parser (Type[MetadataParser]): The parser class to be registered.
         """
-        run_async_until_complete(self._register_metadata_parser(identifier, parser))
+        return run_async_until_complete(self._register_metadata_parser(identifier, parser))
 
-    async def _register_metadata_parser(self, identifier: str, parser: Type["MetadataParser"]) -> None:
+    async def _register_metadata_parser(self, identifier: str, parser: Type["MetadataParser"]) -> bool:
         """
         Asynchronously registers a metadata parser with the server.
 
@@ -337,7 +337,7 @@ class ServerConnection:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
-            return
+            return False
 
         # Announce we want to register a metadata parser
         await write_int(int(ServerTask.REGISTER_METADATA_PARSER), NUM_BYTES_FOR_IDENTIFIERS, writer)
@@ -346,7 +346,9 @@ class ServerConnection:
         await write_utf8_string(identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce metadata parser class
-        await write_int(parser.type.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_pickeled_object(parser, NUM_BYTES_FOR_SIZES, writer)
+
+        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
 
     def check_dataset_exists(self, identifier: str) -> bool:
         """
@@ -455,9 +457,9 @@ class ServerConnection:
         max_val: float = 1,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
-    ) -> None:
+    ) -> bool:
         """
         Adds a property to the server.
 
@@ -471,7 +473,7 @@ class ServerConnection:
             max_val (float): The maximum value of the property. Defaults to 1.
             num_buckets (int): The number of buckets for the property. Defaults to 10.
             batch_size (int): The batch size for the property. Defaults to 1.
-            dop (int): The degree of parallelism for the property. Defaults to 1.
+            degree_of_parallelism (int): The degree of parallelism for the property. Defaults to 1.
             data_only_on_primary (bool): Whether the property data is only on the primary. Defaults to True.
         """
         return run_async_until_complete(
@@ -485,7 +487,7 @@ class ServerConnection:
                 max_val,
                 num_buckets,
                 batch_size,
-                dop,
+                degree_of_parallelism,
                 data_only_on_primary,
             )
         )
@@ -501,9 +503,9 @@ class ServerConnection:
         max_val: float = 1.0,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
-    ) -> None:
+    ) -> bool:
         """
         Asynchronously adds a property to the server.
 
@@ -517,13 +519,13 @@ class ServerConnection:
             max_val (float): The maximum value of the property. Defaults to 1.
             num_buckets (int): The number of buckets for the property. Defaults to 10.
             batch_size (int): The batch size for the property. Defaults to 1.
-            dop (int): The degree of parallelism for the property. Defaults to 1.
+            degree_of_parallelism (int): The degree of parallelism for the property. Defaults to 1.
             data_only_on_primary (bool): Whether the property data is only on the primary. Defaults to True.
         """
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
-            return
+            return False
 
         # Announce we want to add a property
         await write_int(int(ServerTask.ADD_PROPERTY), NUM_BYTES_FOR_IDENTIFIERS, writer)
@@ -556,7 +558,9 @@ class ServerConnection:
         await write_int(batch_size, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce degree of parallelism
-        await write_int(dop, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(degree_of_parallelism, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce data only on primary
         await write_int(data_only_on_primary, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))

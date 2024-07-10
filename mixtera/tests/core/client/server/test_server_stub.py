@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
@@ -7,8 +8,6 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
 from mixtera.network.connection import ServerConnection
-
-# ServerStub class code goes here...
 
 
 class TestServerStub(unittest.TestCase):
@@ -73,12 +72,31 @@ class TestServerStub(unittest.TestCase):
         identifier = "test_id"
         loc = "test_loc"
         dtype = MagicMock()
+        dtype.type = 0
         parsing_func = MagicMock()
         metadata_parser_identifier = "test_metadata_parser"
 
         result = self.server_stub.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
 
-        mock_register_dataset.assert_called_once_with(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
+        mock_register_dataset.assert_called_once_with(
+            identifier, loc, dtype.type, parsing_func, metadata_parser_identifier
+        )
+        self.assertTrue(result)
+
+    @patch.object(ServerConnection, "register_dataset")
+    def test_register_dataset_loc_path(self, mock_register_dataset):
+        identifier = "test_id"
+        loc = Path("test_loc")
+        dtype = MagicMock()
+        dtype.type = 0
+        parsing_func = MagicMock()
+        metadata_parser_identifier = "test_metadata_parser"
+
+        result = self.server_stub.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
+
+        mock_register_dataset.assert_called_once_with(
+            identifier, str(loc), dtype.type, parsing_func, metadata_parser_identifier
+        )
         self.assertTrue(result)
 
     @patch.object(ServerConnection, "register_metadata_parser")
@@ -87,9 +105,10 @@ class TestServerStub(unittest.TestCase):
         parser = MagicMock()
         self.server_stub._server_connection.register_metadata_parser = mock_register_metadata_parser
 
-        self.server_stub.register_metadata_parser(identifier, parser)
+        result = self.server_stub.register_metadata_parser(identifier, parser)
 
         mock_register_metadata_parser.assert_called_once_with(identifier, parser)
+        self.assertTrue(result)
 
     @patch.object(ServerConnection, "check_dataset_exists")
     def test_check_dataset_exists(self, mock_check_dataset_exists):
@@ -126,6 +145,20 @@ class TestServerStub(unittest.TestCase):
         execution_mode = ExecutionMode.LOCAL
         property_type = PropertyType.NUMERICAL
 
-        self.server_stub.add_property(property_name, setup_func, calc_func, execution_mode, property_type)
+        self.server_stub.add_property(
+            property_name, setup_func, calc_func, execution_mode, property_type, 0.1, 0.9, 8, 2, 2, False
+        )
 
-        mock_add_property.assert_called_once_with(property_name, setup_func, calc_func, execution_mode, property_type)
+        mock_add_property.assert_called_once_with(
+            property_name,
+            setup_func,
+            calc_func,
+            execution_mode,
+            property_type,
+            min_val=0.1,
+            max_val=0.9,
+            num_buckets=8,
+            batch_size=2,
+            degree_of_parallelism=2,
+            data_only_on_primary=False,
+        )

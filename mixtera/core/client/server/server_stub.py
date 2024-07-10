@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
 from loguru import logger
@@ -33,20 +34,23 @@ class ServerStub(MixteraClient):
     def register_dataset(
         self,
         identifier: str,
-        loc: str,
+        loc: str | Path,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
         metadata_parser_identifier: str,
     ) -> bool:
+        if isinstance(loc, Path):
+            loc = str(loc)
+
         return self._server_connection.register_dataset(
-            identifier, loc, dtype, parsing_func, metadata_parser_identifier
+            identifier, loc, dtype.type, parsing_func, metadata_parser_identifier
         )
 
     def register_metadata_parser(
         self,
         identifier: str,
         parser: Type[MetadataParser],
-    ) -> None:
+    ) -> bool:
         return self._server_connection.register_metadata_parser(identifier, parser)
 
     def check_dataset_exists(self, identifier: str) -> bool:
@@ -89,9 +93,9 @@ class ServerStub(MixteraClient):
         max_val: float = 1.0,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
-    ) -> None:
+    ) -> bool:
         return self._server_connection.add_property(
             property_name,
             setup_func,
@@ -102,6 +106,6 @@ class ServerStub(MixteraClient):
             max_val=max_val,
             num_buckets=num_buckets,
             batch_size=batch_size,
-            dop=dop,
+            degree_of_parallelism=degree_of_parallelism,
             data_only_on_primary=data_only_on_primary,
         )
