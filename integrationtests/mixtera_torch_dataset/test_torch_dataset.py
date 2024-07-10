@@ -150,6 +150,7 @@ def test_tds(dir: Path) -> None:
     )
 
     assert server_client.check_dataset_exists("ldc_toch_integrationtest_dataset"), "Dataset does not exist!"
+    print(server_client.list_datasets())
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for num_workers in [0, 8]:
