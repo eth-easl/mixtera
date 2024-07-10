@@ -144,9 +144,9 @@ def test_tds(dir: Path) -> None:
     # server tests (smaller matrix)
     server_client = MixteraClient("127.0.0.1", 6666)
 
-    assert server_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
+    assert server_client.register_metadata_parser("TEST_PARSER_TORCH", TestMetadataParser)
     assert server_client.register_dataset(
-        "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
+        "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
     )
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
