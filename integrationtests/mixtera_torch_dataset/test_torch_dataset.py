@@ -125,7 +125,7 @@ def test_tds(dir: Path) -> None:
     local_client = MixteraClient(dir)
     local_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     local_client.register_dataset(
-        "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
+        "ldc_toch_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
     for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:
@@ -146,8 +146,10 @@ def test_tds(dir: Path) -> None:
 
     assert server_client.register_metadata_parser("TEST_PARSER_TORCH", TestMetadataParser)
     assert server_client.register_dataset(
-        "ldc_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
+        "ldc_toch_integrationtest_dataset", dir / "testd.jsonl", JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
     )
+
+    assert server_client.check_dataset_exists("ldc_integrationtest_dataset"), "Dataset does not exist!"
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for num_workers in [0, 8]:
