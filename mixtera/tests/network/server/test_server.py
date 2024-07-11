@@ -38,9 +38,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
     @patch("mixtera.network.server.server.write_int")
     @patch("mixtera.network.server.server.read_pickeled_object")
-    @patch("mixtera.network.server.server.read_int")
-    async def test_register_query(self, mock_read_int, mock_read_pickeled_object, mock_write_int):
-        mock_read_int.return_value = AsyncMock(return_value=4)
+    async def test_register_query(self, mock_read_pickeled_object, mock_write_int):
         query_mock = MagicMock()
         query_mock.job_id = "cool_training_id"
         mock_read_pickeled_object.return_value = query_mock
@@ -48,8 +46,8 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         await self.server._register_query(create_mock_reader(b""), mock_writer)
 
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, ANY)
-        mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, ANY)
+        mock_read_pickeled_object.assert_awaited_with(NUM_BYTES_FOR_SIZES, ANY)
+        self.assertEqual(mock_read_pickeled_object.await_count, 2)
         mock_write_int.assert_awaited_once_with(True, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
 
     @patch("mixtera.network.server.server.write_utf8_string")

@@ -3,7 +3,7 @@ from mixtera.core.query.operators.materialize import Materialize
 from mixtera.core.query.operators.select import Select
 from mixtera.core.query.operators.union import Union
 
-from .mixture import Mixture, NoopMixture
+from .mixture import ArbitraryMixture, Mixture, StaticMixture
 from .operators._base import Operator
 from .query import Query
 from .query_plan import QueryPlan
@@ -23,5 +23,6 @@ __all__ = [
     "Intersection",
     "QueryResult",
     "Mixture",
-    "NoopMixture",
+    "StaticMixture",
+    "ArbitraryMixture",
 ]

@@ -1,10 +1,10 @@
 import asyncio
 from pathlib import Path
-from typing import Generator
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
 from mixtera.core.filesystem.filesystem import FileSystem
+from mixtera.core.query import QueryResult
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
     read_int,
@@ -35,7 +35,7 @@ class MixteraServer:
         self._port = port
         self._directory = directory
         self._local_stub: LocalStub = LocalStub(self._directory)
-        self._result_chunk_generator_map: dict[str, Generator[str, None, None]] = {}
+        self._result_chunk_generator_map: dict[str, QueryResult] = {}
         self._result_chunk_generator_map_lock = asyncio.Lock()
         self._register_query_lock = asyncio.Lock()
 
@@ -51,12 +51,12 @@ class MixteraServer:
             writer (asyncio.StreamWriter): The stream writer to write data to the client.
         """
         logger.debug("Received register query request")
-        chunk_size = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        logger.debug(f"chunk_size = {chunk_size}")
+        mixture = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        logger.debug(f"mixture = {mixture}")
         query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
         async with self._register_query_lock:
-            success = self._local_stub.execute_query(query, chunk_size)
+            success = self._local_stub.execute_query(query, mixture)
         logger.debug(f"Registered query with success = {success} and executed it.")
 
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)

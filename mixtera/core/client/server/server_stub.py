@@ -7,7 +7,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import IndexType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
-from mixtera.core.query import Query
+from mixtera.core.query import Mixture, Query
 from mixtera.network.connection import ServerConnection
 
 
@@ -56,8 +56,8 @@ class ServerStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
 
-    def execute_query(self, query: Query, chunk_size: int) -> bool:
-        if not self._server_connection.execute_query(query, chunk_size):
+    def execute_query(self, query: Query, mixture: Mixture) -> bool:
+        if not self._server_connection.execute_query(query, mixture):
             logger.error("Could not register query at server!")
             return False
 

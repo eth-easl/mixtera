@@ -1,4 +1,4 @@
-import threading
+import multiprocessing as mp
 from pathlib import Path
 from typing import Callable, Generator, Optional, Type
 
@@ -6,7 +6,7 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index.index import IndexType
+from mixtera.core.datacollection.index.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Mixture, Query, QueryResult
@@ -24,8 +24,8 @@ class LocalStub(MixteraClient):
             raise RuntimeError(f"Directory {self.directory} does not exist.")
 
         self._mdc = MixteraDataCollection(self.directory)
-        self._training_query_map_lock = threading.Lock()
-        self._training_query_map: dict[str, tuple[Query, int]] = {}  # (query, chunk_size)
+        self._training_query_map_lock = mp.Lock()
+        self._training_query_map: dict[str, tuple[Query, Mixture]] = {}  # (query, mixture_object)
 
     def register_dataset(
         self,
@@ -53,9 +53,9 @@ class LocalStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         return self._mdc.remove_dataset(identifier)
 
-    def execute_query(self, query: Query, chunk_size: Optional[int] = None, mixture: Optional[Mixture] = None) -> bool:
-        query.execute(self._mdc, chunk_size=chunk_size, mixture=mixture)
-        return self._register_query(query, chunk_size)  # type: ignore[arg-type]
+    def execute_query(self, query: Query, mixture: Mixture) -> bool:
+        query.execute(self._mdc, mixture)
+        return self._register_query(query, mixture)
 
     def is_remote(self) -> bool:
         return False
@@ -88,9 +88,8 @@ class LocalStub(MixteraClient):
             data_only_on_primary=data_only_on_primary,
         )
 
-    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
-        query_result = self._get_query_result(job_id)
-        yield from query_result
+    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
+        yield from self._get_query_result(job_id)
 
     def _get_result_metadata(
         self, job_id: str
@@ -98,15 +97,15 @@ class LocalStub(MixteraClient):
         query_result = self._get_query_result(job_id)
         return query_result.dataset_type, query_result.parsing_func, query_result.file_path
 
-    def _register_query(self, query: "Query", chunk_size: int) -> bool:
+    def _register_query(self, query: "Query", mixture: Mixture) -> bool:
         if query.job_id in self._training_query_map:
             logger.warning(f"We already have a query for job {query.job_id}!")
             return False
 
         with self._training_query_map_lock:
-            self._training_query_map[query.job_id] = (query, chunk_size)
+            self._training_query_map[query.job_id] = (query, mixture)
 
-        logger.info(f"Registered query {str(query)} with chunk_size {chunk_size}" + f" for job {query.job_id}.")
+        logger.info(f"Registered query {str(query)} for job {query.job_id}, with mixture {mixture}")
 
         return True
 

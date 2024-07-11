@@ -23,7 +23,7 @@ from typing import Any, Optional
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.core.query import Query
+from mixtera.core.query import ArbitraryMixture, Query
 
 
 def write_jsonl(path: Path) -> None:
@@ -79,7 +79,8 @@ def run_query(client: MixteraClient, chunk_size: int, tunnel: bool):
     """
     job_id = str(round(time.time() * 1000)) # Get some job ID based on current timestamp
     query = Query.for_job(job_id).select(("language", "==", "JavaScript")) # In our example, we want to query all samples tagged JavaScript
-    client.execute_query(query, chunk_size)
+    mixture = ArbitraryMixture(chunk_size=chunk_size)
+    client.execute_query(query, mixture)
     result_samples = list(client.stream_results(job_id, tunnel_via_server=tunnel))
     
     # Checking the number of results and their validity.

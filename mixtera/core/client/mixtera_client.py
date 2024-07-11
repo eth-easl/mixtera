@@ -9,7 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Query
+from mixtera.core.query import Mixture, Query
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
@@ -173,16 +173,14 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def execute_query(self, query: Query, chunk_size: int) -> bool:
+    def execute_query(self, query: Query, mixture: Mixture) -> bool:
         """
         Executes the query on the MixteraClient. Afterwards, result can be obtained using `stream_results`.
 
         Args:
             query (Query): The query to execute.
-            chunk_size (int): chunk_size is used to set the size of `subresults` in the QueryResult object.
-                Defaults to 1. When iterating over a :py:class:`QueryResult`
-                object, the results are yielded in chunks of size `chunk_size`. Relevant for throughput
-                optimization.
+            mixture: Mixture object
+
         Returns:
             bool indicating success
         """
