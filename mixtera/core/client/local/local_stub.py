@@ -1,6 +1,6 @@
 import multiprocessing as mp
 from pathlib import Path
-from typing import Callable, Generator, Optional, Type
+from typing import Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient

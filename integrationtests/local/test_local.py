@@ -104,8 +104,13 @@ def test_filter_license_and_html(client: MixteraClient, mixture: Mixture):
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_client_chunksize(client: MixteraClient, mixture: Mixture):
-    test_filter_javascript(client, mixture)  # TODO(vGsteiger): Fix this test
+def test_client_chunksize(
+    client: MixteraClient,
+    mixture: Mixture,
+    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
+    **chunk_reader_args: Any,
+):
+    test_filter_javascript(client, mixture, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
     test_filter_html(client, mixture)
     test_filter_both(client, mixture)
     test_filter_license(client, mixture)
@@ -138,20 +143,18 @@ def test_chunk_readers(dir: Path) -> None:
         "reader_count": 4,
         "per_window_mixture": False,
     }
-    special_params = [{"ensure_mixture": False}, {"ensure_mixture": True}, base_parallel_params,
-                      base_parallel_params | {"per_window_mixture": True},]
+    special_params = [
+        {"ensure_mixture": False},
+        {"ensure_mixture": True},
+        base_parallel_params,
+        base_parallel_params | {"per_window_mixture": True},
+    ]
 
     for chunk_reader_type, chunk_reader_args in zip(reader_types, special_params):
-        test_client_chunksize(
-            client, chunk_size=250, chunk_reader_type=chunk_reader_type, **chunk_reader_args
-        )
+        test_client_chunksize(client, chunk_size=250, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
 
 
 def main() -> None:
-    # with tempfile.TemporaryDirectory() as directory:
-    #     test_client(Path(directory))
-
-    # Testing different types of readers
     with tempfile.TemporaryDirectory() as directory:
         test_chunk_readers(Path(directory))
 

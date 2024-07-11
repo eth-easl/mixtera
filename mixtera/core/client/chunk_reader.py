@@ -9,7 +9,7 @@ from typing import Any, Callable, Iterator, Optional, Type
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
-from mixtera.core.query import Mixture, NoopMixture
+from mixtera.core.query import Mixture, StaticMixture
 from mixtera.network.connection import ServerConnection
 
 # These parameters are relevant to the parallel reader in order to avoid timeouts
@@ -186,7 +186,7 @@ class ParallelChunkReader(ChunkReader):
             for key, _ in partition_masses.items():
                 partition_masses[key] = partition_masses[key] / total_count
 
-            self._mixture = NoopMixture(total_count, partition_masses)
+            self._mixture = StaticMixture(total_count, partition_masses)
 
         # Collect the workloads (i.e. did+fid+ranges) and group them by the property combination they belong to
         self._workloads: dict[str, list[tuple[int, int | str, list]]] = {}
