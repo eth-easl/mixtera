@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Type
 
@@ -6,8 +7,24 @@ from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network.connection import ServerConnection
 
 
+class DatasetType(Enum):
+    GENERIC_DATASET = auto()
+    JSONL_DATASET = auto()
+    CROISSANT_DATASET = auto()
+
+    def instantiate(self) -> Type["Dataset"]:
+        if self == DatasetType.JSONL_DATASET:
+            from mixtera.core.datacollection.datasets import JSONLDataset  # pylint: disable=import-outside-toplevel
+
+            return JSONLDataset
+        if self == DatasetType.GENERIC_DATASET:
+            return Dataset
+
+        raise NotImplementedError(f"Dataset type {self} not yet supported")
+
+
 class Dataset(ABC):
-    type_id = 0
+    type: DatasetType = DatasetType.GENERIC_DATASET
 
     @staticmethod
     def from_type_id(type_id: int) -> "Type[Dataset]":
@@ -20,17 +37,11 @@ class Dataset(ABC):
         Returns:
             The class that belongs to the type_id.
         """
-        if type_id < 1:
-            raise RuntimeError(f"Invalid type id {type_id}")
-
-        from mixtera.core.datacollection.datasets.jsonl_dataset import (  # pylint: disable=import-outside-toplevel
-            JSONLDataset,
-        )
-
-        if type_id == JSONLDataset.type_id:
-            return JSONLDataset
-
-        raise NotImplementedError(f"type_id {type_id} not yet supported")
+        try:
+            dataset_type = DatasetType(type_id)
+            return dataset_type.instantiate()
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid type id {type_id}") from exc
 
     @staticmethod
     @abstractmethod
