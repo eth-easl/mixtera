@@ -382,7 +382,7 @@ class TestLocalDataCollection(unittest.TestCase):
             max_val=1.0,
             num_buckets=10,
             batch_size=1,
-            dop=1,
+            degree_of_parallelism=1,
             data_only_on_primary=True,
         )
 
@@ -441,7 +441,7 @@ class TestLocalDataCollection(unittest.TestCase):
             ExecutionMode.LOCAL,
             PropertyType.CATEGORICAL,
             batch_size=1,
-            dop=1,
+            degree_of_parallelism=1,
             data_only_on_primary=True,
         )
 

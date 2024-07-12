@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
 from loguru import logger
@@ -33,28 +34,33 @@ class ServerStub(MixteraClient):
     def register_dataset(
         self,
         identifier: str,
-        loc: str,
+        loc: str | Path,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
         metadata_parser_identifier: str,
     ) -> bool:
-        raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
+        if isinstance(loc, Path):
+            loc = str(loc)
+
+        return self._server_connection.register_dataset(
+            identifier, loc, dtype.type, parsing_func, metadata_parser_identifier
+        )
 
     def register_metadata_parser(
         self,
         identifier: str,
         parser: Type[MetadataParser],
-    ) -> None:
-        raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
+    ) -> bool:
+        return self._server_connection.register_metadata_parser(identifier, parser)
 
     def check_dataset_exists(self, identifier: str) -> bool:
-        raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
+        return self._server_connection.check_dataset_exists(identifier)
 
     def list_datasets(self) -> list[str]:
-        raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
+        return self._server_connection.list_datasets()
 
     def remove_dataset(self, identifier: str) -> bool:
-        raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
+        return self._server_connection.remove_dataset(identifier)
 
     def execute_query(self, query: Query, mixture: Mixture) -> bool:
         if not self._server_connection.execute_query(query, mixture):
@@ -84,10 +90,22 @@ class ServerStub(MixteraClient):
         execution_mode: ExecutionMode,
         property_type: "PropertyType",
         min_val: float = 0.0,
-        max_val: float = 1,
+        max_val: float = 1.0,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
-    ) -> None:
-        raise NotImplementedError("This functionality is not implemented on the ServerStub yet.")
+    ) -> bool:
+        return self._server_connection.add_property(
+            property_name,
+            setup_func,
+            calc_func,
+            execution_mode,
+            property_type,
+            min_val=min_val,
+            max_val=max_val,
+            num_buckets=num_buckets,
+            batch_size=batch_size,
+            degree_of_parallelism=degree_of_parallelism,
+            data_only_on_primary=data_only_on_primary,
+        )

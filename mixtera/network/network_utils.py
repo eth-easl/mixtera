@@ -1,4 +1,5 @@
 import asyncio
+import struct
 from typing import Any, Optional
 
 import dill
@@ -145,4 +146,43 @@ async def read_pickeled_object(size_bytes: int, reader: asyncio.StreamReader) ->
     if (obj_size := await read_int(size_bytes, reader)) is not None:
         if (obj_data := await read_bytes(obj_size, reader)) is not None:
             return dill.loads(obj_data)
+    return None
+
+
+async def write_float(data: float, writer: asyncio.StreamWriter, drain: bool = True) -> None:
+    """
+    Asynchronously writes a float using a asyncio.StreamWriter.
+
+    Does not require a size header, as double precision floats are always 8 bytes long.
+
+    Args:
+        data (float): The float to write.
+        writer (asyncio.StreamWriter): The stream writer which should write the data.
+        drain (bool): Whether to call writer.drain() afterwards. Defaults to True.
+    """
+    #  Pack the float into 8 bytes using big-endian format
+    bytes_data = struct.pack(">d", data)
+    writer.write(bytes_data)
+    if drain:
+        await writer.drain()
+
+
+async def read_float(reader: asyncio.StreamReader, timeout: float = 10.0) -> Optional[float]:
+    """
+    Asynchronously read a float from `asyncio.StreamReader`.
+
+    Does not require a size header, as double precision floats are always 8 bytes long.
+
+    Args:
+        reader (asyncio.StreamReader): The stream reader from which to read.
+    Returns:
+        Optional[float]: The read float. None, if error occurs.
+    Raises:
+        asyncio.TimeoutError: If the timeout is exceeded before `num_bytes` could be read.
+    """
+    # Read 8 bytes from the reader
+    bytes_data = await read_bytes(8, reader, timeout=timeout)
+    if bytes_data is not None and len(bytes_data) == 8:
+        # Unpack the bytes into a float using big-endian format
+        return struct.unpack(">d", bytes_data)[0]
     return None

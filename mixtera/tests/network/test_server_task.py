@@ -24,10 +24,34 @@ class TestServerTask(unittest.TestCase):
         self.assertEqual(ServerTask.GET_NEXT_RESULT_CHUNK, 4)
         self.assertEqual(ServerTask(4), ServerTask.GET_NEXT_RESULT_CHUNK)
 
+    def test_register_dataset(self):
+        self.assertEqual(ServerTask.REGISTER_DATASET, 5)
+        self.assertEqual(ServerTask(5), ServerTask.REGISTER_DATASET)
+
+    def test_register_metadata_parser(self):
+        self.assertEqual(ServerTask.REGISTER_METADATA_PARSER, 6)
+        self.assertEqual(ServerTask(6), ServerTask.REGISTER_METADATA_PARSER)
+
+    def test_check_dataset_exists(self):
+        self.assertEqual(ServerTask.CHECK_DATASET_EXISTS, 7)
+        self.assertEqual(ServerTask(7), ServerTask.CHECK_DATASET_EXISTS)
+
+    def test_list_datasets(self):
+        self.assertEqual(ServerTask.LIST_DATASETS, 8)
+        self.assertEqual(ServerTask(8), ServerTask.LIST_DATASETS)
+
+    def test_remove_dataset(self):
+        self.assertEqual(ServerTask.REMOVE_DATASET, 9)
+        self.assertEqual(ServerTask(9), ServerTask.REMOVE_DATASET)
+
+    def test_add_property(self):
+        self.assertEqual(ServerTask.ADD_PROPERTY, 10)
+        self.assertEqual(ServerTask(10), ServerTask.ADD_PROPERTY)
+
     def test_unique_values(self):
         values = set(member.value for member in ServerTask)
         self.assertEqual(len(values), len(ServerTask))
 
     def test_invalid_value(self):
         with self.assertRaises(ValueError):
-            ServerTask(5)
+            ServerTask(11)

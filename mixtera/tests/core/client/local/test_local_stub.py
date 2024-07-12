@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
+from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
@@ -26,25 +27,41 @@ class TestLocalStub(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             MixteraClient.from_directory("/non/existent/directory/path")
 
-    @patch("mixtera.core.datacollection.MixteraDataCollection.register_dataset")
+    @patch.object(MixteraDataCollection, "register_dataset")
     def test_register_dataset(self, mock_register):
         mock_register.return_value = True
         result = self.local_stub.register_dataset("id", "loc", MagicMock(), MagicMock(), "metadata_parser")
         self.assertTrue(result)
         mock_register.assert_called_once()
 
-    @patch("mixtera.core.datacollection.MixteraDataCollection.check_dataset_exists")
+    @patch.object(MixteraDataCollection, "register_dataset")
+    def test_register_dataset_loc_path(self, mock_register_dataset):
+        identifier = "test_id"
+        loc = Path("test_loc")
+        dtype = MagicMock()
+        dtype.type = 0
+        parsing_func = MagicMock()
+        metadata_parser_identifier = "test_metadata_parser"
+
+        result = self.local_stub.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
+
+        mock_register_dataset.assert_called_once_with(
+            identifier, str(loc), dtype, parsing_func, metadata_parser_identifier
+        )
+        self.assertTrue(result)
+
+    @patch.object(MixteraDataCollection, "check_dataset_exists")
     def test_check_dataset_exists(self, mock_check):
         mock_check.return_value = True
         self.assertTrue(self.local_stub.check_dataset_exists("id"))
         mock_check.assert_called_once_with("id")
 
-    @patch("mixtera.core.datacollection.MixteraDataCollection.list_datasets")
+    @patch.object(MixteraDataCollection, "list_datasets")
     def test_list_datasets(self, mock_list):
         mock_list.return_value = ["dataset1", "dataset2"]
         self.assertEqual(self.local_stub.list_datasets(), ["dataset1", "dataset2"])
 
-    @patch("mixtera.core.datacollection.MixteraDataCollection.remove_dataset")
+    @patch.object(MixteraDataCollection, "remove_dataset")
     def test_remove_dataset(self, mock_remove):
         mock_remove.return_value = True
         self.assertTrue(self.local_stub.remove_dataset("id"))
@@ -81,14 +98,15 @@ class TestLocalStub(unittest.TestCase):
     def test_is_remote(self):
         self.assertFalse(self.local_stub.is_remote())
 
-    @patch("mixtera.core.datacollection.MixteraDataCollection.add_property")
+    @patch.object(MixteraDataCollection, "add_property")
     def test_add_property(self, mock_add_property):
         setup_func = MagicMock()
         calc_func = MagicMock()
         execution_mode = ExecutionMode.LOCAL
         property_type = PropertyType.NUMERICAL
-        self.local_stub.add_property("test_property", setup_func, calc_func, execution_mode, property_type)
+        result = self.local_stub.add_property("test_property", setup_func, calc_func, execution_mode, property_type)
 
+        self.assertTrue(result)
         mock_add_property.assert_called_once_with(
             "test_property",
             setup_func,
@@ -99,7 +117,7 @@ class TestLocalStub(unittest.TestCase):
             max_val=1,
             num_buckets=10,
             batch_size=1,
-            dop=1,
+            degree_of_parallelism=1,
             data_only_on_primary=True,
         )
 
