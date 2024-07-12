@@ -21,7 +21,7 @@ def write_jsonl(path: Path) -> None:
         text_file.write(data)
 
 
-def prep_dir(dir: Path) -> str:
+def setup_test_dataset(dir: Path) -> str:
     print(f"Prepping directory {dir}.")
     write_jsonl(dir / "testd.jsonl")
     print("Directory prepped.")

@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import torch
-from integrationtests.utils import TestMetadataParser, prep_dir
+from integrationtests.utils import TestMetadataParser, setup_test_dataset
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
@@ -119,7 +119,7 @@ def test_torchds(client: MixteraClient, mixture: Mixture, num_workers: int, batc
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
-    local_file = prep_dir(local_dir)
+    local_file = setup_test_dataset(local_dir)
 
     # local tests
     local_client = MixteraClient(local_dir)
@@ -142,7 +142,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
                     raise e
 
     # server tests (smaller matrix)
-    server_file = prep_dir(server_dir)
+    server_file = setup_test_dataset(server_dir)
     server_client = MixteraClient("127.0.0.1", 6666)
 
     assert server_client.register_metadata_parser("TEST_PARSER_TORCH", TestMetadataParser)

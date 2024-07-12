@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from integrationtests.utils import TestMetadataParser, calc_func, prep_dir, setup_func
+from integrationtests.utils import TestMetadataParser, calc_func, setup_func, setup_test_dataset
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.server import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset
@@ -156,7 +156,7 @@ def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool
 def main() -> None:
     server_dir = Path(sys.argv[1])
 
-    prep_dir(server_dir)
+    setup_test_dataset(server_dir)
     test_server(server_dir)
 
 

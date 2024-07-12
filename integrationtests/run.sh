@@ -47,7 +47,6 @@ function shutdown_server {
     fi
   else
     echo "Unsupported OS"
-    return 1
   fi
 
   sleep 2 # Wait for server to shut down, otherwise we trigger a rerun of this script unnecessarily by killing the server again
@@ -68,6 +67,12 @@ function shutdown_server {
 
   fi
   echo "Server shut down."
+}
+
+function empty_work_dir {
+  echo "Emptying work directory $WORK_DIR"
+  rm -rf "$WORK_DIR"/*
+  echo "Emptied work directory $WORK_DIR"
 }
 
 function cleanup {
@@ -111,6 +116,8 @@ python $SCRIPT_DIR/server/test_server.py $WORK_DIR || script_exit_status=$?
 if [ $script_exit_status -ne 0 ]; then
   cleanup
 fi
+
+empty_work_dir
 
 echo "Running mixtera torch dataset tests"
 python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py $WORK_DIR || script_exit_status=$?

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
+from mixtera.core.datacollection.datasets.dataset import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
@@ -131,8 +132,6 @@ class MixteraServer:
         identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         loc = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         dataset_type_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        from mixtera.core.datacollection.datasets.dataset import Dataset  # pylint: disable=import-outside-toplevel
-
         dtype = Dataset.from_type_id(dataset_type_id)
         parsing_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         metadata_parser_identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
