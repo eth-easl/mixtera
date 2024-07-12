@@ -71,7 +71,7 @@ function shutdown_server {
 
 function empty_work_dir {
   echo "Emptying work directory $WORK_DIR"
-  rm -rf "$WORK_DIR"/*
+  find "$WORK_DIR" -type f ! -name '*.sqlite' -exec rm -f {} +
   echo "Emptied work directory $WORK_DIR"
 }
 
