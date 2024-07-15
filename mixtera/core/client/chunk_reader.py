@@ -251,7 +251,7 @@ class ParallelChunkReader(ChunkReader):
         # Determine the number of readers to use s.t. readers are not overprovisioned
         self.reader_count = min(
             sum(len(x) for x in self._workloads.values()),
-            reader_count if reader_count is not None else mp.cpu_count(),
+            self._degree_of_parallelism if self._degree_of_parallelism is not None else mp.cpu_count(),
         )
 
         # Determine how many processes should be assigned per property combination
@@ -301,9 +301,9 @@ class ParallelChunkReader(ChunkReader):
         file_path_dict: dict[int, str],
         pickled_parsing_func_dict: dict[int, bytes],
         server_connection: ServerConnection,
-        workloads: list[tuple[int, int | str, list]],
+        workloads: list[tuple[int, int, list]],
     ) -> None:
-        parsing_func_dict = from_pickled_dict(pickled_parsing_func_dict)
+        parsing_func_dict: dict[int, Callable[[str], str]] = from_pickled_dict(pickled_parsing_func_dict)
         for document_id, file_id, ranges in workloads:
             filename_dict = {file_path_dict[file_id]: ranges}
             instance_iterator = dataset_type_dict[document_id].read_ranges_from_files(
@@ -366,7 +366,7 @@ class ParallelChunkReader(ChunkReader):
                 while not q.empty():
                     paired_results.append((key, q.get_nowait()))
 
-        # Sort the results by the key to ensure reproducibility
+        #  Sort the results by the key to ensure reproducibility
         paired_results.sort(key=lambda x: x[0])
         results = [x[1] for x in paired_results]
 

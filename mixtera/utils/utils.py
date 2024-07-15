@@ -174,7 +174,7 @@ def generate_hashable_search_key(
     return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
 
 
-def generate_hash_string_from_list(string_list: list[str]):
+def generate_hash_string_from_list(string_list: list[str]) -> str:
     """
     Generate a hash string from a list of strings.
 

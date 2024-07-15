@@ -4,11 +4,10 @@ from pathlib import Path
 from typing import Any
 
 from integrationtests.utils import TestMetadataParser, get_expected_js_and_html_samples, get_job_id, setup_test_dataset
+from loguru import logger
 from mixtera.core.client import ChunkReaderType, MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
-
-from loguru import logger
 
 TEST_LOCAL_INSTANCE_COUNT = 1000
 TEST_LOCAL_FILE_COUNT = 5
@@ -121,7 +120,9 @@ def test_filter_unknown_license(
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     client.execute_query(query, mixture)
-    assert len(list(client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args))) == 0, "Got results back for expected empty results."
+    assert (
+        len(list(client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args))) == 0
+    ), "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(
@@ -185,7 +186,9 @@ def test_chunk_readers(dir: Path) -> None:
 
     for chunk_size in [100, 250, 500, 750, 1000]:
         for chunk_reader_type, chunk_reader_args in zip(reader_types, special_params):
-            logger.debug(f"Running chunk reader tests with chunk_size={chunk_size}, chunk_reader_type={chunk_reader_type}, and chunk_reader_args={chunk_reader_args}")
+            logger.debug(
+                f"Running chunk reader tests with chunk_size={chunk_size}, chunk_reader_type={chunk_reader_type}, and chunk_reader_args={chunk_reader_args}"
+            )
             test_client_chunksize(
                 client, ArbitraryMixture(chunk_size), chunk_reader_type=chunk_reader_type, **chunk_reader_args
             )
