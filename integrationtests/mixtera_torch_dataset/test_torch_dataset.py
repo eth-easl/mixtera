@@ -119,13 +119,13 @@ def test_torchds(client: MixteraClient, mixture: Mixture, num_workers: int, batc
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
-    local_file = setup_test_dataset(local_dir)
+    setup_test_dataset(local_dir)
 
     # local tests
-    local_client = MixteraClient(local_dir)
+    local_client = MixteraClient.from_directory(local_dir)
     local_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     local_client.register_dataset(
-        "ldc_torch_integrationtest_dataset", local_file, JSONLDataset, sample_parsing_func, "TEST_PARSER"
+        "ldc_torch_integrationtest_dataset", local_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
     for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:

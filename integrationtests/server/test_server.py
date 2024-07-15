@@ -3,13 +3,19 @@ import time
 from pathlib import Path
 from typing import Any
 
-from integrationtests.utils import TestMetadataParser, calc_func, setup_func, setup_test_dataset
+from integrationtests.utils import TestMetadataParser, calc_func, setup_func, setup_test_dataset, get_expected_js_and_html_samples
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.server import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
+
+TEST_SERVER_INSTANCE_COUNT = 10000
+TEST_SERVER_FILE_COUNT = 10
+TEST_SERVER_FRACTION_MULTIPLIER = 2
+
+EXPECTED_JS_SAMPLES, EXPECTED_HTML_SAMPLES = get_expected_js_and_html_samples(TEST_SERVER_INSTANCE_COUNT, TEST_SERVER_FRACTION_MULTIPLIER)
 
 
 def parsing_func(sample):
@@ -27,7 +33,7 @@ def test_filter_javascript(client: ServerStub, mixture: Mixture, tunnel: bool):
     for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
-    assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
+    assert len(result_samples) == EXPECTED_JS_SAMPLES, f"Got {len(result_samples)} samples instead of the expected {EXPECTED_JS_SAMPLES}!"
     for sample in result_samples:
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
@@ -41,7 +47,7 @@ def test_filter_html(client: ServerStub, mixture: Mixture, tunnel: bool):
     for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
-    assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
+    assert len(result_samples) == EXPECTED_HTML_SAMPLES, f"Got {len(result_samples)} samples instead of the expected {EXPECTED_HTML_SAMPLES}!"
     for sample in result_samples:
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
@@ -59,9 +65,9 @@ def test_filter_both(client: ServerStub, mixture: Mixture, tunnel: bool):
     for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
-    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of 1000!"
+    assert len(result_samples) == TEST_SERVER_INSTANCE_COUNT, f"Got {len(result_samples)} samples instead of {TEST_SERVER_INSTANCE_COUNT}!"
     for sample in result_samples:
-        assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
+        assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
 def test_filter_license(client: ServerStub, mixture: Mixture, tunnel: bool):
@@ -73,9 +79,9 @@ def test_filter_license(client: ServerStub, mixture: Mixture, tunnel: bool):
     for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
-    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
+    assert len(result_samples) == TEST_SERVER_INSTANCE_COUNT, f"Got {len(result_samples)} samples instead of the expected {TEST_SERVER_INSTANCE_COUNT}!"
     for sample in result_samples:
-        assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
+        assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
 def test_filter_unknown_license(client: ServerStub, mixture: Mixture, tunnel: bool):
@@ -101,9 +107,33 @@ def test_filter_license_and_html(client: ServerStub, mixture: Mixture, tunnel: b
     for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
         result_samples.append(sample)
 
-    assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
+    assert len(result_samples) == TEST_SERVER_INSTANCE_COUNT, f"Got {len(result_samples)} samples instead of the expected {TEST_SERVER_INSTANCE_COUNT}!"
     for sample in result_samples:
-        assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
+        assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
+
+
+def test_result_order(client: ServerStub, mixture: Mixture, tunnel: bool):
+    job_id = str(round(time.time() * 1000))
+    query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
+    assert client.execute_query(query, mixture)
+    result_samples = []
+
+    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
+        result_samples.append(sample)
+
+    assert len(result_samples) == EXPECTED_JS_SAMPLES, f"Got {len(result_samples)} samples instead of the expected {EXPECTED_JS_SAMPLES}!"
+
+    job_id_2 = str(round(time.time() * 1000))
+    query_2 = Query.for_job(job_id_2).select(("language", "==", "JavaScript"))
+    assert client.execute_query(query_2, mixture)
+    result_samples_2 = []
+
+    for sample in client.stream_results(job_id_2, tunnel_via_server=tunnel):
+        result_samples_2.append(sample)
+
+    assert len(result_samples_2) == EXPECTED_JS_SAMPLES, f"Got {len(result_samples_2)} samples instead of the expected {EXPECTED_JS_SAMPLES}!"
+    
+    assert result_samples == result_samples_2, "Results are not the same!"
 
 
 def test_check_dataset_exists(client: ServerStub):
@@ -128,7 +158,7 @@ def test_server(server_dir: Path) -> None:
 
     assert client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     assert client.register_dataset(
-        "ldc_integrationtest_dataset", server_dir / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
+        "ldc_integrationtest_dataset", server_dir, JSONLDataset, parsing_func, "TEST_PARSER"
     ), "Could not register dataset!"
 
     test_check_dataset_exists(client)
@@ -151,12 +181,13 @@ def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool
     test_filter_license(client, mixture, tunnel)
     test_filter_unknown_license(client, mixture, tunnel)
     test_filter_license_and_html(client, mixture, tunnel)
+    test_result_order(client, mixture, tunnel)
 
 
 def main() -> None:
     server_dir = Path(sys.argv[1])
 
-    setup_test_dataset(server_dir)
+    setup_test_dataset(server_dir, TEST_SERVER_INSTANCE_COUNT, TEST_SERVER_FILE_COUNT, TEST_SERVER_FRACTION_MULTIPLIER)
     test_server(server_dir)
 
 
