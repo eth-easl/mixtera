@@ -16,10 +16,28 @@ def sample_parsing_func(sample):
     return json.loads(sample)["text"]
 
 
-def test_filter_javascript(client: MixteraClient, mixture: Mixture, num_workers: int, batch_size: int, tunnel: bool):
-    job_id = f"0_{mixture.chunk_size}_{batch_size}_{num_workers}_{tunnel}"
+def test_filter_javascript(
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
+):
+    job_id = f"0_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(
+        client,
+        query,
+        job_id,
+        mixture,
+        dp_groups=dp_groups,
+        nodes_per_group=nodes_per_group,
+        node_id=0,
+        dp_group_id=0,
+        tunnel_via_server=tunnel,
+    )
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -30,8 +48,16 @@ def test_filter_javascript(client: MixteraClient, mixture: Mixture, num_workers:
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
-def test_filter_html(client: MixteraClient, mixture: Mixture, num_workers: int, batch_size: int, tunnel: bool):
-    job_id = f"1_{mixture.chunk_size}_{batch_size}_{num_workers}_{tunnel}"
+def test_filter_html(
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
+):
+    job_id = f"1_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
@@ -44,8 +70,16 @@ def test_filter_html(client: MixteraClient, mixture: Mixture, num_workers: int, 
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
-def test_filter_both(client: MixteraClient, mixture: Mixture, num_workers: int, batch_size: int, tunnel: bool):
-    job_id = f"2_{mixture.chunk_size}_{batch_size}_{num_workers}_{tunnel}"
+def test_filter_both(
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
+):
+    job_id = f"2_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -62,8 +96,16 @@ def test_filter_both(client: MixteraClient, mixture: Mixture, num_workers: int, 
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_filter_license(client: MixteraClient, mixture: Mixture, num_workers: int, batch_size: int, tunnel: bool):
-    job_id = f"3_{mixture.chunk_size}_{batch_size}_{num_workers}_{tunnel}"
+def test_filter_license(
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
+):
+    job_id = f"3_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
@@ -77,9 +119,15 @@ def test_filter_license(client: MixteraClient, mixture: Mixture, num_workers: in
 
 
 def test_filter_unknown_license(
-    client: MixteraClient, mixture: Mixture, num_workers: int, batch_size: int, tunnel: bool
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
 ):
-    job_id = f"4_{mixture.chunk_size}_{batch_size}_{num_workers}_{tunnel}"
+    job_id = f"4_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
@@ -90,9 +138,15 @@ def test_filter_unknown_license(
 
 
 def test_filter_license_and_html(
-    client: MixteraClient, mixture: Mixture, num_workers: int, batch_size: int, tunnel: bool
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
 ):
-    job_id = f"5_{mixture.chunk_size}_{batch_size}_{num_workers}_{tunnel}"
+    job_id = f"5_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -109,13 +163,21 @@ def test_filter_license_and_html(
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_torchds(client: MixteraClient, mixture: Mixture, num_workers: int, batch_size: int, tunnel: bool):
-    test_filter_javascript(client, mixture, num_workers, batch_size, tunnel)
-    test_filter_html(client, mixture, num_workers, batch_size, tunnel)
-    test_filter_both(client, mixture, num_workers, batch_size, tunnel)
-    test_filter_license(client, mixture, num_workers, batch_size, tunnel)
-    test_filter_unknown_license(client, mixture, num_workers, batch_size, tunnel)
-    test_filter_license_and_html(client, mixture, num_workers, batch_size, tunnel)
+def test_torchds(
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
+):
+    test_filter_javascript(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
+    test_filter_html(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
+    test_filter_both(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
+    test_filter_license(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
+    test_filter_unknown_license(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
+    test_filter_license_and_html(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
@@ -132,7 +194,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
                 try:
-                    test_torchds(local_client, mixture, num_workers, batch_size, False)
+                    test_torchds(local_client, mixture, 1, 1, num_workers, batch_size, False)
                 except Exception as e:
                     print(
                         "Error with "
@@ -159,7 +221,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
                     if tunnel and (batch_size > 1 or num_workers > 0 or mixture.chunk_size > 1):
                         continue
                     try:
-                        test_torchds(server_client, mixture, num_workers, batch_size, tunnel)
+                        test_torchds(server_client, mixture, 1, 1, num_workers, batch_size, tunnel)
                     except Exception as e:
                         print(
                             "Error with "

@@ -1,7 +1,7 @@
 import multiprocessing as mp
 import threading
 from multiprocessing.managers import DictProxy, ValueProxy
-from typing import Generator
+from typing import Generator, Optional
 
 from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.query.query_result import QueryResult
@@ -39,7 +39,7 @@ class ChunkDistributor:
                     # Since the workers do not share chunks, we offset their start by 1 each
                     self._next_chunk[dp_group][node][worker_id] = self._manager.Value("i", worker_id)
 
-    def next_chunk_for(self, dp_group: int, node_id: int, worker_id: int) -> ChunkerIndex:
+    def next_chunk_for(self, dp_group: int, node_id: int, worker_id: int) -> Optional[ChunkerIndex]:
         assert dp_group < self._dp_groups
         assert node_id < self._nodes_per_group
         assert worker_id < self._num_workers
@@ -49,7 +49,11 @@ class ChunkDistributor:
 
             if next_chunk_id not in self._chunk_cache[dp_group]:
                 # Load new chunk if not in cache
-                chunk = next(self._query_result)
+                try:
+                    chunk = next(self._query_result)
+                except StopIteration:
+                    return None
+
                 self._chunk_cache[dp_group][next_chunk_id] = chunk
                 self._chunk_usage[dp_group][next_chunk_id] = 0
 
@@ -72,7 +76,10 @@ class ChunkDistributor:
         self, dp_group_id: int, node_id: int, worker_id: int
     ) -> Generator[ChunkerIndex, None, None]:
         while True:
-            yield self.next_chunk_for(dp_group_id, node_id, worker_id)
+            if (chunk := self.next_chunk_for(dp_group_id, node_id, worker_id)) is not None:
+                yield chunk
+            else:
+                return
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
