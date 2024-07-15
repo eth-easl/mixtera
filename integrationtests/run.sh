@@ -97,7 +97,7 @@ echo "Starting Mixtera server"
 
 server_output=$(mktemp)
 
-$SCRIPT_DIR/../mixtera/network/server/mixtera-server --port 6666 $WORK_DIR &> "$server_output" &
+mixtera-server --port 6666 $WORK_DIR &> "$server_output" &
 server_pid=$!
 
 sleep 2

@@ -37,6 +37,7 @@ class QueryResult:
 
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
+
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
 
@@ -158,7 +159,7 @@ class QueryResult:
                         property_values = [interval_properties[property_name] for property_name in property_names]
                         hashable_key = generate_hashable_search_key(property_names, property_values)
 
-                        # Add the interval to the chunk index
+                        # Add the interval to the chunk index based on the generated key
                         chunker_index[hashable_key][document_id][file_id].append([interval.lower, interval.upper])
 
         # TODO(DanGraur): Add option to parallelize: (1) count number of files (2) disseminate to procs equally;

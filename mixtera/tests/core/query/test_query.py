@@ -183,6 +183,24 @@ class TestQuery(unittest.TestCase):
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_execute_chunksize_two(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        query = Query.for_job("job_id").mockoperator("test", len_results=2)
+        assert self.client.execute_query(query, ArbitraryMixture(2))
+        chunks = list(iter(query.results))
+        self.assertEqual(chunks, [{"field:value": {"did": {"fid": [(0, 2)]}}}])
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
     def test_create_inverted_index_simple(
         self,
         mock_get_file_path_by_id: MagicMock,
