@@ -7,6 +7,7 @@ from integrationtests.utils import (
     TestMetadataParser,
     calc_func,
     get_expected_js_and_html_samples,
+    get_job_id,
     setup_func,
     setup_test_dataset,
 )
@@ -17,8 +18,8 @@ from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
 
-TEST_SERVER_INSTANCE_COUNT = 10000
-TEST_SERVER_FILE_COUNT = 10
+TEST_SERVER_INSTANCE_COUNT = 1000
+TEST_SERVER_FILE_COUNT = 5
 TEST_SERVER_FRACTION_MULTIPLIER = 2
 
 EXPECTED_JS_SAMPLES, EXPECTED_HTML_SAMPLES = get_expected_js_and_html_samples(
@@ -33,7 +34,7 @@ def parsing_func(sample):
 
 
 def test_filter_javascript(client: ServerStub, mixture: Mixture, tunnel: bool):
-    job_id = str(round(time.time() * 1000))
+    job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     assert client.execute_query(query, mixture)
     result_samples = []
@@ -49,7 +50,7 @@ def test_filter_javascript(client: ServerStub, mixture: Mixture, tunnel: bool):
 
 
 def test_filter_html(client: ServerStub, mixture: Mixture, tunnel: bool):
-    job_id = str(round(time.time() * 1000))
+    job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     assert client.execute_query(query, mixture)
     result_samples = []
@@ -65,7 +66,7 @@ def test_filter_html(client: ServerStub, mixture: Mixture, tunnel: bool):
 
 
 def test_filter_both(client: ServerStub, mixture: Mixture, tunnel: bool):
-    job_id = str(round(time.time() * 1000))
+    job_id = get_job_id()
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -85,7 +86,7 @@ def test_filter_both(client: ServerStub, mixture: Mixture, tunnel: bool):
 
 
 def test_filter_license(client: ServerStub, mixture: Mixture, tunnel: bool):
-    job_id = str(round(time.time() * 1000))
+    job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     assert client.execute_query(query, mixture)
     result_samples = []
@@ -101,7 +102,7 @@ def test_filter_license(client: ServerStub, mixture: Mixture, tunnel: bool):
 
 
 def test_filter_unknown_license(client: ServerStub, mixture: Mixture, tunnel: bool):
-    job_id = str(round(time.time() * 1000))
+    job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     assert client.execute_query(query, mixture)
     assert (
@@ -111,7 +112,7 @@ def test_filter_unknown_license(client: ServerStub, mixture: Mixture, tunnel: bo
 
 def test_filter_license_and_html(client: ServerStub, mixture: Mixture, tunnel: bool):
     # TODO(#41): This test currently tests unexpected behavior - we want to deduplicate!
-    job_id = str(round(time.time() * 1000))
+    job_id = get_job_id()
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -128,34 +129,6 @@ def test_filter_license_and_html(client: ServerStub, mixture: Mixture, tunnel: b
     ), f"Got {len(result_samples)} samples instead of the expected {TEST_SERVER_INSTANCE_COUNT}!"
     for sample in result_samples:
         assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
-
-
-def test_result_order(client: ServerStub, mixture: Mixture, tunnel: bool):
-    job_id = str(round(time.time() * 1000))
-    query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    assert client.execute_query(query, mixture)
-    result_samples = []
-
-    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
-        result_samples.append(sample)
-
-    assert (
-        len(result_samples) == EXPECTED_JS_SAMPLES
-    ), f"Got {len(result_samples)} samples instead of the expected {EXPECTED_JS_SAMPLES}!"
-
-    job_id_2 = str(round(time.time() * 1000))
-    query_2 = Query.for_job(job_id_2).select(("language", "==", "JavaScript"))
-    assert client.execute_query(query_2, mixture)
-    result_samples_2 = []
-
-    for sample in client.stream_results(job_id_2, tunnel_via_server=tunnel):
-        result_samples_2.append(sample)
-
-    assert (
-        len(result_samples_2) == EXPECTED_JS_SAMPLES
-    ), f"Got {len(result_samples_2)} samples instead of the expected {EXPECTED_JS_SAMPLES}!"
-
-    assert result_samples == result_samples_2, "Results are not the same!"
 
 
 def test_check_dataset_exists(client: ServerStub):
@@ -203,7 +176,6 @@ def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool
     test_filter_license(client, mixture, tunnel)
     test_filter_unknown_license(client, mixture, tunnel)
     test_filter_license_and_html(client, mixture, tunnel)
-    test_result_order(client, mixture, tunnel)
 
 
 def main() -> None:

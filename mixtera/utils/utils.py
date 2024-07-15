@@ -1,9 +1,11 @@
 import asyncio
+import hashlib
 import time
 from collections import defaultdict
 from copy import deepcopy
 from typing import Any, List, Tuple, Union
 
+import dill
 import numpy as np
 
 
@@ -170,3 +172,35 @@ def generate_hashable_search_key(
     if sort_lists:
         zipped.sort(key=lambda x: x[0])
     return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
+
+
+def generate_hash_string_from_list(string_list: list[str]):
+    """
+    Generate a hash string from a list of strings.
+
+    Args:
+        string_list: a list of strings to be hashed
+
+    Returns:
+        A hash string
+    """
+    hash_result = hashlib.blake2b()
+
+    for string in string_list:
+        hash_result.update(string.encode())
+
+    return hash_result.hexdigest()
+
+
+def to_pickled_dict(obj: dict[Any, Any]) -> dict[Any, bytes]:
+    """
+    Pickle all values in a dictionary.
+    """
+    return {k: dill.dumps(v) for k, v in obj.items()}
+
+
+def from_pickled_dict(obj: dict[Any, bytes]) -> dict[Any, Any]:
+    """
+    Unpickle all values in a dictionary.
+    """
+    return {k: dill.loads(v) for k, v in obj.items()}

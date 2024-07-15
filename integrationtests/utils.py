@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -29,6 +30,11 @@ def get_expected_js_and_html_samples(
         total_instance_count // fraction_multiplier,
         total_instance_count - total_instance_count // fraction_multiplier,
     )
+
+
+def get_job_id() -> str:
+    current_time = datetime.now()
+    return str(int(current_time.timestamp() * 1000000))
 
 
 def setup_test_dataset(

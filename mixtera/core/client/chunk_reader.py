@@ -1,9 +1,9 @@
 import multiprocessing as mp
+import random
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
 from queue import Empty
-from random import shuffle
 from typing import Any, Callable, Iterator, Optional, Type
 
 from loguru import logger
@@ -11,6 +11,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.query import Mixture, StaticMixture
 from mixtera.network.connection import ServerConnection
+from mixtera.utils import from_pickled_dict, generate_hash_string_from_list, to_pickled_dict
 
 # These parameters are relevant to the parallel reader in order to avoid timeouts
 RETRY_COUNT = 5
@@ -32,6 +33,10 @@ class ChunkReader(ABC):
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
         server_connection: ServerConnection,
+        degree_of_parallelism: int = 1,
+        mixture: Optional[Mixture] = None,
+        per_window_mixture: bool = False,
+        window_size: int = 128,
     ) -> None:
         """
         Initializer for a ChunkReader.
@@ -49,6 +54,11 @@ class ChunkReader(ABC):
         self._file_path_dict = file_path_dict
         self._parsing_func_dict = parsing_func_dict
         self._server_connection = server_connection
+
+        self._mixture = mixture
+        self._degree_of_parallelism = degree_of_parallelism
+        self._per_window_mixture = per_window_mixture
+        self._window_size = window_size
 
     @abstractmethod
     def iterate_result_chunk(self) -> Iterator[Any]:
@@ -74,7 +84,10 @@ class StandardChunkReader(ChunkReader):
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
         server_connection: ServerConnection,
-        ensure_mixture: bool = False,
+        degree_of_parallelism: int = 1,
+        mixture: Optional[Mixture] = None,
+        per_window_mixture: bool = False,
+        window_size: int = 128,
     ) -> None:
         """
         Initializer for a StandardChunkReader.
@@ -88,33 +101,53 @@ class StandardChunkReader(ChunkReader):
             ensure_mixture: if True, ensures the underlying chunk Mixture by first reading all the data then shuffling
                 it at random and yielding it
         """
+        if degree_of_parallelism != 1:
+            logger.warning("StandardChunkReader does not support parallelism; ignoring degree_of_parallelism!")
+
         super().__init__(
             chunker_index,
             dataset_type_dict=dataset_type_dict,
             file_path_dict=file_path_dict,
             parsing_func_dict=parsing_func_dict,
             server_connection=server_connection,
+            degree_of_parallelism=degree_of_parallelism,
+            mixture=mixture,
+            per_window_mixture=per_window_mixture,
+            window_size=window_size,
         )
-        self._ensure_mixture = ensure_mixture
 
     def _iterate_result_chunk_without_mixture(self) -> Iterator[Any]:
         """
         Iterate over the data, yielding instances one by one from the chunk in a FCFS order.
         """
+        # for dataset_entries in self._chunker_index.values():
+        #     for did, file_entries in dataset_entries.items():
+        #         filename_dict = {
+        #             self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()
+        #         }
+        #         yield from self._dataset_type_dict[did].read_ranges_from_files(
+        #             filename_dict, self._parsing_func_dict[did], self._server_connection
+        #         )
+
+        entry_combinations = []
         for dataset_entries in self._chunker_index.values():
             for did, file_entries in dataset_entries.items():
-                filename_dict = {
-                    self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()
-                }
-                yield from self._dataset_type_dict[did].read_ranges_from_files(
-                    filename_dict, self._parsing_func_dict[did], self._server_connection
-                )
+                for file_id, file_ranges in file_entries.items():
+                    filename = self._file_path_dict[file_id]
+                    entry_combinations.append((did, {filename: file_ranges}))
+
+        random.shuffle(entry_combinations)
+
+        for did, filename_dict in entry_combinations:
+            yield from self._dataset_type_dict[did].read_ranges_from_files(
+                filename_dict, self._parsing_func_dict[did], self._server_connection
+            )
 
     def _iterate_result_chunk_with_mixture(self) -> Iterator[Any]:
         """
         Reads the data once fully, the shuffles it to finally yield it. This happens in order to ensure the mixture.
         """
-        read_instances = []
+        read_instances: list[str] = []
         for dataset_entries in self._chunker_index.values():
             for did, file_entries in dataset_entries.items():
                 filename_dict = {
@@ -125,11 +158,13 @@ class StandardChunkReader(ChunkReader):
                         filename_dict, self._parsing_func_dict[did], self._server_connection
                     )
                 )
-        shuffle(read_instances)
+
+        random.seed(generate_hash_string_from_list(read_instances))
+        random.shuffle(read_instances)
         yield from read_instances
 
     def iterate_result_chunk(self) -> Iterator[Any]:
-        if self._ensure_mixture:
+        if self._per_window_mixture:
             yield_source = self._iterate_result_chunk_with_mixture
         else:
             yield_source = self._iterate_result_chunk_without_mixture
@@ -146,11 +181,11 @@ class ParallelChunkReader(ChunkReader):
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
         server_connection: ServerConnection,
-        window_size: int = 128,
+        degree_of_parallelism: int = 1,
         mixture: Optional[Mixture] = None,
-        reader_count: Optional[int] = None,
         per_window_mixture: bool = False,
-    ):
+        window_size: int = 128,
+    ) -> None:
         """
         Initializer for a ChunkReader.
 
@@ -166,16 +201,21 @@ class ParallelChunkReader(ChunkReader):
             per_window_mixture: if True, the mixture will be fulfilled within each window_size; this might make
                 the reader slower due to the additional synchronization and ordering requirements
         """
+        if degree_of_parallelism <= 1:
+            logger.warning("ParallelChunkReader requires degree_of_parallelism > 1; setting it to 1!")
+            degree_of_parallelism = 2
+
         super().__init__(
             chunker_index,
             dataset_type_dict=dataset_type_dict,
             file_path_dict=file_path_dict,
             parsing_func_dict=parsing_func_dict,
             server_connection=server_connection,
+            degree_of_parallelism=degree_of_parallelism,
+            mixture=mixture,
+            per_window_mixture=per_window_mixture,
+            window_size=window_size,
         )
-        self._mixture = mixture
-        self.window_size = window_size
-        self.per_window_mixture = per_window_mixture
 
         # If no mixture is provided, it needs to be inferred
         if self._mixture is None:
@@ -183,8 +223,8 @@ class ParallelChunkReader(ChunkReader):
             partition_masses: dict[str, int | float] = {}
             for property_combination, partition_entry in self._chunker_index.items():
                 count = 0
-                for _0, document_entry in partition_entry.items():
-                    for _1, ranges in document_entry.items():
+                for document_entry in partition_entry.values():
+                    for ranges in document_entry.values():
                         for base_range in ranges:
                             count += base_range[1] - base_range[0]
                 partition_masses[property_combination] = count
@@ -205,7 +245,7 @@ class ParallelChunkReader(ChunkReader):
                     self._workloads[property_combination].append((document_id, file_id, ranges))
 
         # Determine the per-property combination batch counts
-        self._element_counts = {key: int(window_size * value) for key, value in self._mixture.get_raw_mixture().items()}
+        self._element_counts = {key: int(window_size * value) for key, value in self._mixture.mixture_in_rows().items()}
         self._element_counts[list(self._element_counts.keys())[0]] += window_size - sum(self._element_counts.values())
 
         # Determine the number of readers to use s.t. readers are not overprovisioned
@@ -216,7 +256,7 @@ class ParallelChunkReader(ChunkReader):
 
         # Determine how many processes should be assigned per property combination
         self._process_counts = {
-            key: int(val * self.reader_count) for key, val in self._mixture.get_raw_mixture().items()
+            key: int(val * self.reader_count) for key, val in self._mixture.mixture_in_rows().items()
         }
         self._process_counts[list(self._process_counts.keys())[0]] += self.reader_count - sum(
             self._process_counts.values()
@@ -243,7 +283,7 @@ class ParallelChunkReader(ChunkReader):
                                 queue,
                                 self._dataset_type_dict,
                                 self._file_path_dict,
-                                self._parsing_func_dict,
+                                to_pickled_dict(self._parsing_func_dict),
                                 self._server_connection,
                                 self._workloads[key][partition_ranges[i - 1] : partition_ranges[i]],
                             ),
@@ -255,9 +295,15 @@ class ParallelChunkReader(ChunkReader):
                 self._processes[key][-1][1].start()
 
     @staticmethod
-    def _reader_process(*payload: Any) -> None:
-        queue, dataset_type_dict, file_path_dict, parsing_func_dict, server_connection, workloads = payload
-
+    def _reader_process(
+        queue: mp.Queue,
+        dataset_type_dict: dict[int, Type[Dataset]],
+        file_path_dict: dict[int, str],
+        pickled_parsing_func_dict: dict[int, bytes],
+        server_connection: ServerConnection,
+        workloads: list[tuple[int, int | str, list]],
+    ) -> None:
+        parsing_func_dict = from_pickled_dict(pickled_parsing_func_dict)
         for document_id, file_id, ranges in workloads:
             filename_dict = {file_path_dict[file_id]: ranges}
             instance_iterator = dataset_type_dict[document_id].read_ranges_from_files(
@@ -312,19 +358,24 @@ class ParallelChunkReader(ChunkReader):
         """
         This method first waits for all the data to be read by the parallel readers before collecting it and yielding it
         """
-        results = []
+        paired_results = []
 
-        for _, proc_list in self._processes.items():
+        for key, proc_list in self._processes.items():
             for q, proc in proc_list:
                 proc.join()
                 while not q.empty():
-                    results.append(q.get_nowait())
+                    paired_results.append((key, q.get_nowait()))
 
-        shuffle(results)
+        # Sort the results by the key to ensure reproducibility
+        paired_results.sort(key=lambda x: x[0])
+        results = [x[1] for x in paired_results]
+
+        random.seed(generate_hash_string_from_list(results))
+        random.shuffle(results)
         yield from results
 
     def iterate_result_chunk(self) -> Iterator[Any]:
-        if self.per_window_mixture:
+        if self._per_window_mixture:
             yield_source = self._iterate_result_chunk_window_level_mixture
         else:
             yield_source = self._iterate_result_chunk_no_window_level
