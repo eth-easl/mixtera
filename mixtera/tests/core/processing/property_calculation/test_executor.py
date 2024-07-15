@@ -6,15 +6,15 @@ from mixtera.core.processing.property_calculation import LocalPropertyCalculatio
 
 
 class TestPropertyCalculationExecutor(unittest.TestCase):
-    def test_from_mode_raises_error_with_dop_less_than_1(self):
+    def test_from_mode_raises_error_with_degree_of_parallelism_less_than_1(self):
         with self.assertRaises(RuntimeError) as context:
             PropertyCalculationExecutor.from_mode(ExecutionMode.LOCAL, 0, 10, Mock(), Mock())
-        self.assertEqual(str(context.exception), "dop = 0 < 1")
+        self.assertEqual(str(context.exception), "Degree of parallelism = 0 < 1")
 
     def test_from_mode_raises_error_with_batch_size_less_than_1(self):
         with self.assertRaises(RuntimeError) as context:
             PropertyCalculationExecutor.from_mode(ExecutionMode.LOCAL, 1, 0, Mock(), Mock())
-        self.assertEqual(str(context.exception), "batch_size = 0 < 1")
+        self.assertEqual(str(context.exception), "Batch size = 0 < 1")
 
     def test_from_mode_returns_local_executor_instance(self):
         setup_func = Mock()

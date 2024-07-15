@@ -85,9 +85,6 @@ class MixteraDataCollection:
         parsing_func: Callable[[str], str],
         metadata_parser_type: str,
     ) -> bool:
-        if isinstance(loc, Path):
-            loc = str(loc)
-
         if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, parsing_func)) == -1:
             return False
 
@@ -302,8 +299,32 @@ class MixteraDataCollection:
         return [dataset for (dataset,) in result]
 
     def remove_dataset(self, identifier: str) -> bool:
-        # Need to delete the dataset, and update the index to remove all pointers to files in the dataset
-        raise NotImplementedError("Not implemented yet.")
+        if not self.check_dataset_exists(identifier):
+            logger.error(f"Dataset {identifier} does not exist.")
+            return False
+
+        try:
+            delete_indices_query = """
+            DELETE FROM indices
+            WHERE dataset_id IN (
+                SELECT id FROM datasets WHERE name = ?
+            );
+            """
+            cur = self._connection.cursor()
+            cur.execute(delete_indices_query, (identifier,))
+
+            delete_dataset_query = "DELETE FROM datasets WHERE name = ?;"
+            cur.execute(delete_dataset_query, (identifier,))
+
+            self._connection.commit()
+
+            #  Reset the index to reflect the changes
+            self._index = self._read_index_from_database()
+        except sqlite3.Error as err:
+            logger.error(f"A sqlite error occured during deletion: {err}")
+            return False
+
+        return True
 
     def _get_all_files(self) -> list[tuple[int, int, Type[Dataset], str]]:
         try:
@@ -383,20 +404,24 @@ class MixteraDataCollection:
         max_val: float = 1,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
-    ) -> None:
+    ) -> bool:
         if len(property_name) <= 0:
-            raise RuntimeError(f"Invalid property name: {property_name}")
+            logger.error("Property name must be non-empty.")
+            return False
 
         if property_type == PropertyType.NUMERICAL and max_val <= min_val:
-            raise RuntimeError(f"max_val (= {max_val}) <= min_val (= {min_val})")
+            logger.error(f"max_val (= {max_val}) <= min_val (= {min_val})")
+            return False
 
         if num_buckets < 2:
-            raise RuntimeError(f"num_buckets = {num_buckets} < 2")
+            logger.error(f"num_buckets = {num_buckets} < 2")
+            return False
 
         if batch_size < 1:
-            raise RuntimeError(f"batch_size = {batch_size} < 1")
+            logger.error(f"batch_size = {batch_size} < 1")
+            return False
 
         if property_type == PropertyType.CATEGORICAL and (min_val != 0.0 or max_val != 1.0 or num_buckets != 10):
             logger.warning(
@@ -406,15 +431,19 @@ class MixteraDataCollection:
 
         # TODO(#11): support for numerical buckets
         if property_type == PropertyType.NUMERICAL:
-            raise NotImplementedError("Numerical properties are not yet implemented")
+            logger.error("Numerical properties are not yet implemented.")
+            return False
 
         files = self._get_all_files()
         logger.info(f"Extending index for {len(files)} files.")
 
-        executor = PropertyCalculationExecutor.from_mode(execution_mode, dop, batch_size, setup_func, calc_func)
+        executor = PropertyCalculationExecutor.from_mode(
+            execution_mode, degree_of_parallelism, batch_size, setup_func, calc_func
+        )
         executor.load_data(files, data_only_on_primary)
         new_index = executor.run()
         self._insert_partial_index_into_table(property_name, new_index)
+        return True
 
     def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:
         """

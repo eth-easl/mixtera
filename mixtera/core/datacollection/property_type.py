@@ -1,6 +1,6 @@
-from enum import Enum
+from enum import Enum, auto
 
 
 class PropertyType(Enum):
-    CATEGORICAL = 1
-    NUMERICAL = 2
+    CATEGORICAL = auto()
+    NUMERICAL = auto()

@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
+import numpy as np
 from mixtera.core.datacollection.index.parser import MetadataParser
 
 
@@ -37,6 +38,21 @@ def write_jsonl_ensemble(
 
         with open(path / f"data_{file_number}.jsonl", "w") as text_file:
             text_file.write(data)
+
+
+def setup_test_dataset(dir: Path) -> str:
+    print(f"Prepping directory {dir}.")
+    write_single_jsonl(dir / "testd.jsonl")
+    print("Directory prepped.")
+    return dir / "testd.jsonl"
+
+
+def setup_func(some_class: Any):
+    pass
+
+
+def calc_func(executor: Any, batch: dict[str, np.ndarray]) -> List[Any]:
+    return ["test_category"]
 
 
 class TestMetadataParser(MetadataParser):

@@ -5,6 +5,8 @@ from mixtera.core.datacollection.datasets.dataset import Dataset, DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network.connection import ServerConnection
 
+#  TODO(#75): Implement CroissantDataset
+
 
 class CroissantDataset(Dataset):
     type: DatasetType = DatasetType.CROISSANT_DATASET

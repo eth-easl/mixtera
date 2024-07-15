@@ -1,26 +1,10 @@
 from abc import ABC, abstractmethod
-from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Type
 
+from mixtera.core.datacollection.datasets.dataset_type import DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network.connection import ServerConnection
-
-
-class DatasetType(Enum):
-    GENERIC_DATASET = auto()
-    JSONL_DATASET = auto()
-    CROISSANT_DATASET = auto()
-
-    def instantiate(self) -> Type["Dataset"]:
-        if self == DatasetType.JSONL_DATASET:
-            from mixtera.core.datacollection.datasets import JSONLDataset  # pylint: disable=import-outside-toplevel
-
-            return JSONLDataset
-        if self == DatasetType.GENERIC_DATASET:
-            return Dataset
-
-        raise NotImplementedError(f"Dataset type {self} not yet supported")
 
 
 class Dataset(ABC):
@@ -39,7 +23,15 @@ class Dataset(ABC):
         """
         try:
             dataset_type = DatasetType(type_id)
-            return dataset_type.instantiate()
+
+            if dataset_type == DatasetType.JSONL_DATASET:
+                from mixtera.core.datacollection.datasets import JSONLDataset  # pylint: disable=import-outside-toplevel
+
+                return JSONLDataset
+            if dataset_type == DatasetType.GENERIC_DATASET:
+                return Dataset
+
+            raise NotImplementedError(f"Dataset type {dataset_type.name} not yet supported")
         except ValueError as exc:
             raise RuntimeError(f"Invalid type id {type_id}") from exc
 

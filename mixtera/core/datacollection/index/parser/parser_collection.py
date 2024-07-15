@@ -35,7 +35,7 @@ class MetadataParserFactory:
         # Stores the name of the parser, and its associated class
         self._registry = {"RED_PAJAMA": RedPajamaMetadataParser}
 
-    def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> None:
+    def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
         """
         Add a new metadata parser to the factory. If parser already exists
         at name `parser_name`, but `overwrite` is `True`, then overwrite it.
@@ -48,12 +48,14 @@ class MetadataParserFactory:
         if parser_name not in self._registry or overwrite:
             self._registry[parser_name] = parser
             logger.info(f"Registered medata parser {parser_name} with the " f"associated class {parser}")
-        else:
-            logger.warning(
-                f"Could not register medata parser {parser_name} as "
-                "it already exists with the associated class "
-                f"{self._registry[parser_name]}!"
-            )
+            return True
+
+        logger.warning(
+            f"Could not register medata parser {parser_name} as "
+            "it already exists with the associated class "
+            f"{self._registry[parser_name]}!"
+        )
+        return False
 
     def remove_parser(self, parser_name: str) -> None:
         """

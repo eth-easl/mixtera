@@ -1,8 +1,21 @@
+import sys
 import time
+from pathlib import Path
+from typing import Any
 
+from integrationtests.utils import TestMetadataParser, calc_func, setup_func, setup_test_dataset
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.server import ServerStub
+from mixtera.core.datacollection.datasets import JSONLDataset
+from mixtera.core.datacollection.property_type import PropertyType
+from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
+
+
+def parsing_func(sample):
+    import json
+
+    return json.loads(sample)["text"]
 
 
 def test_filter_javascript(client: ServerStub, mixture: Mixture, tunnel: bool):
@@ -75,7 +88,7 @@ def test_filter_unknown_license(client: ServerStub, mixture: Mixture, tunnel: bo
 
 
 def test_filter_license_and_html(client: ServerStub, mixture: Mixture, tunnel: bool):
-    # TODO(41): This test currently tests unexpected behavior - we want to deduplicate!
+    # TODO(#41): This test currently tests unexpected behavior - we want to deduplicate!
     job_id = str(round(time.time() * 1000))
     query = (
         Query.for_job(job_id)
@@ -93,11 +106,40 @@ def test_filter_license_and_html(client: ServerStub, mixture: Mixture, tunnel: b
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_server() -> None:
+def test_check_dataset_exists(client: ServerStub):
+    assert client.check_dataset_exists("ldc_integrationtest_dataset"), "Dataset does not exist!"
+
+
+def test_list_datasets(client: ServerStub):
+    assert "ldc_integrationtest_dataset" in client.list_datasets(), "Dataset not in list!"
+
+
+def test_add_property(client: ServerStub):
+    assert client.add_property("test_property", setup_func, calc_func, ExecutionMode.LOCAL, PropertyType.CATEGORICAL)
+
+
+def test_remove_dataset(client: ServerStub):
+    assert client.remove_dataset("ldc_integrationtest_dataset"), "Could not remove dataset!"
+    assert not client.check_dataset_exists("ldc_integrationtest_dataset"), "Dataset still exists!"
+
+
+def test_server(server_dir: Path) -> None:
     client = MixteraClient.from_remote("127.0.0.1", 6666)
+
+    assert client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
+    assert client.register_dataset(
+        "ldc_integrationtest_dataset", server_dir / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
+    ), "Could not register dataset!"
+
+    test_check_dataset_exists(client)
+
     for chunk_size in [1, 3, 250, 500, 750, 1000, 2000]:
         for tunnel in [False, True]:
             test_rdc_chunksize_tunnel(client, ArbitraryMixture(chunk_size), tunnel)
+
+    test_list_datasets(client)
+    test_add_property(client)
+    test_remove_dataset(client)
 
     print("Successfully ran server tests!")
 
@@ -112,7 +154,10 @@ def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool
 
 
 def main() -> None:
-    test_server()
+    server_dir = Path(sys.argv[1])
+
+    setup_test_dataset(server_dir)
+    test_server(server_dir)
 
 
 if __name__ == "__main__":

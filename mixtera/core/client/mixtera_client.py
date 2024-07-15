@@ -87,7 +87,7 @@ class MixteraClient(ABC):
     def register_dataset(
         self,
         identifier: str,
-        loc: str,
+        loc: str | Path,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
         metadata_parser_identifier: str,
@@ -119,7 +119,7 @@ class MixteraClient(ABC):
         self,
         identifier: str,
         parser: Type[MetadataParser],
-    ) -> None:
+    ) -> bool:
         """
         This method registers a metadata parser in Mixtera.
 
@@ -324,7 +324,7 @@ class MixteraClient(ABC):
         max_val: float = 1,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
     ) -> None:
         """
@@ -345,7 +345,7 @@ class MixteraClient(ABC):
             max_val (float): Optional value for numerical properties specifying the max value the property can take
             num_buckets (int): The number of buckets for numeritcal properties
             batch_size (int): Size of one batch passed to one processing instance
-            dop (int): Degree of parallelism. How many processing units should be used in parallel.
+            degree_of_parallelism (int): Degree of parallelism. How many processing units should be used in parallel.
                        Meaning depends on execution_mode
             data_only_on_primary (bool): If False, the processing units (may be remote machines)
                                          have access to the same paths as the primary.
