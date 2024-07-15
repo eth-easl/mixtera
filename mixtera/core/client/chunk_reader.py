@@ -17,6 +17,13 @@ RETRY_COUNT = 5
 READ_TIMEOUT_TIME = 0.1  # 100ms
 
 
+class ChunkReaderType(Enum):
+    """Specifies the types of chunk readers"""
+
+    PARALLEL = 1
+    NON_PARALLEL = 2
+
+
 class ChunkReader(ABC):
     def __init__(
         self,
@@ -94,7 +101,7 @@ class StandardChunkReader(ChunkReader):
         """
         Iterate over the data, yielding instances one by one from the chunk in a FCFS order.
         """
-        for _0, dataset_entries in self._chunker_index.items():
+        for dataset_entries in self._chunker_index.values():
             for did, file_entries in dataset_entries.items():
                 filename_dict = {
                     self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()
@@ -108,7 +115,7 @@ class StandardChunkReader(ChunkReader):
         Reads the data once fully, the shuffles it to finally yield it. This happens in order to ensure the mixture.
         """
         read_instances = []
-        for _0, dataset_entries in self._chunker_index.items():
+        for dataset_entries in self._chunker_index.values():
             for did, file_entries in dataset_entries.items():
                 filename_dict = {
                     self._file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()
@@ -322,13 +329,6 @@ class ParallelChunkReader(ChunkReader):
         else:
             yield_source = self._iterate_result_chunk_no_window_level
         yield from yield_source()
-
-
-class ChunkReaderType(Enum):
-    """Specifies the types of chunk readers"""
-
-    PARALLEL = 1
-    NON_PARALLEL = 2
 
 
 class ChunkReaderFactory:
