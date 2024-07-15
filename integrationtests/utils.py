@@ -5,9 +5,7 @@ import numpy as np
 from mixtera.core.datacollection.index.parser import MetadataParser
 
 
-def write_jsonl(
-    path: Path, file_count: int, instance_count_per_file: int, fraction_multiplier: int
-) -> None:
+def write_jsonl(path: Path, file_count: int, instance_count_per_file: int, fraction_multiplier: int) -> None:
     for file_number in range(file_count):
         data = ""
         for i in range(instance_count_per_file):
@@ -24,14 +22,18 @@ def write_jsonl(
             text_file.write(data)
 
 
-def get_expected_js_and_html_samples(total_instance_count: int, fraction_multiplier: int) -> tuple[List[int], List[int]]:
+def get_expected_js_and_html_samples(
+    total_instance_count: int, fraction_multiplier: int
+) -> tuple[List[int], List[int]]:
     return (
         total_instance_count // fraction_multiplier,
         total_instance_count - total_instance_count // fraction_multiplier,
     )
 
 
-def setup_test_dataset(dir: Path, total_instance_count: 1000, file_count: int = 10, fraction_multiplier: int = 2) -> None:
+def setup_test_dataset(
+    dir: Path, total_instance_count: 1000, file_count: int = 10, fraction_multiplier: int = 2
+) -> None:
     print(f"Prepping directory {dir}.")
     write_jsonl(dir, file_count, total_instance_count // file_count, fraction_multiplier)
     print("Directory prepped.")
