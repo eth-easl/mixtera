@@ -68,7 +68,7 @@ class TestQueryE2E(unittest.TestCase):
     def test_query_select(self):
         mixture = ArbitraryMixture(1)
         query = Query.for_job("job_id").select(("language", "==", "Go"))
-        assert self.client.execute_query(query, mixture)
+        assert self.client.execute_query(query, mixture, 1, 1, 1)
         res = list(iter(query.results))
         for x in res:
             self.assertEqual(x, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
@@ -80,7 +80,7 @@ class TestQueryE2E(unittest.TestCase):
         query_2 = Query.for_job("job_id")
         query_2.select(("language", "==", "CSS"))
         query_2 = query_2.union(query_1)
-        assert self.client.execute_query(query_2, mixture)
+        assert self.client.execute_query(query_2, mixture, 1, 1, 1)
         query_result = query_2.results
         res = list(iter(query_result))
 

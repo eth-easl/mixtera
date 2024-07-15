@@ -31,9 +31,9 @@ class TestServerStub(unittest.TestCase):
         query.job_id = "test_job_id"
         mock_execute_query.return_value = True
 
-        result = self.server_stub.execute_query(query, chunk_size)
+        result = self.server_stub.execute_query(query, chunk_size, 1, 2, 3)
 
-        mock_execute_query.assert_called_once_with(query, chunk_size)
+        mock_execute_query.assert_called_once_with(query, chunk_size, 1, 2, 3)
         self.assertTrue(result)
 
     @patch.object(ServerConnection, "execute_query", return_value=False)
@@ -42,18 +42,18 @@ class TestServerStub(unittest.TestCase):
         chunk_size = 100
         query.job_id = "test_job_id"
 
-        result = self.server_stub.execute_query(query, chunk_size)
+        result = self.server_stub.execute_query(query, chunk_size, 1, 2, 3)
 
-        mock_execute_query.assert_called_once_with(query, chunk_size)
+        mock_execute_query.assert_called_once_with(query, chunk_size, 1, 2, 3)
         self.assertFalse(result)
 
     @patch.object(ServerConnection, "_stream_result_chunks")
     def test_stream_result_chunks(self, mock_stream_result_chunks):
         job_id = "test_job_id"
         mock_stream_result_chunks.return_value = iter(["chunk1", "chunk2"])
-        chunks = list(self.server_stub._stream_result_chunks(job_id))
+        chunks = list(self.server_stub._stream_result_chunks(job_id, 1, 1, 1))
 
-        mock_stream_result_chunks.assert_called_once_with(job_id)
+        mock_stream_result_chunks.assert_called_once_with(job_id, 1, 1, 1)
         self.assertEqual(chunks, ["chunk1", "chunk2"])
 
     @patch.object(ServerConnection, "get_result_metadata")

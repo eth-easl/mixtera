@@ -117,7 +117,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         query_mock = MagicMock()
         mixture_mock = MagicMock()
 
-        success = await self.server_connection._execute_query(query_mock, mixture_mock)
+        success = await self.server_connection._execute_query(query_mock, mixture_mock, 1, 1, 1)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
@@ -158,11 +158,11 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_get_next_result.side_effect = [[1, 2, 3], [4, 5, 6], None]
         job_id = "job_id"
 
-        results = self.server_connection._stream_result_chunks(job_id)
+        results = self.server_connection._stream_result_chunks(job_id, 1, 1, 1)
         result_list = list(results)
 
         self.assertEqual(result_list, [[1, 2, 3], [4, 5, 6]])
-        mock_get_next_result.assert_has_calls([call(job_id), call(job_id), call(job_id)])
+        mock_get_next_result.assert_has_calls([call(job_id, 1, 1, 1), call(job_id, 1, 1, 1), call(job_id, 1, 1, 1)])
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     @patch("mixtera.network.connection.server_connection.read_pickeled_object")
@@ -177,7 +177,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_read_pickeled_object.return_value = [1, 2, 3]
         job_id = "job_id"
 
-        result_chunk = await self.server_connection._get_next_result(job_id)
+        result_chunk = await self.server_connection._get_next_result(job_id, 1, 1, 1)
 
         self.assertEqual(result_chunk, [1, 2, 3])
         mock_connect_to_server.assert_awaited_once()

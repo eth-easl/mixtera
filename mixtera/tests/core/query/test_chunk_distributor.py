@@ -4,18 +4,17 @@ import pytest
 from mixtera.core.query.chunk_distributor import ChunkDistributor
 
 
-@pytest.fixture
-def query_result():
+@pytest.fixture(name="query_result")
+def fixture_query_result():
     # Mocking QueryResult to return a generator of indices
     def result_generator():
-        for i in range(100):
-            yield i
+        yield from range(100)
 
     return result_generator()
 
 
-@pytest.fixture
-def chunk_distributor(query_result):
+@pytest.fixture(name="chunk_distributor")
+def fixture_chunk_distributor(query_result):
     return ChunkDistributor(dp_groups=2, nodes_per_group=2, num_workers=3, query_result=query_result)
 
 

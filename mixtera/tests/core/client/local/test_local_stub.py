@@ -9,6 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query, QueryResult, StaticMixture
+from mixtera.core.query.chunk_distributor import ChunkDistributor
 
 
 class TestLocalStub(unittest.TestCase):
@@ -76,9 +77,9 @@ class TestLocalStub(unittest.TestCase):
         self.local_stub._mdc = mock_mdc
         self.local_stub._register_query = MagicMock(return_value=True)
 
-        result = self.local_stub.execute_query(query, mixture)
+        result = self.local_stub.execute_query(query, mixture, 1, 1, 1)
         query.execute.assert_called_once_with(mock_mdc, mixture)
-        self.local_stub._register_query.assert_called_once_with(query, mixture)
+        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)
         self.assertTrue(result)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection")
@@ -89,10 +90,10 @@ class TestLocalStub(unittest.TestCase):
         query.job_id = "test_job_id"
         self.local_stub._register_query = MagicMock(return_value=False)
         self.local_stub._mdc = mock_mdc
-        result = self.local_stub.execute_query(query, mixture)
+        result = self.local_stub.execute_query(query, mixture, 1, 1, 1)
 
         query.execute.assert_called_once_with(mock_mdc, mixture)
-        self.local_stub._register_query.assert_called_once_with(query, mixture)
+        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)
         self.assertFalse(result)
 
     def test_is_remote(self):
@@ -125,11 +126,11 @@ class TestLocalStub(unittest.TestCase):
     def test_stream_result_chunks(self, mock_mdc):
         del mock_mdc
         job_id = "test_job_id"
-        query_result = MagicMock(spec=QueryResult)
-        self.local_stub._get_query_result = MagicMock(return_value=query_result)
-        chunks = list(self.local_stub._stream_result_chunks(job_id))
-        self.local_stub._get_query_result.assert_called_once_with(job_id)
-        self.assertEqual(chunks, list(query_result))
+        chunk_distributor = MagicMock(spec=ChunkDistributor)
+        self.local_stub._get_query_chunk_distributor = MagicMock(return_value=chunk_distributor)
+        chunks = list(self.local_stub._stream_result_chunks(job_id, 1, 1, 1))
+        self.local_stub._get_query_chunk_distributor.assert_called_once_with(job_id)
+        self.assertEqual(chunks, [])
 
     @patch("mixtera.core.datacollection.MixteraDataCollection")
     def test_get_result_metadata(self, mock_mdc):
@@ -152,17 +153,18 @@ class TestLocalStub(unittest.TestCase):
         query.job_id = "test_job_id"
         self.local_stub._training_query_map[query.job_id] = (query, 100)
 
-        result = self.local_stub._register_query(query, 100)
+        result = self.local_stub._register_query(query, 100, 1, 1, 1)
         mock_wait_for_key.assert_not_called()
         self.assertFalse(result)
 
     @patch("mixtera.core.client.local.local_stub.wait_for_key_in_dict")
     def test_register_query_new(self, mock_wait_for_key):
         query = MagicMock(spec=Query)
+        query.results = MagicMock(spec=QueryResult)
         query.job_id = "new_test_job_id"
         self.local_stub._training_query_map = {}
 
-        result = self.local_stub._register_query(query, 100)
+        result = self.local_stub._register_query(query, 100, 1, 1, 1)
         mock_wait_for_key.assert_not_called()
         self.assertTrue(result)
         self.assertIn(query.job_id, self.local_stub._training_query_map)
@@ -178,7 +180,7 @@ class TestLocalStub(unittest.TestCase):
         job_id = "test_job_id"
         query = MagicMock(spec=Query)
         query.results = MagicMock(spec=QueryResult)
-        self.local_stub._training_query_map[job_id] = (query, 100)
+        self.local_stub._training_query_map[job_id] = (ChunkDistributor(1, 1, 1, query.results), query, 100)
 
         result = self.local_stub._get_query_result(job_id)
         mock_wait_for_key.assert_called_once_with(self.local_stub._training_query_map, job_id, 60.0)

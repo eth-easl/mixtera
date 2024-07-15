@@ -26,7 +26,7 @@ class LocalStub(MixteraClient):
 
         self._mdc = MixteraDataCollection(self.directory)
         self._training_query_map_lock = mp.Lock()
-        self._training_query_map: dict[str, tuple[Query, Mixture]] = {}  # (query, mixture_object)
+        self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
 
     def register_dataset(
         self,
@@ -60,6 +60,7 @@ class LocalStub(MixteraClient):
     def execute_query(
         self, query: Query, mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
     ) -> bool:
+        assert dp_groups > 0 and nodes_per_group > 0 and num_workers >= 0
         query.execute(self._mdc, mixture)
         return self._register_query(query, mixture, dp_groups, nodes_per_group, num_workers)
 
