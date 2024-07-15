@@ -49,11 +49,7 @@ class ChunkDistributor:
 
             if next_chunk_id not in self._chunk_cache[dp_group]:
                 # Load new chunk if not in cache
-                try:
-                    chunk = next(self._query_result)
-                except StopIteration:
-                    return None
-
+                chunk = next(self._query_result)
                 self._chunk_cache[dp_group][next_chunk_id] = chunk
                 self._chunk_usage[dp_group][next_chunk_id] = 0
 
@@ -76,9 +72,10 @@ class ChunkDistributor:
         self, dp_group_id: int, node_id: int, worker_id: int
     ) -> Generator[ChunkerIndex, None, None]:
         while True:
-            if (chunk := self.next_chunk_for(dp_group_id, node_id, worker_id)) is not None:
+            try:
+                chunk = self.next_chunk_for(dp_group_id, node_id, worker_id)
                 yield chunk
-            else:
+            except StopIteration:
                 return
 
     def __getstate__(self) -> dict:
