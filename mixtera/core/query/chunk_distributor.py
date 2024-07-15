@@ -1,9 +1,10 @@
 import multiprocessing as mp
-from multiprocessing.managers import DictProxy, ValueProxy
 import threading
+from multiprocessing.managers import DictProxy, ValueProxy
 
-from mixtera.core.query.query_result import QueryResult
 from mixtera.core.datacollection.index import ChunkerIndex
+from mixtera.core.query.query_result import QueryResult
+
 
 class ChunkDistributor:
     def __init__(self, dp_groups: int, nodes_per_group: int, num_workers: int, query_result: QueryResult) -> None:
@@ -13,13 +14,13 @@ class ChunkDistributor:
 
         self._query_result = query_result
         self._manager = mp.Manager()
-        
+
         # We need to pre-initialize all dicts because the manager does not get pickled.
 
         # dp group -> chunk id -> chunk
         self._chunk_cache: DictProxy[int, DictProxy[int, ChunkerIndex]] = self._manager.dict()
         # dp group -> chunk id -> number of nodes that have consumed it
-        self._chunk_usage: DictProxy[int, DictProxy[int , int]] = self._manager.dict()
+        self._chunk_usage: DictProxy[int, DictProxy[int, int]] = self._manager.dict()
         # dp group -> node id -> next chunk
         self._next_chunk: DictProxy[int, DictProxy[int, DictProxy[int, ValueProxy[int]]]] = self._manager.dict()
         # dp group -> lock
@@ -35,8 +36,7 @@ class ChunkDistributor:
                 self._next_chunk[dp_group][node] = self._manager.dict()
                 for worker_id in range(num_workers):
                     # Since the workers do not share chunks, we offset their start by 1 each
-                    self._next_chunk[dp_group][node][worker_id] = self._manager.Value('i', worker_id)
-
+                    self._next_chunk[dp_group][node][worker_id] = self._manager.Value("i", worker_id)
 
     def next_chunk_for(self, dp_group: int, node_id: int, worker_id: int) -> ChunkerIndex:
         assert dp_group < self._dp_groups
@@ -63,10 +63,9 @@ class ChunkDistributor:
 
             # We don't increment by 1 but instead by num_workers, because otherwise
             # we get an overlap between workers after the first chunk
-            self._next_chunk[dp_group][node_id][worker_id].value += self._num_workers 
+            self._next_chunk[dp_group][node_id][worker_id].value += self._num_workers
 
             return chunk_to_return
-
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
