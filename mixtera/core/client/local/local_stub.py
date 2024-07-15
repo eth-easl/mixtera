@@ -10,6 +10,7 @@ from mixtera.core.datacollection.index.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Mixture, Query, QueryResult
+from mixtera.core.query.chunk_distributor import ChunkDistributor
 from mixtera.utils import wait_for_key_in_dict
 
 
@@ -56,9 +57,11 @@ class LocalStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         return self._mdc.remove_dataset(identifier)
 
-    def execute_query(self, query: Query, mixture: Mixture) -> bool:
+    def execute_query(
+        self, query: Query, mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
+    ) -> bool:
         query.execute(self._mdc, mixture)
-        return self._register_query(query, mixture)
+        return self._register_query(query, mixture, dp_groups, nodes_per_group, num_workers)
 
     def is_remote(self) -> bool:
         return False
@@ -91,8 +94,10 @@ class LocalStub(MixteraClient):
             data_only_on_primary=data_only_on_primary,
         )
 
-    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
-        yield from self._get_query_result(job_id)
+    def _stream_result_chunks(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator[ChunkerIndex, None, None]:
+        yield from self._get_query_chunk_distributor(job_id)._stream_chunks_for_worker(dp_group_id, node_id, worker_id)
 
     def _get_result_metadata(
         self, job_id: str
@@ -100,13 +105,19 @@ class LocalStub(MixteraClient):
         query_result = self._get_query_result(job_id)
         return query_result.dataset_type, query_result.parsing_func, query_result.file_path
 
-    def _register_query(self, query: "Query", mixture: Mixture) -> bool:
+    def _register_query(
+        self, query: "Query", mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
+    ) -> bool:
         if query.job_id in self._training_query_map:
             logger.warning(f"We already have a query for job {query.job_id}!")
             return False
 
         with self._training_query_map_lock:
-            self._training_query_map[query.job_id] = (query, mixture)
+            self._training_query_map[query.job_id] = (
+                ChunkDistributor(dp_groups, nodes_per_group, num_workers, query.results),
+                query,
+                mixture,
+            )
 
         logger.info(f"Registered query {str(query)} for job {query.job_id}, with mixture {mixture}")
 
@@ -115,5 +126,9 @@ class LocalStub(MixteraClient):
     def _get_query_result(self, job_id: str) -> QueryResult:
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
             raise RuntimeError(f"Unknown job {job_id}")
-        # Since queries are only registered after they are executed, results is guaranteed to not be None
-        return self._training_query_map[job_id][0].results
+        return self._training_query_map[job_id][1].results
+
+    def _get_query_chunk_distributor(self, job_id: str) -> ChunkDistributor:
+        if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
+            raise RuntimeError(f"Unknown job {job_id}")
+        return self._training_query_map[job_id][0]

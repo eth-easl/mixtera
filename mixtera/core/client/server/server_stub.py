@@ -5,7 +5,7 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType
+from mixtera.core.datacollection.index.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import Mixture, Query
@@ -62,8 +62,10 @@ class ServerStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         return self._server_connection.remove_dataset(identifier)
 
-    def execute_query(self, query: Query, mixture: Mixture) -> bool:
-        if not self._server_connection.execute_query(query, mixture):
+    def execute_query(
+        self, query: Query, mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
+    ) -> bool:
+        if not self._server_connection.execute_query(query, mixture, dp_groups, nodes_per_group, num_workers):
             logger.error("Could not register query at server!")
             return False
 
@@ -71,8 +73,10 @@ class ServerStub(MixteraClient):
 
         return True
 
-    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
-        yield from self._server_connection._stream_result_chunks(job_id)
+    def _stream_result_chunks(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator[ChunkerIndex, None, None]:
+        yield from self._server_connection._stream_result_chunks(job_id, dp_group_id, node_id, worker_id)
 
     def _get_result_metadata(
         self, job_id: str

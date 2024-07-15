@@ -172,7 +172,9 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def execute_query(self, query: Query, mixture: Mixture) -> bool:
+    def execute_query(
+        self, query: Query, mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
+    ) -> bool:
         """
         Executes the query on the MixteraClient. Afterwards, result can be obtained using `stream_results`.
 
@@ -186,7 +188,9 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, job_id: str, tunnel_via_server: bool = False) -> Generator[str, None, None]:
+    def stream_results(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int, tunnel_via_server: bool = False
+    ) -> Generator[str, None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
@@ -199,13 +203,15 @@ class MixteraClient(ABC):
             RuntimeError if query has not been executed.
         """
         result_metadata = self._get_result_metadata(job_id)
-        for result_chunk in self._stream_result_chunks(job_id):
+        for result_chunk in self._stream_result_chunks(job_id, dp_group_id, node_id, worker_id):
             # TODO(#35): When implementing the new sampling on the ResultChunk,
             # the ResultChunk class should offer an iterator instead.
             yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
 
     @abstractmethod
-    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
+    def _stream_result_chunks(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator[ChunkerIndex, None, None]:
         """
         Given a job ID, iterates over the result chunks.
 

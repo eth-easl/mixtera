@@ -7,7 +7,7 @@ from mixtera.core.datacollection.datasets.dataset import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import QueryResult
+from mixtera.core.query.chunk_distributor import ChunkDistributor
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
     read_float,
@@ -39,8 +39,8 @@ class MixteraServer:
         self._port = port
         self._directory = directory
         self._local_stub: LocalStub = LocalStub(self._directory)
-        self._result_chunk_generator_map: dict[str, QueryResult] = {}
-        self._result_chunk_generator_map_lock = asyncio.Lock()
+        self._chunk_distributor_map: dict[str, ChunkDistributor] = {}
+        self._chunk_distributor_map_lock = asyncio.Lock()
         self._register_query_lock = asyncio.Lock()
 
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -57,10 +57,15 @@ class MixteraServer:
         logger.debug("Received register query request")
         mixture = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         logger.debug(f"mixture = {mixture}")
+
+        dp_groups = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        nodes_per_group = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        num_workers = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+
         query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
         async with self._register_query_lock:
-            success = self._local_stub.execute_query(query, mixture)
+            success = self._local_stub.execute_query(query, mixture, dp_groups, nodes_per_group, num_workers)
         logger.debug(f"Registered query with success = {success} and executed it.")
 
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
@@ -92,11 +97,20 @@ class MixteraServer:
             writer (asyncio.StreamWriter): The stream writer to write data to the client.
         """
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        async with self._result_chunk_generator_map_lock:
-            if job_id not in self._result_chunk_generator_map:
-                self._result_chunk_generator_map[job_id] = self._local_stub._get_query_result(job_id)
+        dp_group_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        node_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        worker_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
-        next_chunk = next(self._result_chunk_generator_map[job_id], None)
+        async with self._chunk_distributor_map_lock:
+            if job_id not in self._chunk_distributor_map:
+                self._chunk_distributor_map[job_id] = self._local_stub._get_query_chunk_distributor(job_id)
+
+        next_chunk = None
+        try:
+            next_chunk = self._chunk_distributor_map[job_id].next_chunk_for(dp_group_id, node_id, worker_id)
+        except StopIteration:
+            pass
+
         await write_pickeled_object(next_chunk, NUM_BYTES_FOR_SIZES, writer)
 
     async def _return_result_metadata(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

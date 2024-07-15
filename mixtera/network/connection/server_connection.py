@@ -115,7 +115,9 @@ class ServerConnection:
 
         return None, None
 
-    async def _execute_query(self, query: "Query", mixture: "Mixture") -> bool:
+    async def _execute_query(
+        self, query: "Query", mixture: "Mixture", dp_groups: int, nodes_per_group: int, num_workers: int
+    ) -> bool:
         """
         Asynchronously executes a query on the server and receives a confirmation of success.
 
@@ -137,6 +139,11 @@ class ServerConnection:
         # Announce mixture
         await write_pickeled_object(mixture, NUM_BYTES_FOR_SIZES, writer)
 
+        # Announce other metadata
+        await write_int(dp_groups, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(nodes_per_group, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(num_workers, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
         # Announce query
         await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
 
@@ -144,7 +151,9 @@ class ServerConnection:
         logger.debug(f"Got success = {success} from server.")
         return success
 
-    def execute_query(self, query: "Query", mixture: "Mixture") -> bool:
+    def execute_query(
+        self, query: "Query", mixture: "Mixture", dp_groups: int, nodes_per_group: int, num_workers: int
+    ) -> bool:
         """
         Executes a query on the server and returns whether it was successful.
 
@@ -155,7 +164,7 @@ class ServerConnection:
         Returns:
             A boolean indicating whether the query was successfully registered with the server.
         """
-        success = run_async_until_complete(self._execute_query(query, mixture))
+        success = run_async_until_complete(self._execute_query(query, mixture, dp_groups, nodes_per_group, num_workers))
         return success
 
     async def _get_query_result_meta(self, job_id: str) -> Optional[dict]:
@@ -183,7 +192,9 @@ class ServerConnection:
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
     # TODO(#35): Use some ResultChunk type
-    async def _get_next_result(self, job_id: str) -> Optional["ChunkerIndex"]:
+    async def _get_next_result(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Optional["ChunkerIndex"]:
         """
         Asynchronously retrieves the next result chunk of a query from the server.
 
@@ -205,10 +216,17 @@ class ServerConnection:
         # Announce job ID
         await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
+        # Announce worker info
+        await write_int(dp_group_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(node_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(worker_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
         # Get meta object
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
-    def _stream_result_chunks(self, job_id: str) -> Generator["ChunkerIndex", None, None]:
+    def _stream_result_chunks(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator["ChunkerIndex", None, None]:
         """
         Streams the result chunks of a query job from the server.
 
@@ -219,7 +237,9 @@ class ServerConnection:
             ChunkerIndex objects, each representing a chunk of the query results.
         """
         # TODO(#62): We might want to prefetch here
-        while (next_result := run_async_until_complete(self._get_next_result(job_id))) is not None:
+        while (
+            next_result := run_async_until_complete(self._get_next_result(job_id, dp_group_id, node_id, worker_id))
+        ) is not None:
             yield next_result
 
     def get_result_metadata(

@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import threading
 from multiprocessing.managers import DictProxy, ValueProxy
+from typing import Generator
 
 from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.query.query_result import QueryResult
@@ -66,6 +67,12 @@ class ChunkDistributor:
             self._next_chunk[dp_group][node_id][worker_id].value += self._num_workers
 
             return chunk_to_return
+
+    def _stream_chunks_for_worker(
+        self, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator[ChunkerIndex, None, None]:
+        while True:
+            yield self.next_chunk_for(dp_group_id, node_id, worker_id)
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
