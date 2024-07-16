@@ -37,7 +37,7 @@ class ChunkDistributor:
             self._dp_locks[dp_group] = self._manager.Lock()
             for node in range(nodes_per_group):
                 self._next_chunk[dp_group][node] = self._manager.dict()
-                for worker_id in range(num_workers):
+                for worker_id in range(self._num_workers):
                     # Since the workers do not share chunks, we offset their start by 1 each
                     self._next_chunk[dp_group][node][worker_id] = self._manager.Value("i", worker_id)
 
