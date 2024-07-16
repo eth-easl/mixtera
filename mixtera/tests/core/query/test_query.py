@@ -196,6 +196,7 @@ class TestQuery(unittest.TestCase):
         query = Query.for_job("job_id").mockoperator("test", len_results=2)
         assert self.client.execute_query(query, ArbitraryMixture(2))
         chunks = list(iter(query.results))
+        chunks = [chunk._result_index for chunk in chunks]
         self.assertEqual(chunks, [{"field:value": {"did": {"fid": [(0, 2)]}}}])
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
@@ -444,7 +445,7 @@ class TestQuery(unittest.TestCase):
 
         # Check the equality of the chunks
         for i, chunk in enumerate(chunks):
-            self.assertDictEqual(reference_chunks[i], chunk)
+            self.assertDictEqual(reference_chunks[i], chunk._result_index)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -508,7 +509,7 @@ class TestQuery(unittest.TestCase):
 
         # Check the equality of the chunks
         for i, chunk in enumerate(chunks):
-            self.assertDictEqual(reference_chunks[i], chunk)
+            self.assertDictEqual(reference_chunks[i], chunk._result_index)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -661,7 +662,7 @@ class TestQuery(unittest.TestCase):
 
         def _subchunk_counter(chunk, key):
             count = 0
-            for _0, document_entry in chunk[key].items():
+            for _0, document_entry in chunk._result_index[key].items():
                 for _1, ranges in document_entry.items():
                     for base_range in ranges:
                         count += base_range[1] - base_range[0]
@@ -688,7 +689,7 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected_error_count_s1, real_error_count_s1)
         self.assertEqual(expected_error_count_s2, real_error_count_s2)
         for i, chunk in enumerate(chunks):
-            self.assertDictEqual(reference_chunks[i], chunk)
+            self.assertDictEqual(reference_chunks[i], chunk._result_index)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -885,7 +886,7 @@ class TestQuery(unittest.TestCase):
 
         def _subchunk_counter(chunk, key):
             count = 0
-            for _0, document_entry in chunk[key].items():
+            for _0, document_entry in chunk._result_index[key].items():
                 for _1, ranges in document_entry.items():
                     for base_range in ranges:
                         count += base_range[1] - base_range[0]
@@ -897,7 +898,7 @@ class TestQuery(unittest.TestCase):
         real_error_count = 0
         for chunk in chunks:
             chunk_count = 0
-            for k, _ in chunk.items():
+            for k, _ in chunk._result_index.items():
                 chunk_count += _subchunk_counter(chunk, k)
 
             if chunk_count != 7:
@@ -906,4 +907,4 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected_chunk_count, len(chunks))
         self.assertEqual(expected_error_count, real_error_count)
         for i, chunk in enumerate(chunks):
-            self.assertDictEqual(reference_chunks[i], chunk)
+            self.assertDictEqual(reference_chunks[i], chunk._result_index)

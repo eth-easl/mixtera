@@ -20,8 +20,7 @@ from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
-    from mixtera.core.datacollection.index import ChunkerIndex
-    from mixtera.core.query import Mixture, Query
+    from mixtera.core.query import Mixture, Query, ResultChunk
 
 
 class ServerConnection:
@@ -183,7 +182,7 @@ class ServerConnection:
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
     # TODO(#35): Use some ResultChunk type
-    async def _get_next_result(self, job_id: str) -> Optional["ChunkerIndex"]:
+    async def _get_next_result(self, job_id: str) -> Optional["ResultChunk"]:
         """
         Asynchronously retrieves the next result chunk of a query from the server.
 
@@ -191,7 +190,7 @@ class ServerConnection:
             job_id (str): The identifier of the job for which the next result chunk is requested.
 
         Returns:
-            An ChunkerIndex object representing the next result chunk,
+            An ResultChunk object representing the next result chunk,
             or None if there are no more results or the connection fails.
         """
         reader, writer = await self._connect_to_server()
@@ -208,7 +207,7 @@ class ServerConnection:
         # Get meta object
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
-    def _stream_result_chunks(self, job_id: str) -> Generator["ChunkerIndex", None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator["ResultChunk", None, None]:
         """
         Streams the result chunks of a query job from the server.
 

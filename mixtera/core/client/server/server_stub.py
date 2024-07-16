@@ -5,10 +5,9 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
-from mixtera.core.query import Mixture, Query
+from mixtera.core.query import Mixture, Query, ResultChunk
 from mixtera.network.connection import ServerConnection
 
 
@@ -71,7 +70,7 @@ class ServerStub(MixteraClient):
 
         return True
 
-    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator[ResultChunk, None, None]:
         yield from self._server_connection._stream_result_chunks(job_id)
 
     def _get_result_metadata(

@@ -3,13 +3,11 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
-from mixtera.core.client.chunk_reader import ChunkReaderFactory, ChunkReaderType
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Mixture, Query
+from mixtera.core.query import Mixture, Query, ResultChunk
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
@@ -191,8 +189,9 @@ class MixteraClient(ABC):
         self,
         job_id: str,
         tunnel_via_server: bool = False,
-        reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-        **chunk_reader_parameters: Any,
+        degree_of_parallelism: int = 1,
+        per_window_mixture: bool = False,
+        window_size: int = 128,
     ) -> Generator[str, None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
@@ -207,20 +206,28 @@ class MixteraClient(ABC):
         Raises:
             RuntimeError if query has not been executed.
         """
-        result_metadata = self._get_result_metadata(job_id)
+        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+
+        server_connection = None
+        if tunnel_via_server:
+            if isinstance(self, ServerStub):
+                server_connection = self._server_connection
+            else:
+                raise RuntimeError(
+                    "Currently, tunneling samples via the server is only supported when using a ServerStub."
+                )
+
         for result_chunk in self._stream_result_chunks(job_id):
-            # TODO(#35): When implementing the new sampling on the ResultChunk,
-            # the ResultChunk class should offer an iterator instead.
-            yield from self._iterate_result_chunk(
-                result_chunk,
-                *result_metadata,
-                tunnel_via_server=tunnel_via_server,
-                reader_type=reader_type,
-                **chunk_reader_parameters,
+            result_chunk.configure_result_streaming(
+                server_connection=server_connection,
+                degree_of_parallelism=degree_of_parallelism,
+                per_window_mixture=per_window_mixture,
+                window_size=window_size,
             )
+            yield from result_chunk
 
     @abstractmethod
-    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator[ResultChunk, None, None]:
         """
         Given a job ID, iterates over the result chunks.
 
@@ -250,57 +257,6 @@ class MixteraClient(ABC):
             RuntimeError if query has not been executed.
         """
         raise NotImplementedError()
-
-    def _iterate_result_chunk(
-        self,
-        result_chunk: ChunkerIndex,
-        dataset_type_dict: dict[int, Type[Dataset]],
-        parsing_func_dict: dict[int, Callable[[str], str]],
-        file_path_dict: dict[int, str],
-        tunnel_via_server: bool = False,
-        reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-        **chunk_reader_parameters: Any,
-    ) -> Generator[str, None, None]:
-        """
-        Given a result chunk, iterates over the samples.
-
-        Args:
-            result_chunk (ChunkerIndex): The result chunk object.
-            dataset_type_dict (dict): A mapping from dataset ID to dataset type.
-            parsing_func_dict (dict): A mapping from dataset ID to parsing function.
-            file_path_dict (dict): A mapping from file ID to file path.
-            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server.
-            reader_type (ChunkReaderType): The type of the chunk reader
-            chunk_reader_parameters (kwargs): Supplementary chunk-reader specific instantiation parameters
-
-        Returns:
-            A Generator of samples.
-        """
-        # TODO(#35): Currently, the result chunks are IndexType,
-        # but they should offer their own class with an iterator over samples.
-        # This should sample correctly from the chunk. Then, there is no need for this function anymore.
-
-        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
-
-        server_connection = None
-        if tunnel_via_server:
-            if isinstance(self, ServerStub):
-                server_connection = self._server_connection
-            else:
-                raise RuntimeError(
-                    "Currently, tunneling samples via the server is only supported when using a ServerStub."
-                )
-
-        reader = ChunkReaderFactory.create_chunk_reader(
-            reader_type,
-            result_chunk,
-            dataset_type_dict,
-            file_path_dict,
-            parsing_func_dict,
-            server_connection,
-            **chunk_reader_parameters,
-        )
-        yield from reader.iterate_result_chunk()
 
     @abstractmethod
     def is_remote(self) -> bool:

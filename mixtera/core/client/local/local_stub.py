@@ -6,10 +6,9 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Mixture, Query, QueryResult
+from mixtera.core.query import Mixture, Query, QueryResult, ResultChunk
 from mixtera.utils import wait_for_key_in_dict
 
 
@@ -91,7 +90,7 @@ class LocalStub(MixteraClient):
             data_only_on_primary=data_only_on_primary,
         )
 
-    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator[ResultChunk, None, None]:
         yield from self._get_query_result(job_id)
 
     def _get_result_metadata(

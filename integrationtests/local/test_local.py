@@ -27,14 +27,13 @@ def parsing_func(sample):
 def test_filter_javascript(
     client: MixteraClient,
     mixture: Mixture,
-    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    **chunk_reader_args: Any,
+    **args: Any,
 ) -> None:
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     client.execute_query(query, mixture)
     result_samples = []
-    for sample in client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args):
+    for sample in client.stream_results(job_id, False, **args):
         result_samples.append(sample)
 
     assert (
@@ -47,15 +46,14 @@ def test_filter_javascript(
 def test_filter_html(
     client: MixteraClient,
     mixture: Mixture,
-    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    **chunk_reader_args: Any,
+    **args: Any,
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args):
+    for sample in client.stream_results(job_id, False, **args):
         result_samples.append(sample)
 
     assert (
@@ -68,8 +66,7 @@ def test_filter_html(
 def test_filter_both(
     client: MixteraClient,
     mixture: Mixture,
-    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    **chunk_reader_args: Any,
+    **args: Any,
 ):
     job_id = get_job_id()
     query = (
@@ -80,7 +77,7 @@ def test_filter_both(
     client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args):
+    for sample in client.stream_results(job_id, False, **args):
         result_samples.append(sample)
 
     assert (
@@ -93,15 +90,14 @@ def test_filter_both(
 def test_filter_license(
     client: MixteraClient,
     mixture: Mixture,
-    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    **chunk_reader_args: Any,
+    **args: Any,
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args):
+    for sample in client.stream_results(job_id, False, **args):
         result_samples.append(sample)
 
     assert (
@@ -114,22 +110,18 @@ def test_filter_license(
 def test_filter_unknown_license(
     client: MixteraClient,
     mixture: Mixture,
-    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    **chunk_reader_args: Any,
+    **args: Any,
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     client.execute_query(query, mixture)
-    assert (
-        len(list(client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args))) == 0
-    ), "Got results back for expected empty results."
+    assert len(list(client.stream_results(job_id, False, **args))) == 0, "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(
     client: MixteraClient,
     mixture: Mixture,
-    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    **chunk_reader_args: Any,
+    **args: Any,
 ):
     job_id = get_job_id()
     query = (
@@ -140,7 +132,7 @@ def test_filter_license_and_html(
     client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, reader_type=chunk_reader_type, **chunk_reader_args):
+    for sample in client.stream_results(job_id, False, **args):
         result_samples.append(sample)
 
     assert (
@@ -153,15 +145,14 @@ def test_filter_license_and_html(
 def test_client_chunksize(
     client: MixteraClient,
     mixture: Mixture,
-    chunk_reader_type: ChunkReaderType = ChunkReaderType.NON_PARALLEL,
-    **chunk_reader_args: Any,
+    **args: Any,
 ):
-    test_filter_javascript(client, mixture, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
-    test_filter_html(client, mixture, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
-    test_filter_both(client, mixture, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
-    test_filter_license(client, mixture, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
-    test_filter_unknown_license(client, mixture, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
-    test_filter_license_and_html(client, mixture, chunk_reader_type=chunk_reader_type, **chunk_reader_args)
+    test_filter_javascript(client, mixture, **args)
+    test_filter_html(client, mixture, **args)
+    test_filter_both(client, mixture, **args)
+    test_filter_license(client, mixture, **args)
+    test_filter_unknown_license(client, mixture, **args)
+    test_filter_license_and_html(client, mixture, **args)
 
 
 def test_chunk_readers(dir: Path) -> None:
@@ -172,26 +163,24 @@ def test_chunk_readers(dir: Path) -> None:
         "client_integrationtest_chunk_reader_dataset", dir, JSONLDataset, parsing_func, "TEST_PARSER"
     )
 
-    reader_types = [ChunkReaderType.NON_PARALLEL] * 2 + [ChunkReaderType.PARALLEL] * 2
-    base_parallel_params = {
-        "reader_count": 4,
-        "per_window_mixture": False,
-    }
-    special_params = [
-        {"ensure_mixture": False},
-        {"ensure_mixture": True},
-        base_parallel_params,
-        base_parallel_params | {"per_window_mixture": True},
-    ]
+    degrees_of_parallelisms = [1, 2, 4]
+    per_window_mixtures = [False, True]
+    window_sizes = [64, 128, 256]
 
     for chunk_size in [100, 250, 500, 750, 1000]:
-        for chunk_reader_type, chunk_reader_args in zip(reader_types, special_params):
-            logger.debug(
-                f"Running chunk reader tests with chunk_size={chunk_size}, chunk_reader_type={chunk_reader_type}, and chunk_reader_args={chunk_reader_args}"
-            )
-            test_client_chunksize(
-                client, ArbitraryMixture(chunk_size), chunk_reader_type=chunk_reader_type, **chunk_reader_args
-            )
+        for degree_of_parallelism in degrees_of_parallelisms:
+            for per_window_mixture in per_window_mixtures:
+                for window_size in window_sizes:
+                    args = {
+                        "degree_of_parallelism": degree_of_parallelism,
+                        "per_window_mixture": per_window_mixture,
+                        "window_size": window_size,
+                    }
+                    logger.debug(
+                        f"Running chunk reader tests with chunk_size={chunk_size}, degree_of_parallelism={degree_of_parallelism}, "
+                        f"per_window_mixture={per_window_mixture}, window_size={window_size}"
+                    )
+                    test_client_chunksize(client, ArbitraryMixture(chunk_size), **args)
 
     print("Successfully ran chunk reader tests!")
 
