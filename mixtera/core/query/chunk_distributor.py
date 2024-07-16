@@ -9,6 +9,8 @@ from mixtera.core.query.query_result import QueryResult
 
 class ChunkDistributor:
     def __init__(self, dp_groups: int, nodes_per_group: int, num_workers: int, query_result: QueryResult) -> None:
+        if dp_groups < 1:
+            raise ValueError(f"dp_groups = {dp_groups} < 1")
         self._dp_groups = dp_groups
         self._num_workers = num_workers if num_workers > 0 else 1  # num_workers 0 => interpreted as 1 worker
         self._nodes_per_group = nodes_per_group

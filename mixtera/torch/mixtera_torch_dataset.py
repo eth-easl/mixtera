@@ -29,7 +29,7 @@ class MixteraTorchDataset(IterableDataset):
         self._node_id = node_id
         self._mixture = mixture
         self._tunnel_via_server = tunnel_via_server
-        self._num_workers = num_workers
+        self._num_workers = num_workers if num_workers > 0 else 1
 
         if self._node_id == 0:
             logger.info("Since this is node 0, executing query!")
