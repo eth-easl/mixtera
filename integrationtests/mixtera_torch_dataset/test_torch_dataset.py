@@ -34,6 +34,7 @@ def test_filter_javascript(
         mixture,
         dp_groups=dp_groups,
         nodes_per_group=nodes_per_group,
+        num_workers=num_workers,
         node_id=0,
         dp_group_id=0,
         tunnel_via_server=tunnel,
@@ -59,7 +60,18 @@ def test_filter_html(
 ):
     job_id = f"1_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
-    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(
+        client,
+        query,
+        job_id,
+        mixture,
+        dp_groups=dp_groups,
+        nodes_per_group=nodes_per_group,
+        num_workers=num_workers,
+        node_id=0,
+        dp_group_id=0,
+        tunnel_via_server=tunnel,
+    )
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -85,7 +97,18 @@ def test_filter_both(
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
-    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(
+        client,
+        query,
+        job_id,
+        mixture,
+        dp_groups=dp_groups,
+        nodes_per_group=nodes_per_group,
+        num_workers=num_workers,
+        node_id=0,
+        dp_group_id=0,
+        tunnel_via_server=tunnel,
+    )
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -107,7 +130,18 @@ def test_filter_license(
 ):
     job_id = f"3_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = Query.for_job(job_id).select(("license", "==", "CC"))
-    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(
+        client,
+        query,
+        job_id,
+        mixture,
+        dp_groups=dp_groups,
+        nodes_per_group=nodes_per_group,
+        num_workers=num_workers,
+        node_id=0,
+        dp_group_id=0,
+        tunnel_via_server=tunnel,
+    )
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -129,7 +163,18 @@ def test_filter_unknown_license(
 ):
     job_id = f"4_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
-    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(
+        client,
+        query,
+        job_id,
+        mixture,
+        dp_groups=dp_groups,
+        nodes_per_group=nodes_per_group,
+        num_workers=num_workers,
+        node_id=0,
+        dp_group_id=0,
+        tunnel_via_server=tunnel,
+    )
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
@@ -152,7 +197,18 @@ def test_filter_license_and_html(
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
-    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(
+        client,
+        query,
+        job_id,
+        mixture,
+        dp_groups=dp_groups,
+        nodes_per_group=nodes_per_group,
+        num_workers=num_workers,
+        node_id=0,
+        dp_group_id=0,
+        tunnel_via_server=tunnel,
+    )
     dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
     result_samples = []
     for batch in dl:
