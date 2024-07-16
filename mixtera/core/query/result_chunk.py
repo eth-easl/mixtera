@@ -69,7 +69,7 @@ class ResultChunk:
             partition_masses[property_combination] = count
             total_count += count
 
-        for key, _ in partition_masses.items():
+        for key in partition_masses:
             partition_masses[key] = partition_masses[key] / total_count
 
         return StaticMixture(total_count, partition_masses)
@@ -102,9 +102,15 @@ class ResultChunk:
 
     def iterate_single_threaded_window_mixture(self) -> Iterator[str]:
         element_counts = self._get_element_counts()
-        workloads: dict[str, list[tuple[int, int | str, list]]] = self._prepare_workloads()
+        workloads: dict[str, list[tuple[int, int, list[tuple[int, int]]]]] = self._prepare_workloads()
+
+        total_items_per_property = {
+            property_name: sum(range[1] - range[0] for _, _, ranges in property_workload for range in ranges)
+            for property_name, property_workload in workloads.items()
+        }
 
         processed_items = {property_name: 0 for property_name in workloads}
+        current_iterators = {property_name: None for property_name in workloads}
 
         continue_iterating = True
         while continue_iterating:  # pylint: disable=too-many-nested-blocks
@@ -118,13 +124,16 @@ class ResultChunk:
                     if items_yielded >= property_count:
                         break
 
-                    filename_dict = {self._file_path_dict[file_id]: ranges}
-                    instance_iterator = self._dataset_type_dict[document_id].read_ranges_from_files(
-                        filename_dict, self._parsing_func_dict[document_id], self._server_connection
-                    )
+                    if not current_iterators[property_name]:
+                        filename_dict = {self._file_path_dict[file_id]: ranges}
+                        current_iterators[property_name] = self._dataset_type_dict[document_id].read_ranges_from_files(
+                            filename_dict, self._parsing_func_dict[document_id], self._server_connection
+                        )
+
                     try:
-                        instance = next(instance_iterator)
+                        instance = next(current_iterators[property_name])
                     except StopIteration:
+                        current_iterators[property_name] = None  # Exhausted, allow moving to next workload
                         continue
                     else:
                         yield instance
@@ -135,16 +144,39 @@ class ResultChunk:
                     if items_yielded == property_count:
                         break
 
+            # Check if all properties have been processed and adjust element_counts if necessary
+            all_processed = all(
+                processed_items[property_name] >= total_items_per_property[property_name] for property_name in workloads
+            )
+            if all_processed:
+                # If all properties have been processed, but there's still a demand in element_counts,
+                # adjust accordingly
+                for property_name in list(element_counts.keys()):
+                    if processed_items[property_name] >= total_items_per_property[property_name]:
+                        # Remove property from element_counts if all its items have been processed
+                        del element_counts[property_name]
+
+                # If element_counts becomes empty, stop iterating
+                if not element_counts:
+                    break
+                # Reset processed_items for properties still in element_counts
+                processed_items = {property_name: 0 for property_name in element_counts}
+                continue_iterating = True
+
     def iterate_single_threaded_overall_mixture(self) -> Iterator[str]:
         entry_combinations = []
+        seed_data = []
         for dataset_entries in self._result_index.values():
             for did, file_entries in dataset_entries.items():
                 for file_id, file_ranges in file_entries.items():
                     filename = self._file_path_dict[file_id]
                     entry_combinations.append((did, {filename: file_ranges}))
+                    seed_data.append(f"{did}-{file_id}-{filename}")
 
-        random.seed(generate_hash_string_from_list(entry_combinations))
+        random.seed(generate_hash_string_from_list(seed_data))
         random.shuffle(entry_combinations)
+
+        logger.error(f"Entry combinations: {entry_combinations}")
 
         for did, filename_dict in entry_combinations:
             yield from self._dataset_type_dict[did].read_ranges_from_files(
@@ -152,8 +184,11 @@ class ResultChunk:
             )
 
     def iterate_multi_threaded(self) -> Iterator[str]:
+        if not isinstance(self._mixture, Mixture):
+            raise ValueError("Mixture must be defined for parallel reading, this should not happen.")
+
         # Collect the workloads (i.e. did+fid+ranges) and group them by the property combination they belong to
-        workloads: dict[str, list[tuple[int, int | str, list]]] = self._prepare_workloads()
+        workloads: dict[str, list[tuple[int, int, list[tuple[int, int]]]]] = self._prepare_workloads()
 
         # Determine the number of readers to use s.t. readers are not overprovisioned
         reader_count = min(
@@ -175,6 +210,9 @@ class ResultChunk:
         yield from yield_source
 
     def _get_element_counts(self) -> dict[str, int]:
+        if not isinstance(self._mixture, Mixture):
+            raise ValueError("Mixture must be defined for parallel reading, this should not happen.")
+
         # Determine the per-property combination batch counts
         element_counts = {key: int(self._window_size * value) for key, value in self._mixture.mixture_in_rows().items()}
         element_counts[list(element_counts.keys())[0]] += self._window_size - sum(element_counts.values())
@@ -244,11 +282,11 @@ class ResultChunk:
 
     def _spin_up_readers(
         self,
-        workloads: dict[str, list[tuple[int, int | str, list]]],
+        workloads: dict[str, list[tuple[int, int, list]]],
         process_counts: dict[str, int],
     ) -> dict[str, list[tuple[mp.Queue, mp.Process]]]:
-        processes = {}
-        for key, process_count in process_counts.item():
+        processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = {}
+        for key, process_count in process_counts.items():
             processes[key] = []
 
             # Calculate per-process partition sizes
@@ -278,6 +316,8 @@ class ResultChunk:
                 # Start the process
                 processes[key][-1][1].start()
 
+        return processes
+
     @staticmethod
     def _reader_process(
         queue: mp.Queue,
@@ -298,8 +338,8 @@ class ResultChunk:
 
         queue.close()
 
-    def _prepare_workloads(self) -> dict[str, list[tuple[int, int | str, list]]]:
-        workloads: dict[str, list[tuple[int, int | str, list]]] = {}
+    def _prepare_workloads(self) -> dict[str, list[tuple[int, int, list[tuple[int, int]]]]]:
+        workloads: dict[str, list[tuple[int, int, list[tuple[int, int]]]]] = {}
         for property_combination, document_entries in self._result_index.items():
             if property_combination not in workloads:
                 workloads[property_combination] = []

@@ -71,7 +71,7 @@ class TestQueryE2E(unittest.TestCase):
         assert self.client.execute_query(query, mixture)
         res = list(iter(query.results))
         for x in res:
-            self.assertEqual(x, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
+            self.assertEqual(x._result_index, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
             break
 
     def test_union(self):
@@ -86,6 +86,8 @@ class TestQueryE2E(unittest.TestCase):
 
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
+
+        res = [r._result_index for r in res]
 
         self.assertCountEqual(
             res,
