@@ -96,7 +96,6 @@ trap cleanup EXIT
 echo "Starting Mixtera server"
 
 server_output=$(mktemp)
-
 mixtera-server --port 6666 $WORK_DIR &> "$server_output" &
 server_pid=$!
 

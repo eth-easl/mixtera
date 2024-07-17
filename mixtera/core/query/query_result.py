@@ -112,11 +112,6 @@ class QueryResult:
                                     interval_dict[intersection_range].values()[0], intersection_properties
                                 )
 
-        # TODO(DanGraur): Add option to parallelize: (1) find count of (prop, value, dset, file) tuples (2) divide these
-        #                 by the nr of threads/procs; give each proc one of these ranges (3) each proc produces
-        #                 dset, file -> list[(range, prop)] data structures (4) count nr of files; divide by proc count
-        #                 and disseminate to procs (5) each proc merges the props and intervals per files received.
-        #                 (6) merge into a single data structure. This process is a 2-stage map-reduce.
         return inverted_dictionary
 
     @staticmethod
@@ -162,9 +157,6 @@ class QueryResult:
                         # Add the interval to the chunk index based on the generated key
                         chunker_index[hashable_key][document_id][file_id].append([interval.lower, interval.upper])
 
-        # TODO(DanGraur): Add option to parallelize: (1) count number of files (2) disseminate to procs equally;
-        #                 each proc handles the list reduction and converts to a chunker index (3) chunker indexes are
-        #                 returned and merged by main proc
         return chunker_index
 
     @staticmethod
