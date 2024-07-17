@@ -180,7 +180,7 @@ class TestLocalStub(unittest.TestCase):
         job_id = "test_job_id"
         query = MagicMock(spec=Query)
         query.results = MagicMock(spec=QueryResult)
-        self.local_stub._training_query_map[job_id] = (ChunkDistributor(1, 1, 1, query.results), query, 100)
+        self.local_stub._training_query_map[job_id] = (ChunkDistributor(1, 1, 1, query.results, "test_job"), query, 100)
 
         result = self.local_stub._get_query_result(job_id)
         mock_wait_for_key.assert_called_once_with(self.local_stub._training_query_map, job_id, 60.0)

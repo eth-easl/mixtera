@@ -46,6 +46,46 @@ async def read_bytes(num_bytes: int, reader: asyncio.StreamReader, timeout: floa
     return buffer
 
 
+async def write_bytes_obj(
+    data: bytes | None, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True
+) -> None:
+    """
+    TODO
+    Args:
+        obj (Any): The object to write.
+        size_bytes (int): How many bytes the header should be.
+        writer (asyncio.StreamWriter): The stream writer which should write the data.
+        drain (bool): Whether to call writer.drain() afterwards. Defaults to True.
+    """
+    if data is None:
+        zero_len = 0
+        writer.write(zero_len.to_bytes(size_bytes, "big"))
+    else:
+        writer.write(len(data).to_bytes(size_bytes, "big"))
+        writer.write(data)
+
+    if drain:
+        await writer.drain()
+
+
+async def read_bytes_obj(size_bytes: int, reader: asyncio.StreamReader) -> bytes | None:
+    """
+    TODO
+    Args:
+        size_bytes (int): The size of the header in bytes.
+        reader (asyncio.StreamReader): The stream reader from which to read.
+    Returns:
+        Optional[str]: The read string. None, if error occurs.
+    Raises:
+        asyncio.TimeoutError: If the timeout is exceeded before `num_bytes` could be read.
+    """
+    if (obj_size := await read_int(size_bytes, reader)) is not None:
+        if obj_size == 0:
+            return None
+        return await read_bytes(obj_size, reader)
+    return None
+
+
 async def read_int(num_bytes: int, reader: asyncio.StreamReader, timeout: float = 10.0) -> Optional[int]:
     """
     Asynchronously read exactly `num_bytes` from `asyncio.StreamReader`, with a timeout, and parses this to an int.

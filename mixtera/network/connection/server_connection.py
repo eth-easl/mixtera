@@ -1,6 +1,7 @@
 import asyncio
 from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional, Type
 
+import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets.dataset_type import DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -8,6 +9,7 @@ from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
+    read_bytes_obj,
     read_int,
     read_pickeled_object,
     read_utf8_string,
@@ -221,8 +223,12 @@ class ServerConnection:
         await write_int(node_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
         await write_int(worker_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        # Get meta object
-        return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        # Get bytes
+        serialized_chunk = await read_bytes_obj(NUM_BYTES_FOR_SIZES, reader)
+        if serialized_chunk is not None:
+            serialized_chunk = dill.loads(serialized_chunk)
+
+        return serialized_chunk
 
     def _stream_result_chunks(
         self, job_id: str, dp_group_id: int, node_id: int, worker_id: int

@@ -96,9 +96,14 @@ class LocalStub(MixteraClient):
         )
 
     def _stream_result_chunks(
-        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+        self,
+        job_id: str,
+        dp_group_id: int,
+        node_id: int,
+        worker_id: int,
     ) -> Generator[ChunkerIndex, None, None]:
         yield from self._get_query_chunk_distributor(job_id)._stream_chunks_for_worker(dp_group_id, node_id, worker_id)
+        self._get_query_chunk_distributor(job_id).finalize_worker()
 
     def _get_result_metadata(
         self, job_id: str
@@ -115,7 +120,7 @@ class LocalStub(MixteraClient):
 
         with self._training_query_map_lock:
             self._training_query_map[query.job_id] = (
-                ChunkDistributor(dp_groups, nodes_per_group, num_workers, query.results),
+                ChunkDistributor(dp_groups, nodes_per_group, num_workers, query.results, query.job_id),
                 query,
                 mixture,
             )

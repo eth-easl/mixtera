@@ -14,3 +14,5 @@ dependencies:
   - dill
   - portion
   - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency
+  - pip:
+    - InterProcessPyObjects

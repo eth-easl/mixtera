@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
@@ -13,6 +14,10 @@ from mixtera.core.query import Mixture, Query
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
     from mixtera.core.client.server import ServerStub
+
+
+# Filter warnings from unused dependency module
+warnings.filterwarnings(action="ignore", module="cengal.code_flow_control.python_bytecode_manipulator")
 
 
 class MixteraClient(ABC):
