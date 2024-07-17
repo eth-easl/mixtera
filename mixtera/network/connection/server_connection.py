@@ -181,7 +181,6 @@ class ServerConnection:
         # Get meta object
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
-    # TODO(#35): Use some ResultChunk type
     async def _get_next_result(self, job_id: str) -> Optional["ResultChunk"]:
         """
         Asynchronously retrieves the next result chunk of a query from the server.

@@ -4,7 +4,6 @@ import time
 from queue import Empty
 from typing import Callable, Iterator, Optional, Type
 
-import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
@@ -335,11 +334,3 @@ class ResultChunk:
         except StopIteration:
             self._iterator = None
             raise
-
-    def __getstate__(self) -> dict:
-        state = self.__dict__.copy()
-        pickled_state = dill.dumps(state)
-        return {"pickled_state": pickled_state}
-
-    def __setstate__(self, state: dict) -> None:
-        self.__dict__ = dill.loads(state["pickled_state"])
