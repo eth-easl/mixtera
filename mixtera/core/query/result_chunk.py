@@ -5,7 +5,6 @@ from queue import Empty
 from typing import Callable, Iterator, Optional, Type
 
 import dill
-
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
@@ -67,17 +66,23 @@ class ResultChunk:
     def _infer_mixture(self) -> Mixture:
         total_count = 0
         partition_masses: dict[str, int | float] = {}
+
+        def calculate_partition_mass(partition: dict[int, dict[int, list[tuple[int, int]]]]) -> int:
+            mass = sum(
+                end - start
+                for file_entry in partition.values()
+                for ranges in file_entry.values()
+                for start, end in ranges
+            )
+            return mass
+
         for property_combination, partition_entry in self._result_index.items():
-            count = 0
-            for document_entry in partition_entry.values():
-                for ranges in document_entry.values():
-                    for base_range in ranges:
-                        count += base_range[1] - base_range[0]
-            partition_masses[property_combination] = count
-            total_count += count
+            partition_mass = calculate_partition_mass(partition_entry)
+            partition_masses[property_combination] = partition_mass
+            total_count += partition_mass
 
         for key in partition_masses:
-            partition_masses[key] = partition_masses[key] / total_count
+            partition_masses[key] /= total_count
 
         return StaticMixture(total_count, partition_masses)
 
@@ -140,14 +145,17 @@ class ResultChunk:
             property_name: self._get_iterator_for_workload(workload) for property_name, workload in workloads.items()
         }
         active_iterators = list(iterators.items())
+        active_iterators.sort(key=lambda x: x[0])
+
+        random.seed(generate_hash_string_from_list([x[0] for x in active_iterators]))
+        random.shuffle(active_iterators)
 
         while active_iterators:
-            property_name, iterator = random.choice(active_iterators)
-
-            try:
-                yield next(iterator)
-            except StopIteration:
-                active_iterators.remove((property_name, iterator))
+            for property_name, iterator in active_iterators:
+                try:
+                    yield next(iterator)
+                except StopIteration:
+                    active_iterators.remove((property_name, iterator))
 
     def _iterate_multi_threaded(self) -> Iterator[str]:
         if not isinstance(self._mixture, Mixture):
@@ -242,8 +250,9 @@ class ResultChunk:
         paired_results.sort(key=lambda x: x[0])
         results = [x[1] for x in paired_results]
 
-        random.seed(generate_hash_string_from_list(results))
+        random.seed(generate_hash_string_from_list([x[0] for x in paired_results]))
         random.shuffle(results)
+
         yield from results
 
     def _spin_up_readers(
@@ -331,6 +340,6 @@ class ResultChunk:
         state = self.__dict__.copy()
         pickled_state = dill.dumps(state)
         return {"pickled_state": pickled_state}
-    
+
     def __setstate__(self, state: dict) -> None:
         self.__dict__ = dill.loads(state["pickled_state"])
