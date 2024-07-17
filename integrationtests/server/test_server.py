@@ -33,13 +33,13 @@ def parsing_func(sample):
     return json.loads(sample)["text"]
 
 
-def test_filter_javascript(client: ServerStub, mixture: Mixture, tunnel: bool):
+def test_filter_javascript(client: ServerStub, mixture: Mixture, **args: Any):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     assert client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, **args):
         result_samples.append(sample)
 
     assert (
@@ -49,13 +49,13 @@ def test_filter_javascript(client: ServerStub, mixture: Mixture, tunnel: bool):
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
-def test_filter_html(client: ServerStub, mixture: Mixture, tunnel: bool):
+def test_filter_html(client: ServerStub, mixture: Mixture, **args: Any):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     assert client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, **args):
         result_samples.append(sample)
 
     assert (
@@ -65,7 +65,7 @@ def test_filter_html(client: ServerStub, mixture: Mixture, tunnel: bool):
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
-def test_filter_both(client: ServerStub, mixture: Mixture, tunnel: bool):
+def test_filter_both(client: ServerStub, mixture: Mixture, **args: Any):
     job_id = get_job_id()
     query = (
         Query.for_job(job_id)
@@ -75,7 +75,7 @@ def test_filter_both(client: ServerStub, mixture: Mixture, tunnel: bool):
     assert client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, **args):
         result_samples.append(sample)
 
     assert (
@@ -85,13 +85,13 @@ def test_filter_both(client: ServerStub, mixture: Mixture, tunnel: bool):
         assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
-def test_filter_license(client: ServerStub, mixture: Mixture, tunnel: bool):
+def test_filter_license(client: ServerStub, mixture: Mixture, **args: Any):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     assert client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, **args):
         result_samples.append(sample)
 
     assert (
@@ -101,16 +101,14 @@ def test_filter_license(client: ServerStub, mixture: Mixture, tunnel: bool):
         assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
-def test_filter_unknown_license(client: ServerStub, mixture: Mixture, tunnel: bool):
+def test_filter_unknown_license(client: ServerStub, mixture: Mixture, **args: Any):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     assert client.execute_query(query, mixture)
-    assert (
-        len(list(client.stream_results(job_id, tunnel_via_server=tunnel))) == 0
-    ), "Got results back for expected empty results."
+    assert len(list(client.stream_results(job_id, **args))) == 0, "Got results back for expected empty results."
 
 
-def test_filter_license_and_html(client: ServerStub, mixture: Mixture, tunnel: bool):
+def test_filter_license_and_html(client: ServerStub, mixture: Mixture, **args: Any):
     # TODO(#41): This test currently tests unexpected behavior - we want to deduplicate!
     job_id = get_job_id()
     query = (
@@ -121,7 +119,7 @@ def test_filter_license_and_html(client: ServerStub, mixture: Mixture, tunnel: b
     assert client.execute_query(query, mixture)
     result_samples = []
 
-    for sample in client.stream_results(job_id, tunnel_via_server=tunnel):
+    for sample in client.stream_results(job_id, **args):
         result_samples.append(sample)
 
     assert (
@@ -158,9 +156,26 @@ def test_server(server_dir: Path) -> None:
 
     test_check_dataset_exists(client)
 
-    for chunk_size in [1, 3, 250, 500, 750, 1000, 2000]:
-        for tunnel in [False, True]:
-            test_rdc_chunksize_tunnel(client, ArbitraryMixture(chunk_size), tunnel)
+    degrees_of_parallelisms = [1, 4]
+    per_window_mixtures = [False, True]
+    window_sizes = [128, 256]
+
+    for chunk_size in [100, 500, 1000]:
+        for degree_of_parallelism in degrees_of_parallelisms:
+            for per_window_mixture in per_window_mixtures:
+                for window_size in window_sizes:
+                    for tunnel in [False, True]:
+                        args = {
+                            "tunnel_via_server": tunnel,
+                            "degree_of_parallelism": degree_of_parallelism,
+                            "per_window_mixture": per_window_mixture,
+                            "window_size": window_size,
+                        }
+                        test_rdc_chunksize_tunnel(
+                            client,
+                            ArbitraryMixture(chunk_size),
+                            **args,
+                        )
 
     test_list_datasets(client)
     test_add_property(client)
@@ -169,13 +184,17 @@ def test_server(server_dir: Path) -> None:
     print("Successfully ran server tests!")
 
 
-def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, tunnel: bool):
-    test_filter_javascript(client, mixture, tunnel)
-    test_filter_html(client, mixture, tunnel)
-    test_filter_both(client, mixture, tunnel)
-    test_filter_license(client, mixture, tunnel)
-    test_filter_unknown_license(client, mixture, tunnel)
-    test_filter_license_and_html(client, mixture, tunnel)
+def test_rdc_chunksize_tunnel(
+    client: ServerStub,
+    mixture: Mixture,
+    **args: Any,
+):
+    test_filter_javascript(client, mixture, **args)
+    test_filter_html(client, mixture, **args)
+    test_filter_both(client, mixture, **args)
+    test_filter_license(client, mixture, **args)
+    test_filter_unknown_license(client, mixture, **args)
+    test_filter_license_and_html(client, mixture, **args)
 
 
 def main() -> None:

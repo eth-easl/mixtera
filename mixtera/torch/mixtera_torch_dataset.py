@@ -34,4 +34,4 @@ class MixteraTorchDataset(IterableDataset):
         raise NotImplementedError("This is just overwritten to satify pylint.")
 
     def __iter__(self) -> Generator[str, None, None]:
-        yield from self._client.stream_results(self._training_id, self._tunnel_via_server)
+        yield from self._client.stream_results(self._training_id, tunnel_via_server=self._tunnel_via_server)

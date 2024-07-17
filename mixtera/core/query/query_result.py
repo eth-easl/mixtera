@@ -356,9 +356,6 @@ class QueryResult:
         state = self.__dict__.copy()
         meta_pickled = dill.dumps(state["_meta"])
         del state["_meta"]
-        # Also, we cannot pickle the manager, but also don't need it in the subclasses.
-        if "_manager" in state:
-            del state["_manager"]
 
         # Return a dictionary with the pickled attribute and other picklable attributes
         return {"other": state, "meta_pickled": meta_pickled}

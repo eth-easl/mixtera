@@ -38,7 +38,7 @@ def get_job_id() -> str:
 
 
 def setup_test_dataset(
-    dir: Path, total_instance_count: 1000, file_count: int = 10, fraction_multiplier: int = 2
+    dir: Path, total_instance_count: int = 1000, file_count: int = 10, fraction_multiplier: int = 2
 ) -> None:
     print(f"Prepping directory {dir}.")
     write_jsonl(dir, file_count, total_instance_count // file_count, fraction_multiplier)

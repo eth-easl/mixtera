@@ -9,6 +9,10 @@ from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
 from mixtera.torch import MixteraTorchDataset
 
+TEST_PYTORCH_INSTANCE_COUNT = 1000
+TEST_PYTORCH_FILE_COUNT = 5
+TEST_PYTORCH_FRACTION_MULTIPLIER = 2
+
 
 def sample_parsing_func(sample):
     import json
@@ -119,7 +123,12 @@ def test_torchds(client: MixteraClient, mixture: Mixture, num_workers: int, batc
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
-    setup_test_dataset(local_dir)
+    setup_test_dataset(
+        local_dir,
+        total_instance_count=TEST_PYTORCH_INSTANCE_COUNT,
+        file_count=TEST_PYTORCH_FILE_COUNT,
+        fraction_multiplier=TEST_PYTORCH_FRACTION_MULTIPLIER,
+    )
 
     # local tests
     local_client = MixteraClient.from_directory(local_dir)
@@ -142,12 +151,17 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
                     raise e
 
     # server tests (smaller matrix)
-    server_file = setup_test_dataset(server_dir)
+    setup_test_dataset(
+        server_dir,
+        total_instance_count=TEST_PYTORCH_INSTANCE_COUNT,
+        file_count=TEST_PYTORCH_FILE_COUNT,
+        fraction_multiplier=TEST_PYTORCH_FRACTION_MULTIPLIER,
+    )
     server_client = MixteraClient("127.0.0.1", 6666)
 
     assert server_client.register_metadata_parser("TEST_PARSER_TORCH", TestMetadataParser)
     assert server_client.register_dataset(
-        "ldc_torch_integrationtest_dataset", server_file, JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
+        "ldc_torch_integrationtest_dataset", server_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
     )
 
     assert server_client.check_dataset_exists("ldc_torch_integrationtest_dataset"), "Dataset does not exist!"

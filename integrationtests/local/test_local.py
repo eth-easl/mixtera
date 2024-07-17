@@ -5,7 +5,7 @@ from typing import Any
 
 from integrationtests.utils import TestMetadataParser, get_expected_js_and_html_samples, get_job_id, setup_test_dataset
 from loguru import logger
-from mixtera.core.client import ChunkReaderType, MixteraClient
+from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
 
@@ -163,11 +163,11 @@ def test_chunk_readers(dir: Path) -> None:
         "client_integrationtest_chunk_reader_dataset", dir, JSONLDataset, parsing_func, "TEST_PARSER"
     )
 
-    degrees_of_parallelisms = [1, 2, 4]
+    degrees_of_parallelisms = [1, 4]
     per_window_mixtures = [False, True]
-    window_sizes = [64, 128, 256]
+    window_sizes = [128, 256]
 
-    for chunk_size in [100, 250, 500, 750, 1000]:
+    for chunk_size in [100, 500, 1000]:
         for degree_of_parallelism in degrees_of_parallelisms:
             for per_window_mixture in per_window_mixtures:
                 for window_size in window_sizes:

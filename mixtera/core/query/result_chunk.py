@@ -36,6 +36,8 @@ class ResultChunk:
         self._per_window_mixture: bool = False
         self._window_size: int = 128
 
+        self._iterator: Optional[Iterator[str]] = None
+
     def configure_result_streaming(
         self,
         server_connection: ServerConnection,
@@ -54,7 +56,10 @@ class ResultChunk:
             )
             self._window_size = 128
 
-        if (self._per_window_mixture or self._degree_of_parallelism) and self._mixture is None:
+        if (self._per_window_mixture or self._degree_of_parallelism > 1) and (
+            self._mixture is None or len(self._mixture) == 0
+        ):
+            logger.info("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
     def _infer_mixture(self) -> Mixture:
@@ -74,13 +79,7 @@ class ResultChunk:
 
         return StaticMixture(total_count, partition_masses)
 
-    def __iter__(self) -> "ResultChunk":
-        return self
-
-    def __next__(self) -> Iterator[str]:
-        yield from self.iterate_result_chunks()
-
-    def iterate_result_chunks(self) -> Iterator[str]:
+    def _iterate_result_chunks(self) -> Iterator[str]:
         if self._degree_of_parallelism < 1:
             logger.warning(
                 f"Degree of parallelism is set to {self._degree_of_parallelism} which is invalid. "
@@ -88,102 +87,67 @@ class ResultChunk:
             )
             self._degree_of_parallelism = 1
         if self._degree_of_parallelism == 1:
-            yield_source = self.iterate_single_threaded()
+            yield_source = self._iterate_single_threaded()
         else:
-            yield_source = self.iterate_multi_threaded()
+            yield_source = self._iterate_multi_threaded()
         yield from yield_source
 
-    def iterate_single_threaded(self) -> Iterator[str]:
+    def _iterate_single_threaded(self) -> Iterator[str]:
         if self._per_window_mixture:
-            yield_source = self.iterate_single_threaded_window_mixture()
+            yield_source = self._iterate_single_threaded_window_mixture()
         else:
-            yield_source = self.iterate_single_threaded_overall_mixture()
+            yield_source = self._iterate_single_threaded_overall_mixture()
         yield from yield_source
 
-    def iterate_single_threaded_window_mixture(self) -> Iterator[str]:
+    def _iterate_single_threaded_window_mixture(self) -> Iterator[str]:
         element_counts = self._get_element_counts()
         workloads: dict[str, list[tuple[int, int, list[tuple[int, int]]]]] = self._prepare_workloads()
 
-        total_items_per_property = {
-            property_name: sum(range[1] - range[0] for _, _, ranges in property_workload for range in ranges)
+        current_iterators = {
+            property_name: iter(self._get_iterator_for_workload(property_workload))
             for property_name, property_workload in workloads.items()
         }
 
         processed_items = {property_name: 0 for property_name in workloads}
-        current_iterators = {property_name: None for property_name in workloads}
 
-        continue_iterating = True
-        while continue_iterating:  # pylint: disable=too-many-nested-blocks
-            continue_iterating = False
+        while current_iterators:
             for property_name, property_count in element_counts.items():
-                items_yielded = 0
-                for index, (document_id, file_id, ranges) in enumerate(workloads[property_name]):
-                    if index < processed_items[property_name]:
-                        continue
-
-                    if items_yielded >= property_count:
+                for _ in range(property_count):
+                    if property_name not in current_iterators:
                         break
-
-                    if not current_iterators[property_name]:
-                        filename_dict = {self._file_path_dict[file_id]: ranges}
-                        current_iterators[property_name] = self._dataset_type_dict[document_id].read_ranges_from_files(
-                            filename_dict, self._parsing_func_dict[document_id], self._server_connection
-                        )
-
                     try:
                         instance = next(current_iterators[property_name])
-                    except StopIteration:
-                        current_iterators[property_name] = None  # Exhausted, allow moving to next workload
-                        continue
-                    else:
                         yield instance
-                        items_yielded += 1
                         processed_items[property_name] += 1
-                        continue_iterating = True
+                    except StopIteration:
+                        # If no more workloads, this property is done
+                        del current_iterators[property_name]
+                        continue
 
-                    if items_yielded == property_count:
-                        break
-
-            # Check if all properties have been processed and adjust element_counts if necessary
-            all_processed = all(
-                processed_items[property_name] >= total_items_per_property[property_name] for property_name in workloads
-            )
-            if all_processed:
-                # If all properties have been processed, but there's still a demand in element_counts,
-                # adjust accordingly
-                for property_name in list(element_counts.keys()):
-                    if processed_items[property_name] >= total_items_per_property[property_name]:
-                        # Remove property from element_counts if all its items have been processed
-                        del element_counts[property_name]
-
-                # If element_counts becomes empty, stop iterating
-                if not element_counts:
-                    break
-                # Reset processed_items for properties still in element_counts
-                processed_items = {property_name: 0 for property_name in element_counts}
-                continue_iterating = True
-
-    def iterate_single_threaded_overall_mixture(self) -> Iterator[str]:
-        entry_combinations = []
-        seed_data = []
-        for dataset_entries in self._result_index.values():
-            for did, file_entries in dataset_entries.items():
-                for file_id, file_ranges in file_entries.items():
-                    filename = self._file_path_dict[file_id]
-                    entry_combinations.append((did, {filename: file_ranges}))
-                    seed_data.append(f"{did}-{file_id}-{filename}")
-
-        random.seed(generate_hash_string_from_list(seed_data))
-        random.shuffle(entry_combinations)
-
-        logger.error(f"Entry combinations: {entry_combinations}")
-
-        for did, filename_dict in entry_combinations:
-            yield from self._dataset_type_dict[did].read_ranges_from_files(
-                filename_dict, self._parsing_func_dict[did], self._server_connection
+    def _get_iterator_for_workload(self, workload: list[tuple[int, int, list]]) -> Iterator[str]:
+        for document_id, file_id, ranges in workload:
+            filename_dict = {self._file_path_dict[file_id]: ranges}
+            yield from self._dataset_type_dict[document_id].read_ranges_from_files(
+                filename_dict, self._parsing_func_dict[document_id], self._server_connection
             )
 
-    def iterate_multi_threaded(self) -> Iterator[str]:
+    def _iterate_single_threaded_overall_mixture(self) -> Iterator[str]:
+        workloads: dict[str, list[tuple[int, int, list[tuple[int, int]]]]] = self._prepare_workloads()
+
+        iterators = {
+            property_name: self._get_iterator_for_workload(workload) for property_name, workload in workloads.items()
+        }
+        active_iterators = list(iterators.items())
+
+        while active_iterators:
+            property_name, iterator = random.choice(active_iterators)
+
+            try:
+                yield next(iterator)
+            except StopIteration:
+                active_iterators.remove((property_name, iterator))
+
+    def _iterate_multi_threaded(self) -> Iterator[str]:
         if not isinstance(self._mixture, Mixture):
             raise ValueError("Mixture must be defined for parallel reading, this should not happen.")
 
@@ -347,3 +311,16 @@ class ResultChunk:
                 for file_id, ranges in file_entries.items():
                     workloads[property_combination].append((document_id, file_id, ranges))
         return workloads
+
+    def __iter__(self) -> "ResultChunk":
+        self._iterator = self._iterate_result_chunks()
+        return self
+
+    def __next__(self) -> Iterator[str]:
+        if self._iterator is None:
+            raise StopIteration
+        try:
+            return next(self._iterator)  # type: ignore  # MyPy seems to expect SupportsNext[Iterator[str]] here
+        except StopIteration:
+            self._iterator = None
+            raise
