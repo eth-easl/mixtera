@@ -91,7 +91,7 @@ class ChunkDistributor:
 
         # Initialize shared memory
         self._shared_memory: SharedMemory | None = None
-        _shared_memory = SharedMemory(self._memory_id, create=True, size=1024 * 1024 * 1024)  # Adjust size as needed
+        _shared_memory = SharedMemory(self._memory_id, create=True, size=100 * 1024 * 1024)  # Adjust size as needed
         _shared_memory._create = False  # We will clean up with the last worker that is done
 
         with wait_my_turn(_shared_memory):
