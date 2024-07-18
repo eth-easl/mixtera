@@ -1,5 +1,5 @@
 import tempfile
-import time
+import multiprocessing as mp
 from pathlib import Path
 
 from integrationtests.utils import TestMetadataParser, write_jsonl
@@ -122,6 +122,7 @@ def test_client(dir: Path) -> None:
 
 
 def main() -> None:
+    print(f"Running tests with {mp.get_start_method()} start method.")
     with tempfile.TemporaryDirectory() as directory:
         test_client(Path(directory))
 
