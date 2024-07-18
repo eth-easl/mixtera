@@ -105,6 +105,7 @@ class ChunkDistributor:
         self._global_cleanedup = mp.Value("B", False)  # tracks whether we are globally cleaned up.
         self._expected_finalizations = self._dp_groups * self._nodes_per_group * self._num_workers
         self._memory_id = f"{CHUNK_DISTRIBUTOR_SM_NAME}_{job_id}"
+        self._pre_fork_pid = os.getpid()
 
         with self._global_cleanedup.get_lock():
             # In case _global_cleanedup is True, then we've already gone through the QueryResult
@@ -163,7 +164,7 @@ class ChunkDistributor:
         self._cleanedup = True  # Right now, we don't have any open shared_memory, so we're clean.
         # Setting this is important, otherwise if we have 1+ workers that terminate sucessfully, the
         # main process will not be marked as clean, throwing in __del__
-        logger.debug("[{os.getpid()}/{threading.get_native_id()}] Constructor done")
+        logger.debug(f"[{os.getpid()}/{threading.get_native_id()}] Constructor done")
 
     def next_chunk_for(
         self, dp_group: int, node_id: int, worker_id: int, deserialize: bool
@@ -201,6 +202,10 @@ class ChunkDistributor:
 
                 chunk_to_return: ChunkerIndex | SerializedChunkerIndex
                 if next_chunk_id not in self._chunk_cache[dp_group]:
+                    # Potentially useful debug log
+                    # logger.debug(f"Fetching chunk {next_chunk_id} for dp_group {dp_group} /
+                    # node {node_id} requested by worker {worker_id} from QueryResult.")
+
                     # Fetch new chunk from query result and put into cache
                     chunk_to_return = next(self._query_result)
                     serialized_chunk = dill.dumps(chunk_to_return)
@@ -210,6 +215,9 @@ class ChunkDistributor:
                     if not deserialize:
                         chunk_to_return = serialized_chunk
                 else:
+                    # Potentially useful debug log
+                    # logger.debug(f"Fetching chunk {next_chunk_id} for dp_group {dp_group} /
+                    # node {node_id} requested by worker {worker_id} from cache.")
                     # Load from cache
                     chunk_to_return = self._chunk_cache[dp_group][next_chunk_id]  # always serialized in cache
                     if deserialize:
@@ -220,6 +228,7 @@ class ChunkDistributor:
 
                 # Check if all nodes have seen this chunk
                 if self._chunk_usage[dp_group][next_chunk_id] >= self._nodes_per_group:
+                    logger.debug(f"Purging chunk {next_chunk_id} for dp_group {dp_group} from cache.")
                     del self._chunk_cache[dp_group][next_chunk_id]
                     del self._chunk_usage[dp_group][next_chunk_id]
 
@@ -263,6 +272,8 @@ class ChunkDistributor:
         the finalized workers counter and triggers the cleanup process if all
         workers have been finalized.
         """
+        do_cleanup = True
+
         with self._finalized_workers.get_lock():
             self._finalized_workers.get_obj().value += 1
             logger.debug(
@@ -275,7 +286,7 @@ class ChunkDistributor:
                 assert self._shared_memory is not None
                 self._shared_memory._create = True
                 self._shared_memory._creator_destroy_timeout = (
-                    500.0001  # we're the last worker, no need to wait for any consumer
+                    0.0001  # we're the last worker, no need to wait for any consumer
                 )
                 with self._global_cleanedup.get_lock():
                     self._global_cleanedup.get_obj().value = True
@@ -285,7 +296,15 @@ class ChunkDistributor:
                 assert self._shared_memory is not None
                 self._shared_memory._create = False
 
-            self.cleanup()
+                # If we're not the last worker AND we have not forked at all, we're using server mode
+                # Local with 1+ workers would work
+                # Local with 0 worker wouldn't fork but only finalizes once
+                # In that case, do not clean up yet!
+                if os.getpid() == self._pre_fork_pid:
+                    do_cleanup = False
+
+            if do_cleanup:
+                self.cleanup()
 
     def cleanup(self) -> None:
         """
@@ -300,8 +319,9 @@ class ChunkDistributor:
 
             if self._shared_memory is not None:
                 self._shared_memory.proper_close()
+                del self._shared_memory
+                self._shared_memory = None
 
-            del self._shared_memory
             if hasattr(self, "_chunk_cache"):
                 del self._chunk_cache
             if hasattr(self, "_chunk_usage"):
@@ -369,6 +389,8 @@ class ChunkDistributor:
             state (dict): The pickled state of the instance
         """
         self.__dict__ = state
+        self._shared_memory = None
+
         with self._global_cleanedup.get_lock():
             if not self._global_cleanedup.get_obj().value:
                 self._prep_shared_memory()

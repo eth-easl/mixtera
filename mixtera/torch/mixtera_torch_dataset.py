@@ -13,11 +13,11 @@ class MixteraTorchDataset(IterableDataset):
         query: Query,
         job_id: str,
         mixture: Mixture,
-        dp_group_id: int = 0,
         dp_groups: int = 1,
+        dp_group_id: int = 0,
         nodes_per_group: int = 1,
-        num_workers: int = 1,
         node_id: int = 0,
+        num_workers: int = 1,
         tunnel_via_server: bool = False,
     ):
         # TODO(#63): This needs to be passed information on transformation, e.g., tokenization functions etc.
@@ -31,8 +31,11 @@ class MixteraTorchDataset(IterableDataset):
         self._tunnel_via_server = tunnel_via_server
         self._num_workers = num_workers if num_workers > 0 else 1
 
-        if self._node_id == 0:
-            logger.info("Since this is node 0, executing query!")
+        assert self._dp_group_id < dp_groups
+        assert self._node_id < nodes_per_group
+
+        if self._node_id == 0 and self._dp_group_id == 0:
+            logger.info("Since this is node 0 in data parallel group 0, executing query!")
             # Execute query on primary node pre-fork, to share the results among all forked workers
             self._client.execute_query(query, self._mixture, dp_groups, nodes_per_group, num_workers)
 
