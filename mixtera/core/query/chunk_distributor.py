@@ -1,6 +1,7 @@
 import hashlib
 import multiprocessing as mp
 import os
+import subprocess
 import threading
 import warnings
 from functools import cached_property
@@ -57,6 +58,16 @@ SerializedChunkerIndex = bytes
 warnings.filterwarnings(action="ignore", module="cengal.code_flow_control.python_bytecode_manipulator")
 
 
+def list_shared_memory() -> str:
+    try:
+        # Run the 'ipcs' command to list shared memory segments
+        result = subprocess.run(["ipcs", "-m"], capture_output=True, text=True, check=True)
+        # Print the output of the command
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        return f"Failed to run command: {e}"
+
+
 class ChunkDistributor:
     def __init__(
         self, dp_groups: int, nodes_per_group: int, num_workers: int, query_result: QueryResult, job_id: str
@@ -65,6 +76,7 @@ class ChunkDistributor:
         if dp_groups < 1:
             raise ValueError(f"dp_groups = {dp_groups} < 1")
         logger.debug(f"Instantiating ChunkDistributor for job {job_id}")
+        logger.error(list_shared_memory())
         self._dp_groups = dp_groups
         self._num_workers = num_workers if num_workers > 0 else 1  # num_workers 0 => interpreted as 1 worker
         self._nodes_per_group = nodes_per_group
