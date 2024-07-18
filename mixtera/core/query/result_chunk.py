@@ -117,7 +117,7 @@ class ResultChunk:
         processed_items = {property_name: 0 for property_name in workloads}
 
         while current_iterators:
-            for property_name, property_count in element_counts.items():
+            for property_name, property_count in element_counts:
                 for _ in range(property_count):
                     if property_name not in current_iterators:
                         break
@@ -182,14 +182,26 @@ class ResultChunk:
             yield_source = self._iterate_multi_threaded_overall_mixture(processes)
         yield from yield_source
 
-    def _get_element_counts(self) -> dict[str, int]:
+    def _get_element_counts(self) -> list[tuple[str, int]]:
         if not isinstance(self._mixture, Mixture):
             raise ValueError("Mixture must be defined for parallel reading, this should not happen.")
 
         # Determine the per-property combination batch counts
-        element_counts = {key: int(self._window_size * value) for key, value in self._mixture.mixture_in_rows().items()}
-        element_counts[list(element_counts.keys())[0]] += self._window_size - sum(element_counts.values())
-        return element_counts
+        initial_counts = [
+            (key, int(self._window_size * value)) for key, value in self._mixture.mixture_in_rows().items()
+        ]
+        total_counts = sum(count for _, count in initial_counts)
+        remainder = self._window_size - total_counts
+
+        #  Adjust the counts to ensure that the window size is met
+        adjusted_counts = [
+            (key, count + remainder if i == 0 else count) for i, (key, count) in enumerate(initial_counts)
+        ]
+
+        # Sort the counts by the property combination to ensure reproducibility
+        adjusted_counts.sort(key=lambda x: x[0])
+
+        return adjusted_counts
 
     def _iterate_multi_threaded_window_mixture(
         self,
@@ -200,7 +212,7 @@ class ResultChunk:
         continue_iterating = True
         while continue_iterating:  # pylint: disable=too-many-nested-blocks
             continue_iterating = False
-            for property_name, property_count in element_counts.items():
+            for property_name, property_count in element_counts:
                 for _ in range(property_count):
                     yielded = False
                     retries = RETRY_COUNT

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
-from mixtera.core.query import ResultChunk, StaticMixture
+from mixtera.core.query import Mixture, ResultChunk, StaticMixture
 
 
 class TestResultChunk(unittest.TestCase):
@@ -98,7 +98,7 @@ class TestResultChunk(unittest.TestCase):
         self.assertEqual(result_chunk._degree_of_parallelism, 1)
 
     def test_iterate_single_threaded_window_mixture(self):
-        mock_element_counts = {"property1": 2, "property2": 1}
+        mock_element_counts = [("property1", 2), ("property2", 1)]
         mock_workloads = {"property1": [(1, 1, [(0, 2)]), (1, 2, [(4, 5)])], "property2": [(2, 1, [(10, 11)])]}
         mock_file_path_dict = {1: "file1", 2: "file2"}
         mock_dataset_type_dict = {1: MagicMock(), 2: MagicMock()}
@@ -135,7 +135,7 @@ class TestResultChunk(unittest.TestCase):
         )
 
     def test_iterate_single_threaded_window_mixture_complex(self):
-        mock_element_counts = {"property1": 3, "property2": 2, "property3": 1}
+        mock_element_counts = [("property1", 3), ("property2", 2), ("property3", 1)]
         mock_workloads = {
             "property1": [(1, 1, [(0, 2)]), (1, 2, [(4, 6)]), (1, 3, [(8, 9)])],
             "property2": [(2, 1, [(10, 12)]), (2, 2, [(14, 15)])],
@@ -241,6 +241,34 @@ class TestResultChunk(unittest.TestCase):
         mock_dataset_type_dict[2].read_ranges_from_files.assert_called_once_with(
             {"file1": [(7, 8)]}, mock_parsing_func_dict[2], mock_server_connection
         )
+
+    def test_get_element_counts(self):
+        # Mocking the Mixture class and its method mixture_in_rows
+        mock_mixture = MagicMock(spec=Mixture)
+        mock_mixture.mixture_in_rows.return_value = {"property1": 0.5, "property2": 0.3, "property3": 0.2}
+        mock_dataset_type_dict = {1: MagicMock(), 2: MagicMock()}
+        mock_parsing_func_dict = {1: MagicMock(return_value="parsed1"), 2: MagicMock(return_value="parsed2")}
+        mock_file_path_dict = {1: "file1", 2: "file2"}
+
+        # Creating an instance of the class that contains the method to be tested
+        result_chunk = ResultChunk(
+            MagicMock(), mock_dataset_type_dict, mock_file_path_dict, mock_parsing_func_dict, MagicMock()
+        )
+        result_chunk._mixture = mock_mixture
+        result_chunk._window_size = 10  # Assuming a window size of 10 for this test
+
+        # Expected result calculation explanation:
+        # property1: 0.5 * 10 = 5
+        # property2: 0.3 * 10 = 3
+        # property3: 0.2 * 10 = 2
+        # Total = 10, so no need to adjust the first property
+        expected_element_counts = [("property1", 5), ("property2", 3), ("property3", 2)]
+
+        # Executing the method under test
+        element_counts = result_chunk._get_element_counts()
+
+        # Asserting that the method returns the expected result
+        self.assertEqual(element_counts, expected_element_counts)
 
 
 if __name__ == "__main__":
