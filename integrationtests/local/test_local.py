@@ -1,3 +1,4 @@
+import multiprocessing as mp
 import tempfile
 import time
 from pathlib import Path
@@ -122,6 +123,7 @@ def test_client(dir: Path) -> None:
 
 
 def main() -> None:
+    print(f"Running tests with {mp.get_start_method()} start method.")
     with tempfile.TemporaryDirectory() as directory:
         test_client(Path(directory))
 
