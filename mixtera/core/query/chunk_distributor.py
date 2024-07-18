@@ -111,6 +111,8 @@ class ChunkDistributor:
                     for worker_id in range(self._num_workers):
                         self._next_chunk[dp_group][node][worker_id] = worker_id
 
+        _shared_memory.close_consumer()
+
     @cached_property
     def max_shm_len(self) -> int:
         base_name = "/a"
