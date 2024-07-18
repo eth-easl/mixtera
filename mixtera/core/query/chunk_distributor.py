@@ -226,14 +226,16 @@ class ChunkDistributor:
                     chunk_to_return = self._chunk_cache[dp_group][next_chunk_id]  # always serialized in cache
                     if deserialize:
                         chunk_to_return = dill.loads(chunk_to_return)
-                    assert next_chunk_id in self._chunk_usage[dp_group], (
-                        f"[{os.getpid()}/{threading.get_native_id()}] Chunk {next_chunk_id} is in cache"
-                        + f", but not in usage!\n{self._chunk_usage[dp_group]}"
-                        + f"\n{self._chunk_cache[dp_group].keys()}\n\n"
-                    )
+
+                assert next_chunk_id in self._chunk_usage[dp_group], (
+                    f"[{os.getpid()}/{threading.get_native_id()}] Chunk {next_chunk_id} is in cache"
+                    + f", but not in usage!\n{self._chunk_usage[dp_group]}"
+                    + f"\n{self._chunk_cache[dp_group].keys()}\n\n"
+                )
 
                 # Increment usage count for this chunk
-                self._chunk_usage[dp_group][next_chunk_id] += 1
+                old_usage = self._chunk_usage[dp_group][next_chunk_id]
+                self._chunk_usage[dp_group][next_chunk_id] = old_usage + 1
 
                 # Check if all nodes have seen this chunk
                 if self._chunk_usage[dp_group][next_chunk_id] >= self._nodes_per_group:
