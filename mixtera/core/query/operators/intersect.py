@@ -1,8 +1,7 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from loguru import logger
-import portion as P
 from mixtera.core.query.query_plan import QueryPlan
+from mixtera.utils import intervals_to_ranges, ranges_to_intervals
 
 from ._base import Operator
 
@@ -26,46 +25,51 @@ class Intersection(Operator):
         assert len(self.children) == 2, f"Intersection operator must have 2 children, got {len(self.children)}"
 
         if self.children[0].results and self.children[1].results:
-            self.results = {}
-            for feature, datasets in self.children[0].results.items():
-                if feature in self.children[1].results:
-                    self.results[feature] = {}
-                    for dataset_id, file_entries in datasets.items():
-                        if dataset_id in self.children[1].results[feature]:
-                            self.results[feature][dataset_id] = {}
-                            for file_id, data in file_entries.items():
-                                if file_id in self.children[1].results[feature][dataset_id]:
-                                    data1 = data
-                                    data2 = self.children[1].results[feature][dataset_id][file_id]
+            self.results = {
+                property_key: {
+                    feature: {
+                        dataset_id: {
+                            file_id: self._intersect_index_data(
+                                data, self.children[1].results[property_key][feature][dataset_id][file_id]
+                            )
+                            for file_id, data in file_entries.items()
+                            if file_id in self.children[1].results[property_key][feature][dataset_id]
+                        }
+                        for dataset_id, file_entries in datasets.items()
+                        if dataset_id in self.children[1].results[property_key][feature]
+                    }
+                    for feature, datasets in features.items()
+                    if feature in self.children[1].results[property_key]
+                }
+                for property_key, features in self.children[0].results.items()
+                if property_key in self.children[1].results
+            }
 
-                                    self.results[feature][dataset_id][file_id] = Intersection._intersect_index_data(data1, data2)
-    
-    @staticmethod
-    def _intersect_index_data(data1: list[tuple[int, int] | list[int]], data2: list[tuple[int, int] | list[int]]) -> list[tuple[int, int] | list[int]]:
+    def _intersect_index_data(
+        self, data1: list[tuple[int, int]] | list[int], data2: list[tuple[int, int]] | list[int]
+    ) -> list[tuple[int, int]] | list[int]:
         """Intersect two sets of index data, handling both ranges and row identifiers."""
         if len(data1) == 0 or len(data2) == 0:
             return []
-        if isinstance(data1[0], tuple):
-            return Intersection._intersect_ranges(data1, data2)
-        if isinstance(data1[0], list):
-            return [x for x in data1 if x in data2]
-        else:
-            raise ValueError("Invalid data format")
-        
-    def _ranges_to_intervals(ranges: list[tuple[int, int]]) -> P.Interval:
-        """Convert a list of range tuples to portion intervals."""
-        return P.Interval(*[P.closed(start, end) for start, end in ranges])
+        if all(isinstance(data_point, tuple) for data_point in data1) and all(
+            isinstance(data_point, tuple) for data_point in data2
+        ):
+            data1_casted = cast(list[tuple[int, int]], data1)
+            data2_casted = cast(list[tuple[int, int]], data2)
+            return self._intersect_ranges(data1_casted, data2_casted)
+        if all(isinstance(data_point, int) for data_point in data1) and all(
+            isinstance(data_point, int) for data_point in data2
+        ):
+            intersection = set(data1) & set(data2)
+            return cast(list[int], list(intersection))
+        raise ValueError("Invalid data format")
 
-    def _intervals_to_ranges(intervals: P.Interval) -> list[tuple[int, int]]:
-        """Convert portion intervals back to a list of range tuples."""
-        return [(int(interval.lower), int(interval.upper)) for interval in intervals]
-
-    def _intersect_ranges(range1: list[tuple[int, int]], range2: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    def _intersect_ranges(self, range1: list[tuple[int, int]], range2: list[tuple[int, int]]) -> list[tuple[int, int]]:
         """Intersect two sets of ranges using the portion library."""
-        interval1 = Intersection._ranges_to_intervals(range1)
-        interval2 = Intersection._ranges_to_intervals(range2)
+        interval1 = ranges_to_intervals(range1)
+        interval2 = ranges_to_intervals(range2)
         intersection = interval1 & interval2
-        return Intersection._intervals_to_ranges(intersection)
+        return intervals_to_ranges(intersection)
 
     def __str__(self) -> str:
         return "intersection<>()"

@@ -3,8 +3,17 @@ import threading
 import time
 
 import numpy as np
+import portion as P
 import pytest
-from mixtera.utils import flatten, numpy_to_native_type, ranges, run_async_until_complete, wait_for_key_in_dict
+from mixtera.utils import (
+    flatten,
+    intervals_to_ranges,
+    numpy_to_native_type,
+    ranges,
+    ranges_to_intervals,
+    run_async_until_complete,
+    wait_for_key_in_dict,
+)
 from mixtera.utils.utils import generate_hashable_search_key, merge_property_dicts
 
 
@@ -152,3 +161,19 @@ def test_generate_hashable_search_key():
     assert key_one == "a:m;b:3;c:x", f"Generated key is incorrect; should be 'a:m;b:3;c:x' not {key_one}"
     assert key_two == "a:3;b:x", f"Generated key is incorrect; should be 'a:3;b:x' not {key_two}"
     assert key_three == "c:x;b:3", f"Generated key is incorrect; should be 'a:3;b:x' not {key_two}"
+
+
+def test_ranges_to_intervals():
+    list_of_ranges = [(1, 3), (5, 7)]
+    expected_intervals = P.Interval(P.closed(1, 3), P.closed(5, 7))
+    result_intervals = ranges_to_intervals(list_of_ranges)
+
+    assert result_intervals == expected_intervals, "The intervals do not match the expected result."
+
+
+def test_intervals_to_ranges():
+    intervals = P.Interval(P.closed(1, 3), P.closed(5, 7))
+    expected_ranges = [(1, 3), (5, 7)]
+    result_ranges = intervals_to_ranges(intervals)
+
+    assert result_ranges == expected_ranges, "The ranges do not match the expected result."

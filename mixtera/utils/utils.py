@@ -5,6 +5,7 @@ from copy import deepcopy
 from typing import Any, List, Tuple, Union
 
 import numpy as np
+import portion as P
 
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
@@ -170,3 +171,13 @@ def generate_hashable_search_key(
     if sort_lists:
         zipped.sort(key=lambda x: x[0])
     return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
+
+
+def ranges_to_intervals(list_of_ranges):
+    """Convert a list of ranges to a list of intervals."""
+    return P.Interval(*[P.closed(start, end) for start, end in list_of_ranges])
+
+
+def intervals_to_ranges(intervals):
+    """Convert a list of intervals to a list of ranges."""
+    return [(int(interval.lower), int(interval.upper)) for interval in intervals]
