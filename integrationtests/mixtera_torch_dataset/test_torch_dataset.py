@@ -19,6 +19,13 @@ def sample_parsing_func(sample):
 def create_and_iterate_dataloaders(
     client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
 ):
+    # This iterates in a round robin fashion across the dp nodes and groups:
+    # It first fetches a batch from group 0 / node 0, then group 0 / node 1, etc
+    # Then group 1 / node 0.
+    # This is to somewhat simulate the behavior of nodes requesting batches in parallel.
+    # Otherwise, if we were to iterate over all batches of group 0 / node 0 first,
+    # then we'd completely cache all batches, and all other data parallel groups won't
+    # have any chunks left.
     result_samples = []
     data_loaders = []
 
