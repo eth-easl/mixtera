@@ -202,6 +202,56 @@ def test_filter_license_and_html(
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
+def test_filter_both_with_order_validation(
+    client: MixteraClient,
+    mixture: Mixture,
+    dp_groups: int,
+    nodes_per_group: int,
+    num_workers: int,
+    batch_size: int,
+    tunnel: bool,
+):
+    if nodes_per_group <= 1:
+        return  # This test is only relevant if there are multiple nodes per group
+
+    job_id = f"6_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    query = (
+        Query.for_job(job_id)
+        .select(("language", "==", "HTML"))
+        .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
+    )
+
+    # Collect batches for each node in each group
+    group_batches = {}
+    for dp_group_id in range(dp_groups):
+        node_batches = {}
+        for node_id in range(nodes_per_group):
+            torch_ds = MixteraTorchDataset(
+                client,
+                query,
+                job_id,
+                mixture,
+                dp_groups=dp_groups,
+                nodes_per_group=nodes_per_group,
+                num_workers=num_workers,
+                node_id=node_id,
+                dp_group_id=dp_group_id,
+                tunnel_via_server=tunnel,
+            )
+            dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
+            batches = list(dl)
+            node_batches[node_id] = batches
+
+        group_batches[dp_group_id] = node_batches
+
+    for group_id, node_batches in group_batches.items():
+        reference_batches = node_batches[0]  # Use the first node's batches as the reference
+        for node_id, batches in node_batches.items():
+            if node_id == 0:
+                continue  # Skip the reference node itself
+            assert batches == reference_batches, f"Mismatch in batch order for group {group_id}, node {node_id}"
+
+
 def test_torchds(
     client: MixteraClient,
     mixture: Mixture,
@@ -217,6 +267,7 @@ def test_torchds(
     test_filter_license(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
     test_filter_unknown_license(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
     test_filter_license_and_html(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
+    test_filter_both_with_order_validation(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
@@ -233,7 +284,6 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
                 try:
-                    pass
                     # Locally, we always have one node per dp group and one dp group
                     test_torchds(local_client, mixture, 1, 1, num_workers, batch_size, False)
                 except Exception as e:
