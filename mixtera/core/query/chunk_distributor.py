@@ -203,6 +203,9 @@ class ChunkDistributor:
                 # only then finally removes the global block
                 assert self._shared_memory is not None
                 self._shared_memory._create = True
+                self._shared_memory._creator_destroy_timeout = (
+                    0.0001  # we're the last worker, no need to wait for any consumer
+                )
                 with self._global_cleanedup.get_lock():
                     self._global_cleanedup.get_obj().value = True
 
