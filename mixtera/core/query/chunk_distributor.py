@@ -52,6 +52,9 @@ from cengal.hardware.memory.shared_memory import SharedMemory, wait_my_turn  # i
 
 
 CHUNK_DISTRIBUTOR_SM_NAME = "cd"
+CHUNK_DISTRIBUTOR_SM_SIZE_MB = (
+    100 if os.getenv("GITHUB_ACTIONS") == "true" else 500
+)  # TODO(create issue): make this configurable
 SerializedChunkerIndex = bytes
 
 
@@ -94,7 +97,12 @@ class ChunkDistributor:
         logger.debug(f"Instantiating ChunkDistributor for job {job_id}")
         logger.error(list_shared_memory())
         total_mb, used_mb, free_mb = shm_usage()
-        logger.error(f"total: {total_mb} used: {used_mb} free: {free_mb}")
+        logger.debug(f"-- SHM Usage (MB): Total: {total_mb} Used: {used_mb} Free: {free_mb}")
+        if free_mb < CHUNK_DISTRIBUTOR_SM_SIZE_MB:
+            logger.warning(
+                f"free_mb = {free_mb} < CHUNK_DISTRIBUTOR_SM_SIZE_MB = {CHUNK_DISTRIBUTOR_SM_SIZE_MB}"
+                + "We might crash due to little shared memory."
+            )
         self._dp_groups = dp_groups
         self._num_workers = num_workers if num_workers > 0 else 1  # num_workers 0 => interpreted as 1 worker
         self._nodes_per_group = nodes_per_group
@@ -113,7 +121,9 @@ class ChunkDistributor:
                 self._cleanedup = True
                 return
 
-        logger.info(f"[{os.getpid()}/{threading.get_native_id()}] Initializing chunk with max len = {self.max_shm_len}")
+        logger.debug(
+            f"[{os.getpid()}/{threading.get_native_id()}] Initializing chunk with max len = {self.max_shm_len}"
+        )
         if len(self._memory_id) > self.max_shm_len:
             new_mem_id = self.hash_string(self._memory_id, self.max_shm_len - 1)
             logger.warning(f"shm id of {self._memory_id} is larger than {self.max_shm_len}. Updating to {new_mem_id}.")
@@ -121,7 +131,7 @@ class ChunkDistributor:
 
         # Initialize shared memory
         self._shared_memory: SharedMemory | None = None
-        _shared_memory = SharedMemory(self._memory_id, create=True, size=100 * 1024 * 1024)  # Adjust size as needed
+        _shared_memory = SharedMemory(self._memory_id, create=True, size=CHUNK_DISTRIBUTOR_SM_SIZE_MB * 1024 * 1024)
         _shared_memory._create = False  # We will clean up with the last worker that is done
 
         with wait_my_turn(_shared_memory):
@@ -145,7 +155,7 @@ class ChunkDistributor:
         del self._chunk_usage
         del self._next_chunk
         _shared_memory.close()
-        self._cleanedup = True # Right now, we don't have any open shared_memory, so we're clean.
+        self._cleanedup = True  # Right now, we don't have any open shared_memory, so we're clean.
         logger.debug("Constructor done")
 
     @cached_property
