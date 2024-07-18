@@ -121,7 +121,7 @@ class ChunkDistributor:
 
         # Initialize shared memory
         self._shared_memory: SharedMemory | None = None
-        _shared_memory = SharedMemory(self._memory_id, create=True, size=20 * 1024 * 1024)  # Adjust size as needed
+        _shared_memory = SharedMemory(self._memory_id, create=True, size=100 * 1024 * 1024)  # Adjust size as needed
         _shared_memory._create = False  # We will clean up with the last worker that is done
 
         with wait_my_turn(_shared_memory):
@@ -141,7 +141,11 @@ class ChunkDistributor:
                     for worker_id in range(self._num_workers):
                         self._next_chunk[dp_group][node][worker_id] = worker_id
 
-        _shared_memory.close_consumer()
+        del self._chunk_cache
+        del self._chunk_usage
+        del self._next_chunk
+        _shared_memory.close()
+        logger.debug("Constructor done")
 
     @cached_property
     def max_shm_len(self) -> int:
@@ -257,20 +261,28 @@ class ChunkDistributor:
                 self._shared_memory.proper_close()
 
             del self._shared_memory
-            del self._chunk_cache
-            del self._chunk_usage
-            del self._next_chunk
+            if hasattr(self, "_chunk_cache"):
+                del self._chunk_cache
+            if hasattr(self, "_chunk_usage"):
+                del self._chunk_usage
+            if hasattr(self, "_next_chunk"):
+                del self._next_chunk
 
     def __del__(self) -> None:
         # This indicates wrong usage and thus we should immediately fail to notice this
-        assert self._cleanedup, "You did not clean up the ChunkDistributor!"
+        assert (
+            self._cleanedup
+        ), f"[{os.getpid()}/{threading.get_native_id()}] You did not clean up the ChunkDistributor!"
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
-        if not self._cleanedup:
+        if "_shared_memory" in state:
             del state["_shared_memory"]
+        if "_chunk_cache" in state:
             del state["_chunk_cache"]
+        if "_chunk_usage" in state:
             del state["_chunk_usage"]
+        if "_next_chunk" in state:
             del state["_next_chunk"]
 
         return state
