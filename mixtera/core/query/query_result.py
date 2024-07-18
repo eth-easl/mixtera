@@ -45,6 +45,7 @@ class QueryResult:
         self._lock = mp.Lock()
         self._index = mp.Value("i", 0)
 
+        #  The generator will be created lazily when calling __next__
         self._generator: Generator[ChunkerIndex, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
 
@@ -334,29 +335,35 @@ class QueryResult:
             self._index.get_obj().value += 1
 
         with self._lock:
+            #  The generator is created lazily since the QueryResult object might be pickled
+            # (and the generator was deleted from the state)
             if self._generator is None:
                 self._generator = self._chunk_generator()
                 next(self._generator)
 
-                assert self._num_returns_gen == 0, f"we dun goofed: {self._num_returns_gen}"
+                assert (
+                    self._num_returns_gen == 0
+                ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
 
             self._num_returns_gen += 1
             return self._generator.send((self._mixture, chunk_target_index))
 
     def __getstate__(self) -> dict:
-        # _meta is not pickable using the default pickler (used by torch),
-        # so we have to rely on dill here
         state = self.__dict__.copy()
+
+        # Remove the generator since it is not pickable (and will be recreated on __next__)
         del state["_generator"]
 
-        result = {}
+        #  The following attributes are pickled using dill since they are not pickable by
+        # the default pickler (used by torch)
+        dill_pickled_attributes = {}
         for attrib in ["_meta", "_chunker_index", "_inverted_index"]:
             attrib_pickled = dill.dumps(state[attrib])
             del state[attrib]
-            result[attrib] = attrib_pickled
+            dill_pickled_attributes[attrib] = attrib_pickled
 
         # Return a dictionary with the pickled attribute and other picklable attributes
-        return {"other": state, "dilled": result}
+        return {"other": state, "dilled": dill_pickled_attributes}
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__ = state["other"]
