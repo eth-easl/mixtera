@@ -246,7 +246,7 @@ class ChunkDistributor:
                     # )
                     del self._chunk_cache[dp_group][next_chunk_id]
                     del self._chunk_usage[dp_group][next_chunk_id]
-
+                # random
                 # We don't increment by 1 but instead by num_workers, because otherwise
                 # we get an overlap between workers after the first chunk
                 self._next_chunk[dp_group][node_id][worker_id] = next_chunk_id + self._num_workers
