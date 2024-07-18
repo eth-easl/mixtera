@@ -4,6 +4,7 @@ from typing import Any, Callable, Generator, Type
 
 import dill
 import portion
+from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, InvertedIndex
@@ -30,6 +31,7 @@ class QueryResult:
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
         # Prepare structures for iterable chunking
+        logger.error(f"HELLO start method is {mp.get_start_method()}")
         self._mixture = mixture
         self.results = results
         self._inverted_index: InvertedIndex = self._invert_result(self.results)
