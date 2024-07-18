@@ -245,7 +245,7 @@ class ChunkDistributor:
                     #    + f"for dp_group {dp_group} from cache."
                     # )
                     del self._chunk_cache[dp_group][next_chunk_id]
-                    # del self._chunk_usage[dp_group][next_chunk_id]
+                    del self._chunk_usage[dp_group][next_chunk_id]
 
                 # We don't increment by 1 but instead by num_workers, because otherwise
                 # we get an overlap between workers after the first chunk
