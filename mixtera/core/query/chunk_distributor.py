@@ -145,6 +145,7 @@ class ChunkDistributor:
         del self._chunk_usage
         del self._next_chunk
         _shared_memory.close()
+        self._cleanedup = True # Right now, we don't have any open shared_memory, so we're clean.
         logger.debug("Constructor done")
 
     @cached_property
@@ -288,6 +289,7 @@ class ChunkDistributor:
         return state
 
     def _prep_shared_memory(self) -> None:
+        self._cleanedup = False
         self._shared_memory = SharedMemory(self._memory_id)
         self._shared_memory.init_consumer()
 
