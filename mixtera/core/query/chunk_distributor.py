@@ -1,6 +1,7 @@
 import hashlib
 import multiprocessing as mp
 import os
+import shutil
 import subprocess
 import threading
 import warnings
@@ -68,6 +69,21 @@ def list_shared_memory() -> str:
         return f"Failed to run command: {e}"
 
 
+def shm_usage() -> tuple[int, int, int]:
+    try:
+        # Get the total, used, and free space in /dev/shm
+        total, used, free = shutil.disk_usage("/dev/shm")
+
+        # Convert bytes to megabytes for easier reading
+        total_mb = total / (1024 * 1024)
+        used_mb = used / (1024 * 1024)
+        free_mb = free / (1024 * 1024)
+
+        return total_mb, used_mb, free_mb
+    except FileNotFoundError:
+        return -1, -1, -1
+
+
 class ChunkDistributor:
     def __init__(
         self, dp_groups: int, nodes_per_group: int, num_workers: int, query_result: QueryResult, job_id: str
@@ -77,6 +93,8 @@ class ChunkDistributor:
             raise ValueError(f"dp_groups = {dp_groups} < 1")
         logger.debug(f"Instantiating ChunkDistributor for job {job_id}")
         logger.error(list_shared_memory())
+        total_mb, used_mb, free_mb = shm_usage()
+        logger.error(f"total: {total_mb} used: {used_mb} free: {free_mb}")
         self._dp_groups = dp_groups
         self._num_workers = num_workers if num_workers > 0 else 1  # num_workers 0 => interpreted as 1 worker
         self._nodes_per_group = nodes_per_group
@@ -103,7 +121,7 @@ class ChunkDistributor:
 
         # Initialize shared memory
         self._shared_memory: SharedMemory | None = None
-        _shared_memory = SharedMemory(self._memory_id, create=True, size=20 * 1024 * 1024)  # Adjust size as needed
+        _shared_memory = SharedMemory(self._memory_id, create=True, size=100 * 1024 * 1024)  # Adjust size as needed
         _shared_memory._create = False  # We will clean up with the last worker that is done
 
         with wait_my_turn(_shared_memory):
