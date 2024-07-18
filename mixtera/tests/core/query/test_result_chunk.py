@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
-from mixtera.core.query import Mixture, ResultChunk, StaticMixture
+from mixtera.core.query import ResultChunk
 
 
 class TestResultChunk(unittest.TestCase):
@@ -12,10 +12,16 @@ class TestResultChunk(unittest.TestCase):
         self.parsing_func_dict = {1: MagicMock()}
         self.mixture = MagicMock()
         self.server_connection = MagicMock()
+        self.chunk_size = 10
 
     def test_configure_result_streaming_with_per_window_mixture_and_invalid_window_size(self):
         result_chunk = ResultChunk(
-            self.chunker_index, self.dataset_type_dict, self.file_path_dict, self.parsing_func_dict, None
+            self.chunker_index,
+            self.dataset_type_dict,
+            self.file_path_dict,
+            self.parsing_func_dict,
+            self.chunk_size,
+            None,
         )
 
         result_chunk._infer_mixture = MagicMock(return_value=self.mixture)
@@ -28,7 +34,12 @@ class TestResultChunk(unittest.TestCase):
 
     def test_configure_result_streaming_without_per_window_mixture_and_mixture_is_none(self):
         result_chunk = ResultChunk(
-            self.chunker_index, self.dataset_type_dict, self.file_path_dict, self.parsing_func_dict, None
+            self.chunker_index,
+            self.dataset_type_dict,
+            self.file_path_dict,
+            self.parsing_func_dict,
+            self.chunk_size,
+            None,
         )
 
         result_chunk._infer_mixture = MagicMock(return_value=self.mixture)
@@ -46,17 +57,27 @@ class TestResultChunk(unittest.TestCase):
         expected_partition_masses = {"property1": 20, "property2": 15}
 
         result_chunk = ResultChunk(
-            mock_result_index, self.dataset_type_dict, self.file_path_dict, self.parsing_func_dict, None
+            mock_result_index,
+            self.dataset_type_dict,
+            self.file_path_dict,
+            self.parsing_func_dict,
+            self.chunk_size,
+            None,
         )
 
         mixture = result_chunk._infer_mixture()
 
-        self.assertTrue(isinstance(mixture, StaticMixture))
-        self.assertEqual(mixture.mixture_in_rows(), expected_partition_masses)
+        self.assertTrue(isinstance(mixture, dict))
+        self.assertEqual(mixture, expected_partition_masses)
 
     def test_iterate_result_chunks_single_threaded(self):
         result_chunk = ResultChunk(
-            self.chunker_index, self.dataset_type_dict, self.file_path_dict, self.parsing_func_dict, self.mixture
+            self.chunker_index,
+            self.dataset_type_dict,
+            self.file_path_dict,
+            self.parsing_func_dict,
+            self.chunk_size,
+            self.mixture,
         )
         result_chunk._degree_of_parallelism = 1
 
@@ -70,7 +91,12 @@ class TestResultChunk(unittest.TestCase):
 
     def test_iterate_result_chunks_multi_threaded(self):
         result_chunk = ResultChunk(
-            self.chunker_index, self.dataset_type_dict, self.file_path_dict, self.parsing_func_dict, self.mixture
+            self.chunker_index,
+            self.dataset_type_dict,
+            self.file_path_dict,
+            self.parsing_func_dict,
+            self.chunk_size,
+            self.mixture,
         )
         result_chunk._degree_of_parallelism = 2
 
@@ -84,7 +110,12 @@ class TestResultChunk(unittest.TestCase):
 
     def test_iterate_result_chunks_with_invalid_degree_of_parallelism(self):
         result_chunk = ResultChunk(
-            self.chunker_index, self.dataset_type_dict, self.file_path_dict, self.parsing_func_dict, self.mixture
+            self.chunker_index,
+            self.dataset_type_dict,
+            self.file_path_dict,
+            self.parsing_func_dict,
+            self.chunk_size,
+            self.mixture,
         )
         result_chunk._degree_of_parallelism = -1  # Invalid value
 
@@ -112,7 +143,12 @@ class TestResultChunk(unittest.TestCase):
         mock_dataset_type_dict[2].read_ranges_from_files.return_value = iter(["instance4"])
 
         result_chunk = ResultChunk(
-            MagicMock(), mock_dataset_type_dict, mock_file_path_dict, mock_parsing_func_dict, MagicMock()
+            MagicMock(),
+            mock_dataset_type_dict,
+            mock_file_path_dict,
+            mock_parsing_func_dict,
+            self.chunk_size,
+            MagicMock(),
         )
         result_chunk._get_element_counts = MagicMock(return_value=mock_element_counts)
         result_chunk._prepare_workloads = MagicMock(return_value=mock_workloads)
@@ -162,7 +198,12 @@ class TestResultChunk(unittest.TestCase):
         mock_dataset_type_dict[3].read_ranges_from_files.return_value = iter(["instance9"])
 
         result_chunk = ResultChunk(
-            MagicMock(), mock_dataset_type_dict, mock_file_path_dict, mock_parsing_func_dict, MagicMock()
+            MagicMock(),
+            mock_dataset_type_dict,
+            mock_file_path_dict,
+            mock_parsing_func_dict,
+            self.chunk_size,
+            MagicMock(),
         )
         result_chunk._get_element_counts = MagicMock(return_value=mock_element_counts)
         result_chunk._prepare_workloads = MagicMock(return_value=mock_workloads)
@@ -220,7 +261,12 @@ class TestResultChunk(unittest.TestCase):
         mock_dataset_type_dict[2].read_ranges_from_files.return_value = iter(["instance5"])
 
         result_chunk = ResultChunk(
-            MagicMock(), mock_dataset_type_dict, mock_file_path_dict, mock_parsing_func_dict, MagicMock()
+            MagicMock(),
+            mock_dataset_type_dict,
+            mock_file_path_dict,
+            mock_parsing_func_dict,
+            self.chunk_size,
+            MagicMock(),
         )
         result_chunk._result_index = mock_result_index
         result_chunk._server_connection = mock_server_connection
@@ -244,17 +290,20 @@ class TestResultChunk(unittest.TestCase):
 
     def test_get_element_counts(self):
         # Mocking the Mixture class and its method mixture_in_rows
-        mock_mixture = MagicMock(spec=Mixture)
-        mock_mixture.mixture_in_rows.return_value = {"property1": 0.5, "property2": 0.3, "property3": 0.2}
+        mock_mixture = {"property1": 5, "property2": 3, "property3": 2}
         mock_dataset_type_dict = {1: MagicMock(), 2: MagicMock()}
         mock_parsing_func_dict = {1: MagicMock(return_value="parsed1"), 2: MagicMock(return_value="parsed2")}
         mock_file_path_dict = {1: "file1", 2: "file2"}
 
         # Creating an instance of the class that contains the method to be tested
         result_chunk = ResultChunk(
-            MagicMock(), mock_dataset_type_dict, mock_file_path_dict, mock_parsing_func_dict, MagicMock()
+            MagicMock(),
+            mock_dataset_type_dict,
+            mock_file_path_dict,
+            mock_parsing_func_dict,
+            self.chunk_size,
+            mock_mixture,
         )
-        result_chunk._mixture = mock_mixture
         result_chunk._window_size = 10  # Assuming a window size of 10 for this test
 
         # Expected result calculation explanation:

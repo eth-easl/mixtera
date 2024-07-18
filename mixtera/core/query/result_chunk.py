@@ -7,7 +7,7 @@ from typing import Callable, Iterator, Optional, Type
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex
-from mixtera.core.query.mixture import Mixture, StaticMixture
+from mixtera.core.query.mixture import StaticMixture
 from mixtera.network.connection import ServerConnection
 from mixtera.utils import from_pickled_dict, generate_hash_string_from_list, to_pickled_dict
 
@@ -23,12 +23,14 @@ class ResultChunk:
         dataset_type_dict: dict[int, Type[Dataset]],
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
-        mixture: Optional[Mixture] = None,
+        chunk_size: int,
+        mixture: Optional[dict[str, int]] = None,
     ) -> None:
         self._result_index = result_index
         self._dataset_type_dict = dataset_type_dict
         self._file_path_dict = file_path_dict
         self._parsing_func_dict = parsing_func_dict
+        self._chunk_size = chunk_size
         self._mixture = mixture
 
         self._server_connection: Optional[ServerConnection] = None
@@ -50,6 +52,13 @@ class ResultChunk:
         self._per_window_mixture = per_window_mixture
         self._window_size = window_size
 
+        if self._per_window_mixture and self._window_size > self._chunk_size:
+            logger.warning(
+                f"Window size is set to {self._window_size} which is > the chunk size of {self._chunk_size}. "
+                "Setting window size to the chunk size."
+            )
+            self._window_size = self._chunk_size
+
         if self._per_window_mixture and self._window_size < 1:
             logger.warning(
                 f"Window size is set to {self._window_size} which is invalid. " "Setting window size to 128."
@@ -59,10 +68,10 @@ class ResultChunk:
         if (self._per_window_mixture or self._degree_of_parallelism > 1) and (
             self._mixture is None or len(self._mixture) == 0
         ):
-            logger.info("Mixture is not defined or empty but required. Infer mixture from the result index.")
+            logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
-    def _infer_mixture(self) -> Mixture:
+    def _infer_mixture(self) -> dict[str, int]:
         total_count = 0
         partition_masses: dict[str, int | float] = {}
 
@@ -83,7 +92,7 @@ class ResultChunk:
         for key in partition_masses:
             partition_masses[key] /= total_count
 
-        return StaticMixture(total_count, partition_masses)
+        return StaticMixture(total_count, partition_masses).mixture_in_rows()
 
     def _iterate_result_chunks(self) -> Iterator[str]:
         if self._degree_of_parallelism < 1:
@@ -157,8 +166,7 @@ class ResultChunk:
                     active_iterators.remove((property_name, iterator))
 
     def _iterate_multi_threaded(self) -> Iterator[str]:
-        if not isinstance(self._mixture, Mixture):
-            raise ValueError("Mixture must be defined for parallel reading, this should not happen.")
+        assert isinstance(self._mixture, dict), "Mixture must be defined for parallel reading, this should not happen."
 
         # Collect the workloads (i.e. did+fid+ranges) and group them by the property combination they belong to
         workloads: dict[str, list[tuple[int, int, list[tuple[int, int]]]]] = self._prepare_workloads()
@@ -170,7 +178,7 @@ class ResultChunk:
         )
 
         # Determine how many processes should be assigned per property combination
-        process_counts = {key: int(val * reader_count) for key, val in self._mixture.mixture_in_rows().items()}
+        process_counts = {key: int(val * reader_count) for key, val in self._mixture.items()}
 
         process_counts[list(process_counts.keys())[0]] += reader_count - sum(process_counts.values())
 
@@ -183,12 +191,11 @@ class ResultChunk:
         yield from yield_source
 
     def _get_element_counts(self) -> list[tuple[str, int]]:
-        if not isinstance(self._mixture, Mixture):
-            raise ValueError("Mixture must be defined for parallel reading, this should not happen.")
+        assert isinstance(self._mixture, dict), "Mixture must be defined for windowed reading, this should not happen."
 
         # Determine the per-property combination batch counts
         initial_counts = [
-            (key, int(self._window_size * value)) for key, value in self._mixture.mixture_in_rows().items()
+            (key, int(self._window_size * (value / self._chunk_size))) for key, value in self._mixture.items()
         ]
         total_counts = sum(count for _, count in initial_counts)
         remainder = self._window_size - total_counts
@@ -220,6 +227,7 @@ class ResultChunk:
                         to_remove = []
                         for i, q_proc in enumerate(processes[property_name]):
                             q, proc = q_proc
+                            proc.join()
 
                             # Mark processes that are dead and have empty queues; else try to fetch an instance
                             if not proc.is_alive() and q.empty():

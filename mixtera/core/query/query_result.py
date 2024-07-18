@@ -290,7 +290,7 @@ class QueryResult:
                     return
                 if current_chunk_index == target_chunk_index:
                     base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, mixture
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
                     )
             else:
                 chunk = None
@@ -310,7 +310,7 @@ class QueryResult:
                 if current_chunk_index == target_chunk_index:
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
                     base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, mixture
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
                     )
             current_chunk_index += 1
 

@@ -7,7 +7,7 @@ from integrationtests.utils import TestMetadataParser, get_expected_js_and_html_
 from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Mixture, Query
+from mixtera.core.query import ArbitraryMixture, Mixture, Query, StaticMixture
 
 TEST_LOCAL_INSTANCE_COUNT = 1000
 TEST_LOCAL_FILE_COUNT = 5
@@ -142,6 +142,33 @@ def test_filter_license_and_html(
         assert 0 <= int(sample) < TEST_LOCAL_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
+def test_reproducibility(
+    client: MixteraClient,
+    mixture: Mixture,
+    **args: Any,
+):
+    mixture = StaticMixture(mixture.chunk_size, {"language:JavaScript": 0.6, "language:HTML": 0.4})
+    result_list = []
+
+    for i in range(10):
+        job_id = get_job_id()
+        query = (
+            Query.for_job(job_id)
+            .select(("language", "==", "HTML"))
+            .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
+        )
+        client.execute_query(query, mixture)
+        result_samples = []
+
+        for sample in client.stream_results(job_id, False, **args):
+            result_samples.append(sample)
+
+        result_list.append(result_samples)
+
+    for i in range(1, 10):
+        assert result_list[i] == result_list[i - 1], "Results are not reproducible"
+
+
 def test_client_chunksize(
     client: MixteraClient,
     mixture: Mixture,
@@ -153,6 +180,7 @@ def test_client_chunksize(
     test_filter_license(client, mixture, **args)
     test_filter_unknown_license(client, mixture, **args)
     test_filter_license_and_html(client, mixture, **args)
+    test_reproducibility(client, mixture, **args)
 
 
 def test_chunk_readers(dir: Path) -> None:
@@ -165,9 +193,9 @@ def test_chunk_readers(dir: Path) -> None:
 
     degrees_of_parallelisms = [1, 4]
     per_window_mixtures = [False, True]
-    window_sizes = [128, 256]
+    window_sizes = [64, 128, 256]
 
-    for chunk_size in [100, 500, 1000]:
+    for chunk_size in [50, 100, 250, 500, 750, 1000]:
         for degree_of_parallelism in degrees_of_parallelisms:
             for per_window_mixture in per_window_mixtures:
                 for window_size in window_sizes:
