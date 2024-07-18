@@ -118,7 +118,11 @@ class ChunkDistributor:
                 return
 
         logger.debug(f"[{os.getpid()}/{threading.get_native_id()}] Initializing chunk with max len = {max_shm_len()}")
+
         if len(self._memory_id) > max_shm_len():
+            # On different systems, the maximum length of shared memory segments differs
+            # On my macOS installation, the max length is only 28
+            # This code ensures our length stays below the limit to not throw an error
             new_mem_id = hash_string(self._memory_id, max_shm_len() - 1)
             logger.warning(f"shm id of {self._memory_id} is larger than {max_shm_len()}. Updating to {new_mem_id}.")
             self._memory_id = new_mem_id
