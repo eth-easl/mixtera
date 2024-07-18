@@ -229,7 +229,7 @@ class ChunkDistributor:
                 # Check if all nodes have seen this chunk
                 if self._chunk_usage[dp_group][next_chunk_id] >= self._nodes_per_group:
                     # Potentially useful debug log
-                    #logger.debug(f"Purging chunk {next_chunk_id} for dp_group {dp_group} from cache.")
+                    # logger.debug(f"Purging chunk {next_chunk_id} for dp_group {dp_group} from cache.")
                     del self._chunk_cache[dp_group][next_chunk_id]
                     del self._chunk_usage[dp_group][next_chunk_id]
 
