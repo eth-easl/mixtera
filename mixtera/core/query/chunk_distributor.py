@@ -234,22 +234,22 @@ class ChunkDistributor:
                 )
 
                 # Increment usage count for this chunk
-                old_usage = self._chunk_usage[dp_group][next_chunk_id]
-                self._chunk_usage[dp_group][next_chunk_id] = old_usage + 1
+                current_usage = self._chunk_usage[dp_group][next_chunk_id] + 1
+                self._chunk_usage[dp_group][next_chunk_id] = current_usage
 
                 # Check if all nodes have seen this chunk
-                if self._chunk_usage[dp_group][next_chunk_id] >= self._nodes_per_group:
+                if current_usage >= self._nodes_per_group:
                     # Potentially useful debug log
-                    logger.debug(
-                        f"[{os.getpid()}/{threading.get_native_id()}] Purging chunk {next_chunk_id}"
-                        + f"for dp_group {dp_group} from cache."
-                    )
+                    # logger.debug(
+                    #    f"[{os.getpid()}/{threading.get_native_id()}] Purging chunk {next_chunk_id}"
+                    #    + f"for dp_group {dp_group} from cache."
+                    # )
                     del self._chunk_cache[dp_group][next_chunk_id]
                     del self._chunk_usage[dp_group][next_chunk_id]
 
                 # We don't increment by 1 but instead by num_workers, because otherwise
                 # we get an overlap between workers after the first chunk
-                self._next_chunk[dp_group][node_id][worker_id] += self._num_workers
+                self._next_chunk[dp_group][node_id][worker_id] = next_chunk_id + self._num_workers
                 return chunk_to_return
 
     def _stream_chunks_for_worker(
