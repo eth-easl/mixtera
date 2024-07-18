@@ -1,5 +1,5 @@
-import tempfile
 import multiprocessing as mp
+import tempfile
 from pathlib import Path
 
 from integrationtests.utils import TestMetadataParser, write_jsonl
