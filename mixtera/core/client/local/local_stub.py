@@ -102,8 +102,9 @@ class LocalStub(MixteraClient):
         node_id: int,
         worker_id: int,
     ) -> Generator[ChunkerIndex, None, None]:
-        yield from self._get_query_chunk_distributor(job_id)._stream_chunks_for_worker(dp_group_id, node_id, worker_id)
-        self._get_query_chunk_distributor(job_id).finalize_worker()
+        chunk_distributor = self._get_query_chunk_distributor(job_id)
+        yield from chunk_distributor._stream_chunks_for_worker(dp_group_id, node_id, worker_id)
+        chunk_distributor.finalize_worker()
 
     def _get_result_metadata(
         self, job_id: str

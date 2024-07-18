@@ -169,6 +169,9 @@ class TestLocalStub(unittest.TestCase):
         self.assertTrue(result)
         self.assertIn(query.job_id, self.local_stub._training_query_map)
 
+        # Need to clean up to avoid exception
+        self.local_stub._get_query_chunk_distributor(query.job_id).cleanup()
+
     @patch("mixtera.core.client.local.local_stub.wait_for_key_in_dict", return_value=False)
     def test_get_query_result_timeout(self, mock_wait_for_key):
         del mock_wait_for_key
@@ -180,8 +183,12 @@ class TestLocalStub(unittest.TestCase):
         job_id = "test_job_id"
         query = MagicMock(spec=Query)
         query.results = MagicMock(spec=QueryResult)
-        self.local_stub._training_query_map[job_id] = (ChunkDistributor(1, 1, 1, query.results, "test_job"), query, 100)
+        chunk_distri = ChunkDistributor(1, 1, 1, query.results, "test_job")
+        self.local_stub._training_query_map[job_id] = (chunk_distri, query, 100)
 
         result = self.local_stub._get_query_result(job_id)
         mock_wait_for_key.assert_called_once_with(self.local_stub._training_query_map, job_id, 60.0)
         self.assertEqual(result, query.results)
+
+        # Need to clean up to avoid exception
+        chunk_distri.cleanup()
