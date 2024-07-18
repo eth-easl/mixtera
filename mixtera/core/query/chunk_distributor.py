@@ -69,7 +69,7 @@ def list_shared_memory() -> str:
         return f"Failed to run command: {e}"
 
 
-def shm_usage() -> tuple[int, int, int]:
+def shm_usage() -> tuple[float, float, float]:
     try:
         # Get the total, used, and free space in /dev/shm
         total, used, free = shutil.disk_usage("/dev/shm")
@@ -255,7 +255,7 @@ class ChunkDistributor:
 
             if self._shared_memory is not None:
                 self._shared_memory.proper_close()
-
+            
             del self._shared_memory
             del self._chunk_cache
             del self._chunk_usage
