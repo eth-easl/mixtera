@@ -13,16 +13,11 @@ def fixture_query_result():
 
 @pytest.fixture(name="chunk_distributor")
 def fixture_chunk_distributor(query_result):
-    distributor = ChunkDistributor(
-        dp_groups=2, nodes_per_group=2, num_workers=3, query_result=query_result, job_id="test_job"
-    )
-    yield distributor
-    distributor.cleanup()
+    return ChunkDistributor(dp_groups=2, nodes_per_group=2, num_workers=3, query_result=query_result, job_id="test_job")
 
 
 def test_initialization(chunk_distributor):
-    # assert len(chunk_distributor._chunk_cache) == 2
-    assert len(chunk_distributor._dp_locks) == 2
+    assert len(chunk_distributor._chunk_cache) == 2
 
 
 def test_chunk_distribution_within_dp(chunk_distributor):

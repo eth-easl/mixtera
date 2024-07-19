@@ -55,9 +55,6 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         mock_write_int.assert_awaited_once_with(True, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
 
-        # Need to cleanup to avoid warning.
-        self.server._local_stub._get_query_chunk_distributor("cool_training_id").cleanup()
-
     @patch("mixtera.network.server.server.write_utf8_string")
     @patch("mixtera.network.server.server.read_utf8_string")
     @patch("mixtera.network.server.server.read_int")

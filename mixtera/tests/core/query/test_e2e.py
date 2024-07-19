@@ -73,7 +73,6 @@ class TestQueryE2E(unittest.TestCase):
         for x in res:
             self.assertEqual(x, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
             break
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     def test_union(self):
         mixture = ArbitraryMixture(1)
@@ -107,8 +106,6 @@ class TestQueryE2E(unittest.TestCase):
             parsing_func,
             {1: self.parsing_func_source},
         )
-
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
 
 if __name__ == "__main__":

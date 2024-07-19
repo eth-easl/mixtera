@@ -180,9 +180,6 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(query_result.dataset_type, gt_meta["dataset_type"])
         self.assertEqual(query_result.file_path, gt_meta["file_path"])
 
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
-
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
@@ -200,8 +197,6 @@ class TestQuery(unittest.TestCase):
         assert self.client.execute_query(query, ArbitraryMixture(2), 1, 1, 1)
         chunks = list(iter(query.results))
         self.assertEqual(chunks, [{"field:value": {"did": {"fid": [(0, 2)]}}}])
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -261,9 +256,6 @@ class TestQuery(unittest.TestCase):
                         and intervals in inverted_index[document_id][file_id]
                     )
                     self.assertDictEqual(properties, inverted_index[document_id][file_id][intervals].values()[0])
-
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -352,8 +344,6 @@ class TestQuery(unittest.TestCase):
                         and intervals in inverted_index[document_id][file_id]
                     )
                     self.assertDictEqual(properties, inverted_index[document_id][file_id][intervals].values()[0])
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -397,8 +387,6 @@ class TestQuery(unittest.TestCase):
         inverted_index = query.results._invert_result(query.results.results)
         chunk_index = query.results._create_chunker_index(inverted_index)
         self.assertDictEqual(defaultdict_to_dict(chunk_index), reference_result)
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -457,8 +445,6 @@ class TestQuery(unittest.TestCase):
         # Check the equality of the chunks
         for i, chunk in enumerate(chunks):
             self.assertDictEqual(reference_chunks[i], chunk)
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -523,8 +509,6 @@ class TestQuery(unittest.TestCase):
         # Check the equality of the chunks
         for i, chunk in enumerate(chunks):
             self.assertDictEqual(reference_chunks[i], chunk)
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -705,8 +689,6 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected_error_count_s2, real_error_count_s2)
         for i, chunk in enumerate(chunks):
             self.assertDictEqual(reference_chunks[i], chunk)
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -925,5 +907,3 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected_error_count, real_error_count)
         for i, chunk in enumerate(chunks):
             self.assertDictEqual(reference_chunks[i], chunk)
-        # Cleanup to avoid warnings
-        self.client._get_query_chunk_distributor("job_id").cleanup()

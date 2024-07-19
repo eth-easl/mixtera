@@ -110,7 +110,7 @@ class MixteraServer:
         try:
             next_chunk = self._chunk_distributor_map[job_id].next_chunk_for(dp_group_id, node_id, worker_id, False)
         except StopIteration:
-            self._chunk_distributor_map[job_id].finalize_worker()
+            pass
 
         await write_bytes_obj(next_chunk, NUM_BYTES_FOR_SIZES, writer)
 
