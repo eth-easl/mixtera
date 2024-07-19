@@ -50,12 +50,23 @@ async def write_bytes_obj(
     data: bytes | None, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True
 ) -> None:
     """
-    TODO
+    Asynchronously writes a bytes object or None to the stream writer.
+
+    This function first writes the size of the data as a header, then writes the data itself.
+    If the data is None, it writes a zero-length header.
+
     Args:
-        obj (Any): The object to write.
-        size_bytes (int): How many bytes the header should be.
-        writer (asyncio.StreamWriter): The stream writer which should write the data.
-        drain (bool): Whether to call writer.drain() afterwards. Defaults to True.
+        data (bytes | None): The bytes object to write, or None.
+        size_bytes (int): The number of bytes to use for the size header.
+        writer (asyncio.StreamWriter): The stream writer to write the data to.
+        drain (bool): Whether to call writer.drain() after writing. Defaults to True.
+
+    Returns:
+        None
+
+    Note:
+        If data is None, only a zero-length header is written.
+        The size header is always written in big-endian format.
     """
     if data is None:
         zero_len = 0
@@ -70,15 +81,26 @@ async def write_bytes_obj(
 
 async def read_bytes_obj(size_bytes: int, reader: asyncio.StreamReader) -> bytes | None:
     """
-    TODO
+    Asynchronously reads a bytes object or None from the stream reader.
+
+    This function first reads the size header, then reads the actual data based on the size.
+    If the size header indicates zero length, it returns None.
+
     Args:
-        size_bytes (int): The size of the header in bytes.
-        reader (asyncio.StreamReader): The stream reader from which to read.
+        size_bytes (int): The number of bytes used for the size header.
+        reader (asyncio.StreamReader): The stream reader to read the data from.
+
     Returns:
-        Optional[str]: The read string. None, if error occurs.
+        bytes | None: The read bytes object, or None if the size header indicated zero length
+                      or if an error occurred during reading.
+
     Raises:
-        asyncio.TimeoutError: If the timeout is exceeded before `num_bytes` could be read.
+        asyncio.TimeoutError: If a timeout occurs while reading (inherited from read_int and read_bytes).
+
+    Note:
+        The size header is expected to be in big-endian format.
     """
+
     if (obj_size := await read_int(size_bytes, reader)) is not None:
         if obj_size == 0:
             return None
