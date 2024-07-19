@@ -224,6 +224,24 @@ class Index(ABC):
           Does not return anything, but extends the internal index with the `other`.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
+    
+    @abstractmethod
+    def intersect(self, other: "Index", copy_other: bool = False) -> None:
+        """
+        Intersects another index with this one. It is assumed that the indexes never
+        have collisions. In other words, they may map over the same feature,
+        value, and dataset, but never over the same files within each category.
+
+        Args:
+          other: The other index
+          copy_other: if True, the other dictionary is copied to avoid side-effects
+            later due to shared pointers. If False, side-effects may exist, but
+            merging is faster.
+
+        Returns:
+          Does not return anything, but extends the internal index with the `other`.
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
     def get_all_features(self) -> list[str]:
