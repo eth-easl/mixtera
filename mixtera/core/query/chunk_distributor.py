@@ -11,6 +11,13 @@ SerializedChunkerIndex = bytes
 
 
 class ChunkDistributor:
+    """
+    A class responsible for distributing data chunks across multiple data parallel groups, nodes, and workers.
+
+    This class manages the distribution of data chunks, ensuring efficient caching and usage tracking
+    to minimize data fetching and optimize performance in distributed computing environments.
+    """
+
     def __init__(
         self,
         dp_groups: int,
@@ -19,6 +26,19 @@ class ChunkDistributor:
         query_result: QueryResult,
         job_id: str,
     ) -> None:
+        """
+        Initialize the ChunkDistributor.
+
+        Args:
+            dp_groups (int): Number of data parallel groups.
+            nodes_per_group (int): Number of nodes per data parallel group.
+            num_workers (int): Number of workers per node.
+            query_result (QueryResult): The source of data chunks.
+            job_id (str): Unique identifier for the job.
+
+        Raises:
+            ValueError: If dp_groups is less than 1.
+        """
         if dp_groups < 1:
             raise ValueError(f"dp_groups = {dp_groups} < 1")
 
@@ -51,21 +71,29 @@ class ChunkDistributor:
         self, dp_group: int, node_id: int, worker_id: int, deserialize: bool
     ) -> ChunkerIndex | SerializedChunkerIndex:
         """
-        Retrieves the next data chunk for a specified worker in a data parallel group and node.
+        Retrieve the next data chunk for a specified worker in a data parallel group and node.
 
-        Manages the distribution of chunks by tracking their usage and caching them to minimize data fetching.
-        This method ensures that each worker receives the appropriate chunk as needed for processing.
+        This method manages the distribution of chunks by tracking their usage
+        and caching them to minimize data fetching.
+        It ensures that each worker receives the appropriate chunk as needed for processing.
 
-        This function is NOT threadsafe. This is not a problem. In the server case, asyncio coroutines
-        will not be executed in parallel. In the local case, we fork anyways.
+        Note:
+            This method is not thread-safe. In the server case, asyncio coroutines will not be executed in parallel.
+            In the local case, the process is forked.
 
         Args:
-            dp_group (int): Data parallel group ID
-            node_id (int): Node ID within the group
-            worker_id (int): Worker ID within the node
+            dp_group (int): Data parallel group ID.
+            node_id (int): Node ID within the group.
+            worker_id (int): Worker ID within the node.
+            deserialize (bool): Whether to deserialize the chunk before returning.
+
+        Returns:
+            ChunkerIndex | SerializedChunkerIndex: The next chunk for the specified worker.
+
         Raises:
-            AssertionError: If the provided IDs are out of range
-            StopIteration: If there are no
+            AssertionError: If the provided IDs are out of range.
+            StopIteration: If there are no more chunks available.
+            RuntimeError: If a fork is detected in server mode.
         """
 
         assert dp_group < self._dp_groups
@@ -139,16 +167,20 @@ class ChunkDistributor:
     ) -> Generator[ChunkerIndex | SerializedChunkerIndex, None, None]:
         """
         Generate a stream of chunks for a specific worker.
-        Used for local training.
+
+        This method is used for local training, providing a continuous stream of data chunks
+        for a given worker in a specific data parallel group and node.
 
         Args:
-            dp_group_id (int): Data parallel group ID
-            node_id (int): Node ID within the group
-            worker_id (int): Worker ID within the node
+            dp_group_id (int): Data parallel group ID.
+            node_id (int): Node ID within the group.
+            worker_id (int): Worker ID within the node.
 
         Yields:
-            ChunkerIndex | SerializedChunkerIndex: The next chunk for the worker
+            ChunkerIndex | SerializedChunkerIndex: The next chunk for the worker.
 
+        Note:
+            The stream ends when there are no more chunks available (StopIteration is caught internally).
         """
 
         while True:
