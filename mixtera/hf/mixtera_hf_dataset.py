@@ -33,6 +33,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         return {"key": "random item to make huggingface happy"}
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> datasets.iterable_dataset._BaseExamplesIterable:
+        del generator
         logger.info("shuffle_data_sources called.")
         return self
 
@@ -92,11 +93,11 @@ class MixteraHFDataset(datasets.IterableDataset):
     ):
         super().__init__(_MixteraHFIterable(client, query, query_execution_args, result_streaming_args))
         self.info.features = datasets.Features({"text": datasets.Value(dtype="string")})
+        self._ex_iterable: _MixteraHFIterable
 
     def __iter__(self) -> Generator[Any | dict, Any, None]:
         # We wrap IterableDataset.__iter__ to do some state assertions
         assert isinstance(self._ex_iterable, _MixteraHFIterable)
-        self._ex_iterable: _MixteraHFIterable
         if self._distributed is not None:
             assert self._distributed.world_size == self._ex_iterable._query_execution_args.dp_groups, (
                 f"self._distributed.world_size = {self._distributed.world_size} != Mixtera"
