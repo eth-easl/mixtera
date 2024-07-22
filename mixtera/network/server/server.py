@@ -3,6 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.datasets.dataset import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.filesystem.filesystem import FileSystem
@@ -63,10 +64,14 @@ class MixteraServer:
         nodes_per_group = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         num_workers = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
+        args = QueryExecutionArgs(
+            mixture=mixture, dp_groups=dp_groups, nodes_per_group=nodes_per_group, num_workers=num_workers
+        )
+
         query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         logger.debug(f"Received query = {str(query)}. Executing it.")
         async with self._register_query_lock:
-            success = self._local_stub.execute_query(query, mixture, dp_groups, nodes_per_group, num_workers)
+            success = self._local_stub.execute_query(query, args)
         logger.debug(f"Registered query with success = {success} and executed it.")
 
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)

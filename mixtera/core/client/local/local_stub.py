@@ -4,6 +4,7 @@ from typing import Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.index import ChunkerIndex
@@ -57,12 +58,10 @@ class LocalStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         return self._mdc.remove_dataset(identifier)
 
-    def execute_query(
-        self, query: Query, mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
-    ) -> bool:
-        assert dp_groups > 0 and nodes_per_group > 0 and num_workers >= 0
-        query.execute(self._mdc, mixture)
-        return self._register_query(query, mixture, dp_groups, nodes_per_group, num_workers)
+    def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
+        assert args.dp_groups > 0 and args.nodes_per_group > 0 and args.num_workers >= 0
+        query.execute(self._mdc, args.mixture)
+        return self._register_query(query, args.mixture, args.dp_groups, args.nodes_per_group, args.num_workers)
 
     def is_remote(self) -> bool:
         return False

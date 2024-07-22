@@ -5,6 +5,7 @@ from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import dill
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.connection.server_connection import ServerConnection
@@ -117,8 +118,8 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_read_int.return_value = 1
         query_mock = MagicMock()
         mixture_mock = MagicMock()
-
-        success = await self.server_connection._execute_query(query_mock, mixture_mock, 1, 1, 1)
+        args = QueryExecutionArgs(mixture=mixture_mock)
+        success = await self.server_connection._execute_query(query_mock, args)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()

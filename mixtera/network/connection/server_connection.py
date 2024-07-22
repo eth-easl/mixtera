@@ -22,8 +22,9 @@ from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
+    from mixtera.core.client.mixtera_client import QueryExecutionArgs
     from mixtera.core.datacollection.index import ChunkerIndex
-    from mixtera.core.query import Mixture, Query
+    from mixtera.core.query import Query
 
 
 class ServerConnection:
@@ -117,9 +118,7 @@ class ServerConnection:
 
         return None, None
 
-    async def _execute_query(
-        self, query: "Query", mixture: "Mixture", dp_groups: int, nodes_per_group: int, num_workers: int
-    ) -> bool:
+    async def _execute_query(self, query: "Query", args: "QueryExecutionArgs") -> bool:
         """
         Asynchronously executes a query on the server and receives a confirmation of success.
 
@@ -139,12 +138,12 @@ class ServerConnection:
         await write_int(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce mixture
-        await write_pickeled_object(mixture, NUM_BYTES_FOR_SIZES, writer)
+        await write_pickeled_object(args.mixture, NUM_BYTES_FOR_SIZES, writer)
 
         # Announce other metadata
-        await write_int(dp_groups, NUM_BYTES_FOR_IDENTIFIERS, writer)
-        await write_int(nodes_per_group, NUM_BYTES_FOR_IDENTIFIERS, writer)
-        await write_int(num_workers, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(args.dp_groups, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(args.nodes_per_group, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(args.num_workers, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce query
         await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
@@ -153,9 +152,7 @@ class ServerConnection:
         logger.debug(f"Got success = {success} from server.")
         return success
 
-    def execute_query(
-        self, query: "Query", mixture: "Mixture", dp_groups: int, nodes_per_group: int, num_workers: int
-    ) -> bool:
+    def execute_query(self, query: "Query", args: "QueryExecutionArgs") -> bool:
         """
         Executes a query on the server and returns whether it was successful.
 
@@ -166,7 +163,7 @@ class ServerConnection:
         Returns:
             A boolean indicating whether the query was successfully registered with the server.
         """
-        success = run_async_until_complete(self._execute_query(query, mixture, dp_groups, nodes_per_group, num_workers))
+        success = run_async_until_complete(self._execute_query(query, args))
         return success
 
     async def _get_query_result_meta(self, job_id: str) -> Optional[dict]:

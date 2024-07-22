@@ -3,10 +3,12 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
+from mixtera.core.query.mixture import ArbitraryMixture
 from mixtera.network.connection import ServerConnection
 
 
@@ -30,10 +32,11 @@ class TestServerStub(unittest.TestCase):
         chunk_size = 100
         query.job_id = "test_job_id"
         mock_execute_query.return_value = True
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size), dp_groups=1, nodes_per_group=2, num_workers=3)
 
-        result = self.server_stub.execute_query(query, chunk_size, 1, 2, 3)
+        result = self.server_stub.execute_query(query, args)
 
-        mock_execute_query.assert_called_once_with(query, chunk_size, 1, 2, 3)
+        mock_execute_query.assert_called_once_with(query, args)
         self.assertTrue(result)
 
     @patch.object(ServerConnection, "execute_query", return_value=False)
@@ -41,10 +44,11 @@ class TestServerStub(unittest.TestCase):
         query = MagicMock(spec=Query)
         chunk_size = 100
         query.job_id = "test_job_id"
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size), dp_groups=1, nodes_per_group=2, num_workers=3)
 
-        result = self.server_stub.execute_query(query, chunk_size, 1, 2, 3)
+        result = self.server_stub.execute_query(query, args)
 
-        mock_execute_query.assert_called_once_with(query, chunk_size, 1, 2, 3)
+        mock_execute_query.assert_called_once_with(query, args)
         self.assertFalse(result)
 
     @patch.object(ServerConnection, "_stream_result_chunks")

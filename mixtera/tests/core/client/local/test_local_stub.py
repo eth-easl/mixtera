@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
@@ -76,8 +77,8 @@ class TestLocalStub(unittest.TestCase):
         query.job_id = "test_job_id"
         self.local_stub._mdc = mock_mdc
         self.local_stub._register_query = MagicMock(return_value=True)
-
-        result = self.local_stub.execute_query(query, mixture, 1, 1, 1)
+        args = QueryExecutionArgs(mixture=mixture)
+        result = self.local_stub.execute_query(query, args)
         query.execute.assert_called_once_with(mock_mdc, mixture)
         self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)
         self.assertTrue(result)
@@ -90,7 +91,8 @@ class TestLocalStub(unittest.TestCase):
         query.job_id = "test_job_id"
         self.local_stub._register_query = MagicMock(return_value=False)
         self.local_stub._mdc = mock_mdc
-        result = self.local_stub.execute_query(query, mixture, 1, 1, 1)
+        args = QueryExecutionArgs(mixture=mixture)
+        result = self.local_stub.execute_query(query, args)
 
         query.execute.assert_called_once_with(mock_mdc, mixture)
         self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)

@@ -5,6 +5,7 @@ from pathlib import Path
 import torch
 from integrationtests.utils import TestMetadataParser, setup_test_dataset
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
 from mixtera.torch import MixteraTorchDataset
@@ -17,7 +18,7 @@ def sample_parsing_func(sample):
 
 
 def create_and_iterate_dataloaders(
-    client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
+    client, query, query_execution_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs, batch_size
 ):
     # This iterates in a round robin fashion across the dp nodes and groups:
     # It first fetches a batch from group 0 / node 0, then group 0 / node 1, etc
@@ -29,21 +30,14 @@ def create_and_iterate_dataloaders(
     result_samples = []
     data_loaders = []
 
-    for node_id in range(nodes_per_group):
-        for dp_group_id in range(dp_groups):
-            torch_ds = MixteraTorchDataset(
-                client,
-                query,
-                job_id,
-                mixture,
-                dp_groups=dp_groups,
-                nodes_per_group=nodes_per_group,
-                num_workers=num_workers,
-                node_id=node_id,
-                dp_group_id=dp_group_id,
-                tunnel_via_server=tunnel,
+    for node_id in range(query_execution_args.nodes_per_group):
+        for dp_group_id in range(query_execution_args.dp_groups):
+            result_streaming_args.node_id = node_id
+            result_streaming_args.dp_group_id = dp_group_id
+            torch_ds = MixteraTorchDataset(client, query, query_execution_args, result_streaming_args)
+            dl = torch.utils.data.DataLoader(
+                torch_ds, batch_size=batch_size, num_workers=query_execution_args.num_workers
             )
-            dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
             data_loaders.append(dl)
 
     iterators = [iter(dl) for dl in data_loaders]
@@ -63,113 +57,114 @@ def create_and_iterate_dataloaders(
 
 def test_filter_javascript(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    job_id = f"0_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    job_id = (
+        f"0_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+    )
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     result_samples = create_and_iterate_dataloaders(
-        client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
     )
-    expected_samples = 500 * nodes_per_group
+    expected_samples = 500 * query_exec_args.nodes_per_group
 
     assert (
         len(result_samples) == expected_samples
-    ), f"Got {len(result_samples)} samples instead of the expected 500 * {nodes_per_group} = {expected_samples}!"
+    ), f"Got {len(result_samples)} samples instead of the expected 500 * {query_exec_args.nodes_per_group} = {expected_samples}!"
     for sample in result_samples:
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
 def test_filter_html(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    job_id = f"1_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    job_id = (
+        f"1_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+    )
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     result_samples = create_and_iterate_dataloaders(
-        client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
     )
-    expected_samples = 500 * nodes_per_group
+    expected_samples = 500 * query_exec_args.nodes_per_group
 
     assert (
         len(result_samples) == expected_samples
-    ), f"Got {len(result_samples)} samples instead of the expected 500 * {nodes_per_group} = {expected_samples}!"
+    ), f"Got {len(result_samples)} samples instead of the expected 500 * {query_exec_args.nodes_per_group} = {expected_samples}!"
     for sample in result_samples:
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
 def test_filter_both(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    job_id = f"2_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    job_id = (
+        f"2_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+    )
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
     result_samples = create_and_iterate_dataloaders(
-        client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
     )
-    expected_samples = 1000 * nodes_per_group
+    expected_samples = 1000 * query_exec_args.nodes_per_group
 
     assert (
         len(result_samples) == expected_samples
-    ), f"Got {len(result_samples)} samples instead of the expected 1000 * {nodes_per_group} = {expected_samples}!"
+    ), f"Got {len(result_samples)} samples instead of the expected 1000 * {query_exec_args.nodes_per_group} = {expected_samples}!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
 def test_filter_license(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    job_id = f"3_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    job_id = (
+        f"3_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+    )
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     result_samples = create_and_iterate_dataloaders(
-        client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
     )
-    expected_samples = 1000 * nodes_per_group
+
+    expected_samples = 1000 * query_exec_args.nodes_per_group
 
     assert (
         len(result_samples) == expected_samples
-    ), f"Got {len(result_samples)} samples instead of the expected 1000 * {nodes_per_group} = {expected_samples}!"
+    ), f"Got {len(result_samples)} samples instead of the expected 1000 * {query_exec_args.nodes_per_group} = {expected_samples}!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
 def test_filter_unknown_license(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    job_id = f"4_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    job_id = (
+        f"4_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+    )
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     result_samples = create_and_iterate_dataloaders(
-        client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
     )
 
     assert len(result_samples) == 0, f"Got {len(result_samples)} samples for expected empty results"
@@ -177,44 +172,44 @@ def test_filter_unknown_license(
 
 def test_filter_license_and_html(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    job_id = f"5_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    job_id = (
+        f"5_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+    )
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
     result_samples = create_and_iterate_dataloaders(
-        client, query, job_id, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
     )
-    expected_samples = 1000 * nodes_per_group
+    expected_samples = 1000 * query_exec_args.nodes_per_group
 
     assert (
         len(result_samples) == expected_samples
-    ), f"Got {len(result_samples)} samples instead of the expected 1000 * {nodes_per_group} = {expected_samples}!"
+    ), f"Got {len(result_samples)} samples instead of the expected 1000 * {query_exec_args.nodes_per_group} = {expected_samples}!"
     for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
 def test_filter_both_with_order_validation(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    if nodes_per_group <= 1:
+    if query_exec_args.nodes_per_group <= 1:
         return  # This test is only relevant if there are multiple nodes per group
 
-    job_id = f"6_{mixture.chunk_size}_{batch_size}_{dp_groups}_{nodes_per_group}_{num_workers}_{tunnel}"
+    job_id = (
+        f"6_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+    )
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -223,22 +218,16 @@ def test_filter_both_with_order_validation(
 
     # Collect batches for each node in each group
     group_batches = {}
-    for dp_group_id in range(dp_groups):
+    for dp_group_id in range(query_exec_args.dp_groups):
         node_batches = {}
-        for node_id in range(nodes_per_group):
+        for node_id in range(query_exec_args.nodes_per_group):
             torch_ds = MixteraTorchDataset(
                 client,
                 query,
-                job_id,
-                mixture,
-                dp_groups=dp_groups,
-                nodes_per_group=nodes_per_group,
-                num_workers=num_workers,
-                node_id=node_id,
-                dp_group_id=dp_group_id,
-                tunnel_via_server=tunnel,
+                query_exec_args,
+                ResultStreamingArgs(job_id=job_id, dp_group_id=dp_group_id, node_id=node_id, tunnel_via_server=tunnel),
             )
-            dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=num_workers)
+            dl = torch.utils.data.DataLoader(torch_ds, batch_size=batch_size, num_workers=query_exec_args.num_workers)
             batches = list(dl)
             node_batches[node_id] = batches
 
@@ -254,20 +243,17 @@ def test_filter_both_with_order_validation(
 
 def test_torchds(
     client: MixteraClient,
-    mixture: Mixture,
-    dp_groups: int,
-    nodes_per_group: int,
-    num_workers: int,
+    query_exec_args: QueryExecutionArgs,
     batch_size: int,
     tunnel: bool,
 ):
-    test_filter_javascript(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
-    test_filter_html(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
-    test_filter_both(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
-    test_filter_license(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
-    test_filter_unknown_license(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
-    test_filter_license_and_html(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
-    test_filter_both_with_order_validation(client, mixture, dp_groups, nodes_per_group, num_workers, batch_size, tunnel)
+    test_filter_javascript(client, query_exec_args, batch_size, tunnel)
+    test_filter_html(client, query_exec_args, batch_size, tunnel)
+    test_filter_both(client, query_exec_args, batch_size, tunnel)
+    test_filter_license(client, query_exec_args, batch_size, tunnel)
+    test_filter_unknown_license(client, query_exec_args, batch_size, tunnel)
+    test_filter_license_and_html(client, query_exec_args, batch_size, tunnel)
+    test_filter_both_with_order_validation(client, query_exec_args, batch_size, tunnel)
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
@@ -284,8 +270,8 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
                 try:
-                    # Locally, we always have one node per dp group and one dp group
-                    test_torchds(local_client, mixture, 1, 1, num_workers, batch_size, False)
+                    query_exec_args = QueryExecutionArgs(mixture=mixture, num_workers=num_workers)
+                    test_torchds(local_client, query_exec_args, batch_size, False)
                 except Exception as e:
                     print(
                         "Error with "
@@ -320,9 +306,13 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
                             continue  # just test 8 workers for the smaller number of nodes
 
                         try:
-                            test_torchds(
-                                server_client, mixture, dp_groups, num_nodes_per_group, num_workers, batch_size, tunnel
+                            query_exec_args = QueryExecutionArgs(
+                                mixture=mixture,
+                                dp_groups=dp_groups,
+                                nodes_per_group=num_nodes_per_group,
+                                num_workers=num_workers,
                             )
+                            test_torchds(server_client, query_exec_args, batch_size, tunnel)
                         except Exception as e:
                             print(
                                 "Error with "

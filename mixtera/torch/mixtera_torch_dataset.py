@@ -2,8 +2,10 @@ from typing import Any, Generator
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
-from mixtera.core.query import Mixture, Query
-from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable=import-error,no-name-in-module
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
+from mixtera.core.query import Query
+from mixtera.core.query.mixture import Mixture  # pylint: disable=import-error,no-name-in-module
+from torch.utils.data import IterableDataset, get_worker_info
 
 
 class MixteraTorchDataset(IterableDataset):
@@ -11,33 +13,39 @@ class MixteraTorchDataset(IterableDataset):
         self,
         client: MixteraClient,
         query: Query,
-        job_id: str,
-        mixture: Mixture,
-        dp_groups: int = 1,
-        dp_group_id: int = 0,
-        nodes_per_group: int = 1,
-        node_id: int = 0,
-        num_workers: int = 1,
-        tunnel_via_server: bool = False,
+        query_execution_args: QueryExecutionArgs,
+        result_streaming_args: ResultStreamingArgs,
     ):
         # TODO(#63): This needs to be passed information on transformation, e.g., tokenization functions etc.
         # Alternative: Let people inherit from this.
         self._client = client
         self._query = query
-        self._training_id = job_id
-        self._dp_group_id = dp_group_id
-        self._node_id = node_id
-        self._mixture = mixture
-        self._tunnel_via_server = tunnel_via_server
-        self._num_workers = num_workers if num_workers > 0 else 1
+        self._res_str_args = result_streaming_args
+        self._query_execution_args = query_execution_args
 
-        assert self._dp_group_id < dp_groups
-        assert self._node_id < nodes_per_group
+        assert self._dp_group_id < query_execution_args.dp_groups
+        assert self._node_id < query_execution_args.nodes_per_group
 
         if self._node_id == 0 and self._dp_group_id == 0:
             logger.info("Since this is node 0 in data parallel group 0, executing query!")
             # Execute query on primary node pre-fork, to share the results among all forked workers
-            self._client.execute_query(query, self._mixture, dp_groups, nodes_per_group, num_workers)
+            self._client.execute_query(query, self._query_execution_args)
+
+    @property
+    def _dp_group_id(self) -> int:
+        return self._res_str_args.dp_group_id
+
+    @property
+    def _node_id(self) -> int:
+        return self._res_str_args.node_id
+
+    @property
+    def _mixture(self) -> Mixture:
+        return self._query_execution_args.mixture
+
+    @property
+    def num_workers(self) -> int:
+        return max(self._query_execution_args.num_workers, 1)
 
     def __getitem__(self, index: int) -> Any:
         raise NotImplementedError("This is just overwritten to satify pylint.")
@@ -50,8 +58,7 @@ class MixteraTorchDataset(IterableDataset):
         else:
             worker_id = worker_info.id
 
-        assert worker_id < self._num_workers, f"Number of workers was invalid: {worker_id} vs {self._num_workers}"
+        assert worker_id < self.num_workers, f"Number of workers was invalid: {worker_id} vs {self.num_workers}"
+        self._res_str_args.worker_id = worker_id
 
-        yield from self._client.stream_results(
-            self._training_id, self._dp_group_id, self._node_id, worker_id, self._tunnel_via_server
-        )
+        yield from self._client.stream_results(self._res_str_args)

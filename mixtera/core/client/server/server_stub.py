@@ -3,12 +3,13 @@ from typing import Any, Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
-from mixtera.core.query import Mixture, Query
+from mixtera.core.query import Query
 from mixtera.network.connection import ServerConnection
 
 
@@ -62,10 +63,8 @@ class ServerStub(MixteraClient):
     def remove_dataset(self, identifier: str) -> bool:
         return self._server_connection.remove_dataset(identifier)
 
-    def execute_query(
-        self, query: Query, mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
-    ) -> bool:
-        if not self._server_connection.execute_query(query, mixture, dp_groups, nodes_per_group, num_workers):
+    def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
+        if not self._server_connection.execute_query(query, args):
             logger.error("Could not register query at server!")
             return False
 

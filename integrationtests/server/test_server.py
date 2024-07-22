@@ -5,6 +5,7 @@ from typing import Any
 
 from integrationtests.utils import TestMetadataParser, calc_func, setup_func, setup_test_dataset
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.client.server import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.property_type import PropertyType
@@ -18,13 +19,13 @@ def parsing_func(sample):
     return json.loads(sample)["text"]
 
 
-def test_filter_javascript(client: ServerStub, mixture: Mixture, dp_groups: int, nodes_per_group: int, tunnel: bool):
+def test_filter_javascript(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = str(round(time.time() * 1000))
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    assert client.execute_query(query, mixture, dp_groups, nodes_per_group, 1)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, 0, 0, 0, tunnel_via_server=tunnel):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -32,13 +33,13 @@ def test_filter_javascript(client: ServerStub, mixture: Mixture, dp_groups: int,
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
-def test_filter_html(client: ServerStub, mixture: Mixture, dp_groups: int, nodes_per_group: int, tunnel: bool):
+def test_filter_html(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = str(round(time.time() * 1000))
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
-    assert client.execute_query(query, mixture, dp_groups, nodes_per_group, 1)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, 0, 0, 0, tunnel_via_server=tunnel):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -46,17 +47,17 @@ def test_filter_html(client: ServerStub, mixture: Mixture, dp_groups: int, nodes
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
-def test_filter_both(client: ServerStub, mixture: Mixture, dp_groups: int, nodes_per_group: int, tunnel: bool):
+def test_filter_both(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = str(round(time.time() * 1000))
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
-    assert client.execute_query(query, mixture, dp_groups, nodes_per_group, 1)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, 0, 0, 0, tunnel_via_server=tunnel):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of 1000!"
@@ -64,13 +65,13 @@ def test_filter_both(client: ServerStub, mixture: Mixture, dp_groups: int, nodes
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_filter_license(client: ServerStub, mixture: Mixture, dp_groups: int, nodes_per_group: int, tunnel: bool):
+def test_filter_license(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = str(round(time.time() * 1000))
     query = Query.for_job(job_id).select(("license", "==", "CC"))
-    assert client.execute_query(query, mixture, dp_groups, nodes_per_group, 1)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, 0, 0, 0, tunnel_via_server=tunnel):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -79,19 +80,17 @@ def test_filter_license(client: ServerStub, mixture: Mixture, dp_groups: int, no
 
 
 def test_filter_unknown_license(
-    client: ServerStub, mixture: Mixture, dp_groups: int, nodes_per_group: int, tunnel: bool
+    client: ServerStub, mixture: Mixture, query_exec_args: QueryExecutionArgs, tunnel: bool
 ):
     job_id = str(round(time.time() * 1000))
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
-    assert client.execute_query(query, mixture, dp_groups, nodes_per_group, 1)
+    assert client.execute_query(query, query_exec_args)
     assert (
-        len(list(client.stream_results(job_id, 0, 0, 0, tunnel_via_server=tunnel))) == 0
+        len(list(client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)))) == 0
     ), "Got results back for expected empty results."
 
 
-def test_filter_license_and_html(
-    client: ServerStub, mixture: Mixture, dp_groups: int, nodes_per_group: int, tunnel: bool
-):
+def test_filter_license_and_html(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     # TODO(#41): This test currently tests unexpected behavior - we want to deduplicate!
     job_id = str(round(time.time() * 1000))
     query = (
@@ -99,10 +98,10 @@ def test_filter_license_and_html(
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
-    assert client.execute_query(query, mixture, dp_groups, nodes_per_group, 1)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, 0, 0, 0, tunnel_via_server=tunnel):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"

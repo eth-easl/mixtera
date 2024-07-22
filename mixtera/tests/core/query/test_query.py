@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import portion as P
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query import ArbitraryMixture, Operator, Query, QueryPlan, StaticMixture
 from mixtera.utils import defaultdict_to_dict
@@ -170,7 +171,8 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query("job_id").mockoperator("test")
-        assert self.client.execute_query(query, ArbitraryMixture(1), 1, 1, 1)
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(1))
+        assert self.client.execute_query(query, args)
         query_result = query.results
         gt_meta = {
             "dataset_type": {"did": "test_dataset_type"},
@@ -194,7 +196,8 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         query = Query.for_job("job_id").mockoperator("test", len_results=2)
-        assert self.client.execute_query(query, ArbitraryMixture(2), 1, 1, 1)
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(2))
+        assert self.client.execute_query(query, args)
         chunks = list(iter(query.results))
         self.assertEqual(chunks, [{"field:value": {"did": {"fid": [(0, 2)]}}}])
 
@@ -232,7 +235,9 @@ class TestQuery(unittest.TestCase):
         }
 
         query = Query.for_job("job_id").simplemockoperator("test")
-        assert self.client.execute_query(query, ArbitraryMixture(1), 1, 1, 1)
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(1))
+
+        assert self.client.execute_query(query, args)
         inverted_index = query.results._invert_result(query.results.results)
 
         # True result vs reference
@@ -320,7 +325,8 @@ class TestQuery(unittest.TestCase):
         }
 
         query = Query.for_job("job_id").complexmockoperator("test")
-        assert self.client.execute_query(query, ArbitraryMixture(1), 1, 1, 1)
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(1))
+        assert self.client.execute_query(query, args)
         inverted_index = query.results._invert_result(query.results.results)
 
         # True result vs reference
@@ -383,7 +389,8 @@ class TestQuery(unittest.TestCase):
         }
 
         query = Query.for_job("job_id").complexmockoperator("test")
-        assert self.client.execute_query(query, ArbitraryMixture(1), 1, 1, 1)
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(1))
+        assert self.client.execute_query(query, args)
         inverted_index = query.results._invert_result(query.results.results)
         chunk_index = query.results._create_chunker_index(inverted_index)
         self.assertDictEqual(defaultdict_to_dict(chunk_index), reference_result)
@@ -432,9 +439,10 @@ class TestQuery(unittest.TestCase):
         }
 
         query = Query.for_job("job_id").simplemockoperator("test")
-
         mixture = StaticMixture(16, mixture_concentration)
-        assert self.client.execute_query(query, mixture, 1, 1, 1)
+        args = QueryExecutionArgs(mixture=mixture)
+
+        assert self.client.execute_query(query, args)
         chunks = list(iter(query.results))
 
         # Check the structure of the chunker index
@@ -497,7 +505,9 @@ class TestQuery(unittest.TestCase):
         mixture_1 = StaticMixture(16, mixture_concentration_1)
         mixture_2 = StaticMixture(16, mixture_concentration_2)
         mixture_3 = StaticMixture(20, mixture_concentration_2)
-        assert self.client.execute_query(query, mixture_1, 1, 1, 1)
+        args = QueryExecutionArgs(mixture=mixture_1)
+
+        assert self.client.execute_query(query, args)
         result_iterator = iter(query.results)
         chunks = [next(result_iterator) for _ in range(10)]
         query.results.update_mixture(mixture_2)
@@ -656,7 +666,8 @@ class TestQuery(unittest.TestCase):
         query = Query.for_job("job_id").complexmockoperator("test")
 
         mixture = StaticMixture(10, mixture_concentration)
-        assert self.client.execute_query(query, mixture, 1, 1, 1)
+        args = QueryExecutionArgs(mixture=mixture)
+        assert self.client.execute_query(query, args)
         chunks = list(iter(query.results))
 
         def _subchunk_counter(chunk, key):
@@ -880,7 +891,9 @@ class TestQuery(unittest.TestCase):
         ]
 
         query = Query.for_job("job_id").complexmockoperator("test")
-        assert self.client.execute_query(query, ArbitraryMixture(7), 1, 1, 1)
+        args = QueryExecutionArgs(mixture=ArbitraryMixture(7))
+
+        assert self.client.execute_query(query, args)
         chunks = list(iter(query.results))
 
         def _subchunk_counter(chunk, key):
