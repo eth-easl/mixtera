@@ -1,3 +1,5 @@
+import os
+import threading
 from typing import Any, Generator
 
 from loguru import logger
@@ -15,6 +17,7 @@ class MixteraTorchDataset(IterableDataset):
         query: Query,
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
+        execute_query: bool = True,
     ):
         # TODO(#63): This needs to be passed information on transformation, e.g., tokenization functions etc.
         # Alternative: Let people inherit from this.
@@ -26,8 +29,10 @@ class MixteraTorchDataset(IterableDataset):
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
 
-        if self._node_id == 0 and self._dp_group_id == 0:
-            logger.info("Since this is node 0 in data parallel group 0, executing query!")
+        if self._node_id == 0 and self._dp_group_id == 0 and execute_query:
+            logger.info(
+                f"[{os.getpid()}/{threading.get_native_id()}] Since this is node 0 in data parallel group 0, executing query!"
+            )
             # Execute query on primary node pre-fork, to share the results among all forked workers
             self._client.execute_query(query, self._query_execution_args)
 

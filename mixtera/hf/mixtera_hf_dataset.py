@@ -19,7 +19,9 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         result_streaming_args: ResultStreamingArgs,
         _shard_called: bool = False,
     ):
-        MixteraTorchDataset.__init__(self, client, query, query_execution_args, result_streaming_args)
+        MixteraTorchDataset.__init__(
+            self, client, query, query_execution_args, result_streaming_args, execute_query=not _shard_called
+        )
         datasets.iterable_dataset._BaseExamplesIterable.__init__(self)
         self._shard_called = _shard_called
 
