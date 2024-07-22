@@ -27,10 +27,11 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         raise NotImplementedError("This is just overwritten to satify pylint.")
 
     def _init_state_dict(self) -> dict:
-        raise NotImplementedError("Do we need this?")
+        logger.info("_init_state_dict called.")
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> datasets.iterable_dataset._BaseExamplesIterable:
-        raise NotImplementedError("Do we need this?")
+        logger.info("shuffle_data_sources called.")
+        return self
 
     @property
     def n_shards(self) -> int:
