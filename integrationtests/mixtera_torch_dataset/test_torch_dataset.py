@@ -67,7 +67,7 @@ def test_filter_javascript(
     )
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     result_samples = create_and_iterate_dataloaders(
-        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
     expected_samples = 500 * query_exec_args.nodes_per_group
 
@@ -90,7 +90,7 @@ def test_filter_html(
     )
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     result_samples = create_and_iterate_dataloaders(
-        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
     expected_samples = 500 * query_exec_args.nodes_per_group
 
@@ -117,7 +117,7 @@ def test_filter_both(
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
     result_samples = create_and_iterate_dataloaders(
-        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
     expected_samples = 1000 * query_exec_args.nodes_per_group
 
@@ -140,7 +140,7 @@ def test_filter_license(
     )
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     result_samples = create_and_iterate_dataloaders(
-        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
 
     expected_samples = 1000 * query_exec_args.nodes_per_group
@@ -164,7 +164,7 @@ def test_filter_unknown_license(
     )
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     result_samples = create_and_iterate_dataloaders(
-        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
 
     assert len(result_samples) == 0, f"Got {len(result_samples)} samples for expected empty results"
@@ -186,7 +186,7 @@ def test_filter_license_and_html(
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
     result_samples = create_and_iterate_dataloaders(
-        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel=tunnel), batch_size, tunnel
+        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
     expected_samples = 1000 * query_exec_args.nodes_per_group
 
