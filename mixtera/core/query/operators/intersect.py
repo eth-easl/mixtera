@@ -1,7 +1,6 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from mixtera.core.query.query_plan import QueryPlan
-from mixtera.utils import intervals_to_ranges, ranges_to_intervals
 
 from ._base import Operator
 

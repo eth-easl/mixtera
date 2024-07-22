@@ -224,7 +224,7 @@ class Index(ABC):
           Does not return anything, but extends the internal index with the `other`.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
-    
+
     @abstractmethod
     def intersect(self, other: "Index", copy_other: bool = False) -> None:
         """

@@ -14,7 +14,7 @@ from mixtera.core.datacollection.index import (
     IndexType,
     InvertedIndex,
 )
-from mixtera.utils import merge_dicts, ranges
+from mixtera.utils import intersect_dicts, merge_dicts, ranges
 from mixtera.utils.utils import return_with_deepcopy_or_noop
 
 # Note that these functions cannot be nested lambdas or nested functions since they cannot be pickled
@@ -215,6 +215,14 @@ class InMemoryDictionaryIndex(Index, ABC):
         )
         other_raw_dict = other.get_full_dict_index(copy=copy_other)
         self._index = merge_dicts(self._index, other_raw_dict)
+
+    def intersect(self, other: Index, copy_other: bool = False) -> None:
+        assert isinstance(other, self.__class__), (
+            "You cannot intersect two indices of differnt types: "
+            f"<left: {self.__class__}> and <right: {other.__class__}>"
+        )
+        other_raw_dict = other.get_full_dict_index(copy=copy_other)
+        self._index = intersect_dicts(self._index, other_raw_dict)
 
     def has_feature(self, feature_name: str) -> bool:
         return feature_name in self._index
