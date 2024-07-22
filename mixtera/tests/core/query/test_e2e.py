@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Query
 
@@ -68,7 +69,8 @@ class TestQueryE2E(unittest.TestCase):
     def test_query_select(self):
         mixture = ArbitraryMixture(1)
         query = Query.for_job("job_id").select(("language", "==", "Go"))
-        assert self.client.execute_query(query, mixture)
+        args = QueryExecutionArgs(mixture=mixture)
+        assert self.client.execute_query(query, args)
         res = list(iter(query.results))
         for x in res:
             self.assertEqual(x._result_index, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
@@ -80,7 +82,8 @@ class TestQueryE2E(unittest.TestCase):
         query_2 = Query.for_job("job_id")
         query_2.select(("language", "==", "CSS"))
         query_2 = query_2.union(query_1)
-        assert self.client.execute_query(query_2, mixture)
+        args = QueryExecutionArgs(mixture=mixture)
+        assert self.client.execute_query(query_2, args)
         query_result = query_2.results
         res = list(iter(query_result))
 

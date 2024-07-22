@@ -1,11 +1,12 @@
+import multiprocessing as mp
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
 from integrationtests.utils import TestMetadataParser, get_expected_js_and_html_samples, get_job_id, setup_test_dataset
 from loguru import logger
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query, StaticMixture
 
@@ -31,9 +32,9 @@ def test_filter_javascript(
 ) -> None:
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
-    for sample in client.stream_results(job_id, False, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert (
@@ -50,10 +51,10 @@ def test_filter_html(
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert (
@@ -74,10 +75,10 @@ def test_filter_both(
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert (
@@ -94,10 +95,10 @@ def test_filter_license(
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "CC"))
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert (
@@ -114,8 +115,10 @@ def test_filter_unknown_license(
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
-    client.execute_query(query, mixture)
-    assert len(list(client.stream_results(job_id, False, **args))) == 0, "Got results back for expected empty results."
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
+    assert (
+        len(list(client.stream_results(ResultStreamingArgs(job_id=job_id)))) == 0
+    ), "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(
@@ -129,10 +132,10 @@ def test_filter_license_and_html(
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert (
@@ -216,6 +219,7 @@ def test_chunk_readers(dir: Path) -> None:
 
 
 def main() -> None:
+    print(f"Running tests with {mp.get_start_method()} start method.")
     with tempfile.TemporaryDirectory() as directory:
         test_chunk_readers(Path(directory))
 

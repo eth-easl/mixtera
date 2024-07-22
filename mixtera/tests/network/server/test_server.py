@@ -3,7 +3,6 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Generator
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
@@ -38,16 +37,22 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
     @patch("mixtera.network.server.server.write_int")
     @patch("mixtera.network.server.server.read_pickeled_object")
-    async def test_register_query(self, mock_read_pickeled_object, mock_write_int):
+    @patch("mixtera.network.server.server.read_int")
+    async def test_register_query(self, mock_read_int, mock_read_pickeled_object, mock_write_int):
         query_mock = MagicMock()
         query_mock.job_id = "cool_training_id"
-        mock_read_pickeled_object.return_value = query_mock
+        mock_read_pickeled_object.side_effect = [MagicMock(), query_mock]  # mixture, query
+        mock_read_int.side_effect = [1, 2, 3]  # dp_groups, nodes_per_group, num_workers
         mock_writer = create_mock_writer()
 
         await self.server._register_query(create_mock_reader(b""), mock_writer)
 
         mock_read_pickeled_object.assert_awaited_with(NUM_BYTES_FOR_SIZES, ANY)
         self.assertEqual(mock_read_pickeled_object.await_count, 2)
+
+        mock_read_int.assert_awaited_with(NUM_BYTES_FOR_IDENTIFIERS, ANY)
+        self.assertEqual(mock_read_int.await_count, 3)
+
         mock_write_int.assert_awaited_once_with(True, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
 
     @patch("mixtera.network.server.server.write_utf8_string")
@@ -96,35 +101,33 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
             mock_writer,
         )
 
-    @patch("mixtera.network.server.server.write_pickeled_object")
+    @patch("mixtera.network.server.server.write_bytes_obj")
     @patch("mixtera.network.server.server.read_int")
     @patch("mixtera.network.server.server.read_utf8_string")
-    @patch("mixtera.core.client.local.LocalStub._get_query_result")
+    @patch("mixtera.core.client.local.LocalStub._get_query_chunk_distributor")
     async def test_get_next_result_chunk(
-        self, mock_get_query_result, mock_read_utf8_string, mock_read_int, mock_write_pickeled_object
+        self, mock_get_query_chunk_distributor, mock_read_utf8_string, mock_read_int, mock_write_bytes_obj
     ):
-        def sample_generator() -> Generator[int, None, None]:
-            yield 1
-            yield 2
-
-        job_id = "itsamemario"
-        mock_read_int.return_value = int(ServerTask.GET_NEXT_RESULT_CHUNK)
+        job_id = "itsamememario"
+        mock_read_int.side_effect = [int(ServerTask.GET_NEXT_RESULT_CHUNK), 1, 2, 3] * 2
         mock_read_utf8_string.return_value = job_id
-        mock_get_query_result.return_value = sample_generator()
+        mock_get_query_chunk_distributor.return_value.next_chunk_for = MagicMock()
+        mock_get_query_chunk_distributor.return_value.next_chunk_for.side_effect = [1, 2]
         mock_writer = create_mock_writer()
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
-        mock_get_query_result.assert_called_once_with(job_id)
-        mock_write_pickeled_object.assert_awaited_once_with(1, NUM_BYTES_FOR_SIZES, mock_writer)
+        mock_get_query_chunk_distributor.assert_called_once_with(job_id)
+        mock_write_bytes_obj.assert_awaited_once_with(1, NUM_BYTES_FOR_SIZES, mock_writer)
 
         await self.server._dispatch_client(create_mock_reader(b""), mock_writer)
-        mock_get_query_result.assert_called_once_with(job_id)
+
+        mock_get_query_chunk_distributor.assert_called_once_with(job_id)
         expected_calls = [
             call(1, NUM_BYTES_FOR_SIZES, mock_writer),  # The first call
             call(2, NUM_BYTES_FOR_SIZES, mock_writer),  # The second call
         ]
-        mock_write_pickeled_object.assert_has_calls(expected_calls)
-        assert mock_write_pickeled_object.await_count == 2
+        mock_write_bytes_obj.assert_has_calls(expected_calls)
+        assert mock_write_bytes_obj.await_count == 2
 
     @patch("mixtera.network.server.server.MixteraServer._dispatch_client")
     async def test_run_async(self, mock_dispatch_client):

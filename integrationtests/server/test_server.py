@@ -12,6 +12,7 @@ from integrationtests.utils import (
     setup_test_dataset,
 )
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.client.server import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.property_type import PropertyType
@@ -33,13 +34,13 @@ def parsing_func(sample):
     return json.loads(sample)["text"]
 
 
-def test_filter_javascript(client: ServerStub, mixture: Mixture, **args: Any):
+def test_filter_javascript(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    assert client.execute_query(query, mixture)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert (
@@ -49,13 +50,13 @@ def test_filter_javascript(client: ServerStub, mixture: Mixture, **args: Any):
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
-def test_filter_html(client: ServerStub, mixture: Mixture, **args: Any):
+def test_filter_html(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
-    assert client.execute_query(query, mixture)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert (
@@ -65,17 +66,17 @@ def test_filter_html(client: ServerStub, mixture: Mixture, **args: Any):
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
-def test_filter_both(client: ServerStub, mixture: Mixture, **args: Any):
+def test_filter_both(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = get_job_id()
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
-    assert client.execute_query(query, mixture)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert (
@@ -85,13 +86,13 @@ def test_filter_both(client: ServerStub, mixture: Mixture, **args: Any):
         assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
-def test_filter_license(client: ServerStub, mixture: Mixture, **args: Any):
+def test_filter_license(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "CC"))
-    assert client.execute_query(query, mixture)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert (
@@ -101,14 +102,16 @@ def test_filter_license(client: ServerStub, mixture: Mixture, **args: Any):
         assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
-def test_filter_unknown_license(client: ServerStub, mixture: Mixture, **args: Any):
+def test_filter_unknown_license(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
-    assert client.execute_query(query, mixture)
-    assert len(list(client.stream_results(job_id, **args))) == 0, "Got results back for expected empty results."
+    assert client.execute_query(query, query_exec_args)
+    assert (
+        len(list(client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)))) == 0
+    ), "Got results back for expected empty results."
 
 
-def test_filter_license_and_html(client: ServerStub, mixture: Mixture, **args: Any):
+def test_filter_license_and_html(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     # TODO(#41): This test currently tests unexpected behavior - we want to deduplicate!
     job_id = get_job_id()
     query = (
@@ -116,10 +119,10 @@ def test_filter_license_and_html(client: ServerStub, mixture: Mixture, **args: A
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
-    assert client.execute_query(query, mixture)
+    assert client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(job_id, **args):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)):
         result_samples.append(sample)
 
     assert (
@@ -171,10 +174,11 @@ def test_server(server_dir: Path) -> None:
                             "per_window_mixture": per_window_mixture,
                             "window_size": window_size,
                         }
+                        query_exec_args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size))
                         test_rdc_chunksize_tunnel(
                             client,
-                            ArbitraryMixture(chunk_size),
-                            **args,
+                            query_exec_args,
+                            tunnel
                         )
 
     test_list_datasets(client)
@@ -184,17 +188,13 @@ def test_server(server_dir: Path) -> None:
     print("Successfully ran server tests!")
 
 
-def test_rdc_chunksize_tunnel(
-    client: ServerStub,
-    mixture: Mixture,
-    **args: Any,
-):
-    test_filter_javascript(client, mixture, **args)
-    test_filter_html(client, mixture, **args)
-    test_filter_both(client, mixture, **args)
-    test_filter_license(client, mixture, **args)
-    test_filter_unknown_license(client, mixture, **args)
-    test_filter_license_and_html(client, mixture, **args)
+def test_rdc_chunksize_tunnel(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
+    test_filter_javascript(client, query_exec_args, tunnel)
+    test_filter_html(client, query_exec_args, tunnel)
+    test_filter_both(client, query_exec_args, tunnel)
+    test_filter_license(client, query_exec_args, tunnel)
+    test_filter_unknown_license(client, query_exec_args, tunnel)
+    test_filter_license_and_html(client, query_exec_args, tunnel)
 
 
 def main() -> None:

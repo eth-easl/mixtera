@@ -1,5 +1,6 @@
 import multiprocessing as mp
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
@@ -12,6 +13,23 @@ from mixtera.core.query import Mixture, Query, ResultChunk
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
     from mixtera.core.client.server import ServerStub
+
+
+@dataclass
+class QueryExecutionArgs:
+    mixture: Mixture
+    dp_groups: int = 1
+    nodes_per_group: int = 1
+    num_workers: int = 1
+
+
+@dataclass
+class ResultStreamingArgs:
+    job_id: str
+    dp_group_id: int = 0
+    node_id: int = 0
+    worker_id: int = 0
+    tunnel_via_server: bool = False
 
 
 class MixteraClient(ABC):
@@ -171,13 +189,13 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def execute_query(self, query: Query, mixture: Mixture) -> bool:
+    def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
         """
         Executes the query on the MixteraClient. Afterwards, result can be obtained using `stream_results`.
 
         Args:
-            query (Query): The query to execute.
-            mixture: Mixture object
+            query (Query): The query to execute
+            args (QueryExecutionArgs): The object encoding the execution arguments
 
         Returns:
             bool indicating success
@@ -185,49 +203,41 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(
-        self,
-        job_id: str,
-        tunnel_via_server: bool = False,
-        degree_of_parallelism: int = 1,
-        per_window_mixture: bool = False,
-        window_size: int = 128,
-    ) -> Generator[str, None, None]:
+    def stream_results(self, args: ResultStreamingArgs) -> Generator[str, None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
-            job_id (str): The job ID to get the results for.
-            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server. Defaults to False.
-            reader_type (ChunkReaderType): The type of the chunk reader
-            chunk_reader_parameters (kwargs): Supplementary chunk-reader specific instantiation parameters
+            args (ResultStreamingArgs): The object encoding the streaming arguments
         Returns:
             A Generator over string samples.
 
         Raises:
             RuntimeError if query has not been executed.
         """
+
         from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
 
         server_connection = None
-        if tunnel_via_server:
+        if args.tunnel_via_server:
             if isinstance(self, ServerStub):
                 server_connection = self._server_connection
             else:
                 raise RuntimeError(
                     "Currently, tunneling samples via the server is only supported when using a ServerStub."
                 )
-
-        for result_chunk in self._stream_result_chunks(job_id):
+        for result_chunk in self._stream_result_chunks(args.job_id, args.dp_group_id, args.node_id, args.worker_id):
             result_chunk.configure_result_streaming(
                 server_connection=server_connection,
-                degree_of_parallelism=degree_of_parallelism,
-                per_window_mixture=per_window_mixture,
-                window_size=window_size,
+                degree_of_parallelism=args.degree_of_parallelism,
+                per_window_mixture=args.per_window_mixture,
+                window_size=args.window_size,
             )
             yield from result_chunk
 
     @abstractmethod
-    def _stream_result_chunks(self, job_id: str) -> Generator[ResultChunk, None, None]:
+    def _stream_result_chunks(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator[ResultChunk, None, None]:
         """
         Given a job ID, iterates over the result chunks.
 
