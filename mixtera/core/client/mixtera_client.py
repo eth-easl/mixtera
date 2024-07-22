@@ -1,5 +1,6 @@
 import multiprocessing as mp
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
@@ -13,6 +14,23 @@ from mixtera.core.query import Mixture, Query
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
     from mixtera.core.client.server import ServerStub
+
+
+@dataclass
+class QueryExecutionArgs:
+    mixture: Mixture
+    dp_groups: int = 1
+    nodes_per_group: int = 1
+    num_workers: int = 1
+
+
+@dataclass
+class ResultStreamingArgs:
+    job_id: str
+    dp_group_id: int = 0
+    node_id: int = 0
+    worker_id: int = 0
+    tunnel_via_server: bool = False
 
 
 class MixteraClient(ABC):
@@ -172,13 +190,13 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def execute_query(self, query: Query, mixture: Mixture) -> bool:
+    def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
         """
         Executes the query on the MixteraClient. Afterwards, result can be obtained using `stream_results`.
 
         Args:
-            query (Query): The query to execute.
-            mixture: Mixture object
+            query (Query): The query to execute
+            args (QueryExecutionArgs): The object encoding the execution arguments
 
         Returns:
             bool indicating success
@@ -186,26 +204,29 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, job_id: str, tunnel_via_server: bool = False) -> Generator[str, None, None]:
+    def stream_results(self, args: ResultStreamingArgs) -> Generator[str, None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:
-            job_id (str): The job ID to get the results for.
-            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server. Defaults to False.
+            args (ResultStreamingArgs): The object encoding the streaming arguments
         Returns:
             A Generator over string samples.
 
         Raises:
             RuntimeError if query has not been executed.
         """
-        result_metadata = self._get_result_metadata(job_id)
-        for result_chunk in self._stream_result_chunks(job_id):
+        result_metadata = self._get_result_metadata(args.job_id)
+        for result_chunk in self._stream_result_chunks(args.job_id, args.dp_group_id, args.node_id, args.worker_id):
             # TODO(#35): When implementing the new sampling on the ResultChunk,
             # the ResultChunk class should offer an iterator instead.
-            yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
+            yield from self._iterate_result_chunk(
+                result_chunk, *result_metadata, tunnel_via_server=args.tunnel_via_server
+            )
 
     @abstractmethod
-    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
+    def _stream_result_chunks(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator[ChunkerIndex, None, None]:
         """
         Given a job ID, iterates over the result chunks.
 

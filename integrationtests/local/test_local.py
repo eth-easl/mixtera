@@ -1,9 +1,10 @@
+import multiprocessing as mp
 import tempfile
-import time
 from pathlib import Path
 
 from integrationtests.utils import TestMetadataParser, write_jsonl
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
 
@@ -17,9 +18,9 @@ def parsing_func(sample):
 def test_filter_javascript(client: MixteraClient, mixture: Mixture):
     job_id = str(int(1e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
-    for sample in client.stream_results(job_id, False):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -30,10 +31,10 @@ def test_filter_javascript(client: MixteraClient, mixture: Mixture):
 def test_filter_html(client: MixteraClient, mixture: Mixture):
     job_id = str(int(2e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
@@ -48,10 +49,10 @@ def test_filter_both(client: MixteraClient, mixture: Mixture):
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -62,10 +63,10 @@ def test_filter_both(client: MixteraClient, mixture: Mixture):
 def test_filter_license(client: MixteraClient, mixture: Mixture):
     job_id = str(int(4e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("license", "==", "CC"))
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -76,8 +77,10 @@ def test_filter_license(client: MixteraClient, mixture: Mixture):
 def test_filter_unknown_license(client: MixteraClient, mixture: Mixture):
     job_id = str(int(5e4 + mixture.chunk_size))
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
-    client.execute_query(query, mixture)
-    assert len(list(client.stream_results(job_id, False))) == 0, "Got results back for expected empty results."
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
+    assert (
+        len(list(client.stream_results(ResultStreamingArgs(job_id=job_id)))) == 0
+    ), "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(client: MixteraClient, mixture: Mixture):
@@ -87,10 +90,10 @@ def test_filter_license_and_html(client: MixteraClient, mixture: Mixture):
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
-    client.execute_query(query, mixture)
+    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
     result_samples = []
 
-    for sample in client.stream_results(job_id, False):
+    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
         result_samples.append(sample)
 
     assert len(result_samples) == 1000, f"Got {len(result_samples)} samples instead of the expected 1000!"
@@ -122,6 +125,7 @@ def test_client(dir: Path) -> None:
 
 
 def main() -> None:
+    print(f"Running tests with {mp.get_start_method()} start method.")
     with tempfile.TemporaryDirectory() as directory:
         test_client(Path(directory))
 

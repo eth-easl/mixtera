@@ -4,6 +4,8 @@ import unittest
 from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
+import dill
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.connection.server_connection import ServerConnection
@@ -116,8 +118,8 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_read_int.return_value = 1
         query_mock = MagicMock()
         mixture_mock = MagicMock()
-
-        success = await self.server_connection._execute_query(query_mock, mixture_mock)
+        args = QueryExecutionArgs(mixture=mixture_mock)
+        success = await self.server_connection._execute_query(query_mock, args)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
@@ -158,34 +160,40 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_get_next_result.side_effect = [[1, 2, 3], [4, 5, 6], None]
         job_id = "job_id"
 
-        results = self.server_connection._stream_result_chunks(job_id)
+        results = self.server_connection._stream_result_chunks(job_id, 1, 1, 1)
         result_list = list(results)
 
         self.assertEqual(result_list, [[1, 2, 3], [4, 5, 6]])
-        mock_get_next_result.assert_has_calls([call(job_id), call(job_id), call(job_id)])
+        mock_get_next_result.assert_has_calls([call(job_id, 1, 1, 1), call(job_id, 1, 1, 1), call(job_id, 1, 1, 1)])
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
-    @patch("mixtera.network.connection.server_connection.read_pickeled_object")
+    @patch("mixtera.network.connection.server_connection.read_bytes_obj")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     async def test_get_next_result(
-        self, mock_write_string, mock_write_int, mock_read_pickeled_object, mock_connect_to_server
+        self, mock_write_string, mock_write_int, mock_read_bytes_obj, mock_connect_to_server
     ):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
         mock_connect_to_server.return_value = mock_reader, mock_writer
-        mock_read_pickeled_object.return_value = [1, 2, 3]
+        serialized_chunk = dill.dumps([1, 2, 3])
+        mock_read_bytes_obj.return_value = serialized_chunk
         job_id = "job_id"
 
-        result_chunk = await self.server_connection._get_next_result(job_id)
+        result_chunk = await self.server_connection._get_next_result(job_id, 1, 1, 1)
 
         self.assertEqual(result_chunk, [1, 2, 3])
         mock_connect_to_server.assert_awaited_once()
         mock_write_int.assert_has_calls(
-            [call(int(ServerTask.GET_NEXT_RESULT_CHUNK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
+            [
+                call(int(ServerTask.GET_NEXT_RESULT_CHUNK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(1, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(1, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(1, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ]
         )
         mock_write_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
-        mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
+        mock_read_bytes_obj.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
