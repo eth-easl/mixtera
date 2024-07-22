@@ -47,10 +47,8 @@ class MixteraTorchDataset(IterableDataset):
     def num_workers(self) -> int:
         return max(self._query_execution_args.num_workers, 1)
 
-    def __getitem__(self, index: int) -> Any:
-        raise NotImplementedError("This is just overwritten to satify pylint.")
-
-    def __iter__(self) -> Generator[str, None, None]:
+    @property
+    def worker_id(self) -> int:
         worker_info = get_worker_info()
         if worker_info is None:
             # Non-multithreaded data loading. We use worker_id 0.
@@ -59,6 +57,12 @@ class MixteraTorchDataset(IterableDataset):
             worker_id = worker_info.id
 
         assert worker_id < self.num_workers, f"Number of workers was invalid: {worker_id} vs {self.num_workers}"
-        self._res_str_args.worker_id = worker_id
 
+        return worker_id
+
+    def __getitem__(self, index: int) -> Any:
+        raise NotImplementedError("This is just overwritten to satify pylint.")
+
+    def __iter__(self) -> Generator[str, None, None]:
+        self._res_str_args.worker_id = self.worker_id
         yield from self._client.stream_results(self._res_str_args)
