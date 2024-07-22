@@ -4,6 +4,7 @@ channels:
   - conda-forge
   - anaconda
   - pytorch
+  - huggingface
 
 dependencies:
   - python==3.11
@@ -14,3 +15,4 @@ dependencies:
   - dill
   - portion
   - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency
+  - huggingface::datasets
