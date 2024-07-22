@@ -138,7 +138,8 @@ def test_server(server_dir: Path) -> None:
 
     for chunk_size in [1, 3, 250, 500, 750, 1000, 2000]:
         for tunnel in [False, True]:
-            test_rdc_chunksize_tunnel(client, ArbitraryMixture(chunk_size), 1, 1, tunnel)
+            query_exec_args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size))
+            test_rdc_chunksize_tunnel(client, query_exec_args, tunnel)
 
     test_list_datasets(client)
     test_add_property(client)
@@ -147,13 +148,13 @@ def test_server(server_dir: Path) -> None:
     print("Successfully ran server tests!")
 
 
-def test_rdc_chunksize_tunnel(client: ServerStub, mixture: Mixture, dp_groups: int, nodes_per_group: int, tunnel: bool):
-    test_filter_javascript(client, mixture, dp_groups, nodes_per_group, tunnel)
-    test_filter_html(client, mixture, dp_groups, nodes_per_group, tunnel)
-    test_filter_both(client, mixture, dp_groups, nodes_per_group, tunnel)
-    test_filter_license(client, mixture, dp_groups, nodes_per_group, tunnel)
-    test_filter_unknown_license(client, mixture, dp_groups, nodes_per_group, tunnel)
-    test_filter_license_and_html(client, mixture, dp_groups, nodes_per_group, tunnel)
+def test_rdc_chunksize_tunnel(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
+    test_filter_javascript(client, query_exec_args, tunnel)
+    test_filter_html(client, query_exec_args, tunnel)
+    test_filter_both(client, query_exec_args, tunnel)
+    test_filter_license(client, query_exec_args, tunnel)
+    test_filter_unknown_license(client, query_exec_args, tunnel)
+    test_filter_license_and_html(client, query_exec_args, tunnel)
 
 
 def main() -> None:
