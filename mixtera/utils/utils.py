@@ -1,11 +1,12 @@
 import asyncio
 import hashlib
+import os
+import random
 import time
 from collections import defaultdict
 from copy import deepcopy
 from typing import Any, List, Tuple, Union
 
-import dill
 import numpy as np
 
 
@@ -174,7 +175,7 @@ def generate_hashable_search_key(
     return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
 
 
-def generate_hash_string_from_list(string_list: list[str]) -> str:
+def generate_hash_string_from_list(string_list: list[str]) -> int:
     """
     Generate a hash string from a list of strings.
 
@@ -189,18 +190,22 @@ def generate_hash_string_from_list(string_list: list[str]) -> str:
     for string in string_list:
         hash_result.update(string.encode())
 
-    return hash_result.hexdigest()
+    return int(hash_result.hexdigest(), 16)
 
 
-def to_pickled_dict(obj: dict[Any, Any]) -> dict[Any, bytes]:
+def seed_everything(seed: int) -> None:
     """
-    Pickle all values in a dictionary.
-    """
-    return {k: dill.dumps(v) for k, v in obj.items()}
+    Seed all random number generators for reproducibility.
 
+    Args:
+        seed: The seed to be used.
+    """
+    assert isinstance(seed, int), "Seed must be an integer"
 
-def from_pickled_dict(obj: dict[Any, bytes]) -> dict[Any, Any]:
-    """
-    Unpickle all values in a dictionary.
-    """
-    return {k: dill.loads(v) for k, v in obj.items()}
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    # Cap the seed to be within 0 and 2**32 - 1
+    #  Since numpy only accepts 32-bit seeds
+    seed = seed % 2**32
+    np.random.seed(seed)

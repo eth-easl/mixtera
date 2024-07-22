@@ -30,6 +30,9 @@ class ResultStreamingArgs:
     node_id: int = 0
     worker_id: int = 0
     tunnel_via_server: bool = False
+    chunk_reading_degree_of_parallelism: int = 1
+    chunk_reading_per_window_mixture: bool = False
+    chunk_reading_window_size: int = 128
 
 
 class MixteraClient(ABC):
@@ -228,9 +231,9 @@ class MixteraClient(ABC):
         for result_chunk in self._stream_result_chunks(args.job_id, args.dp_group_id, args.node_id, args.worker_id):
             result_chunk.configure_result_streaming(
                 server_connection=server_connection,
-                degree_of_parallelism=args.degree_of_parallelism,
-                per_window_mixture=args.per_window_mixture,
-                window_size=args.window_size,
+                degree_of_parallelism=args.chunk_reading_degree_of_parallelism,
+                per_window_mixture=args.chunk_reading_per_window_mixture,
+                window_size=args.chunk_reading_window_size,
             )
             yield from result_chunk
 

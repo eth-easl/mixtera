@@ -1,3 +1,4 @@
+import multiprocessing as mp
 import unittest
 from unittest.mock import MagicMock
 
@@ -84,7 +85,7 @@ class TestResultChunk(unittest.TestCase):
         mock_yield_source = ["chunk1", "chunk2", "chunk3"]
         result_chunk._iterate_single_threaded = MagicMock(return_value=mock_yield_source)
 
-        results = list(result_chunk._iterate_result_chunks())
+        results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_single_threaded.assert_called_once()
         self.assertEqual(results, mock_yield_source)
@@ -103,7 +104,7 @@ class TestResultChunk(unittest.TestCase):
         mock_yield_source = ["chunk1", "chunk2", "chunk3"]
         result_chunk._iterate_multi_threaded = MagicMock(return_value=mock_yield_source)
 
-        results = list(result_chunk._iterate_result_chunks())
+        results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_multi_threaded.assert_called_once()
         self.assertEqual(results, mock_yield_source)
@@ -122,7 +123,9 @@ class TestResultChunk(unittest.TestCase):
         mock_yield_source = ["chunk1", "chunk2", "chunk3"]
         result_chunk._iterate_single_threaded = MagicMock(return_value=mock_yield_source)
 
-        results = list(result_chunk._iterate_result_chunks())
+        result_chunk.configure_result_streaming(MagicMock())
+
+        results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_single_threaded.assert_called_once()
         self.assertEqual(results, mock_yield_source)
@@ -153,10 +156,11 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._get_element_counts = MagicMock(return_value=mock_element_counts)
         result_chunk._prepare_workloads = MagicMock(return_value=mock_workloads)
         result_chunk._server_connection = mock_server_connection
+        result_chunk._window_size = 3
 
         results = list(result_chunk._iterate_single_threaded_window_mixture())
 
-        expected_results = ["instance1", "instance2", "instance4", "instance3"]
+        expected_results = ["instance4", "instance1", "instance2", "instance3"]
         self.assertEqual(results, expected_results)
 
         mock_dataset_type_dict[1].read_ranges_from_files.assert_has_calls(
@@ -208,19 +212,20 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._get_element_counts = MagicMock(return_value=mock_element_counts)
         result_chunk._prepare_workloads = MagicMock(return_value=mock_workloads)
         result_chunk._server_connection = mock_server_connection
+        result_chunk._window_size = 6
 
         results = list(result_chunk._iterate_single_threaded_window_mixture())
 
         expected_results = [
+            "instance6",
             "instance1",
+            "instance9",
+            "instance7",
             "instance2",
             "instance3",
-            "instance6",
-            "instance7",
-            "instance9",
+            "instance8",
             "instance4",
             "instance5",
-            "instance8",
         ]
         self.assertEqual(results, expected_results)
 
@@ -242,6 +247,98 @@ class TestResultChunk(unittest.TestCase):
         mock_dataset_type_dict[3].read_ranges_from_files.assert_called_once_with(
             {"file1": [(16, 17)]}, mock_parsing_func_dict[3], mock_server_connection
         )
+
+    def test_iterate_multi_threaded_window_mixture(self):
+        mock_element_counts = [("property1", 2), ("property2", 1)]
+        mock_queues_processes = {
+            "property1": [(mp.Queue(), mp.Process()), (mp.Queue(), mp.Process())],
+            "property2": [(mp.Queue(), mp.Process())],
+        }
+
+        # Populate queues with mock data
+        mock_queues_processes["property1"][0][0].put("instance1")
+        mock_queues_processes["property1"][0][0].put("instance2")
+        mock_queues_processes["property1"][1][0].put("instance3")
+        mock_queues_processes["property2"][0][0].put("instance4")
+
+        # Mock the _get_element_counts method to return predefined counts
+        result_chunk = ResultChunk(
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            self.chunk_size,
+            MagicMock(),
+        )
+        result_chunk._get_element_counts = MagicMock(return_value=mock_element_counts)
+        result_chunk._window_size = 3
+
+        # Mock the multiprocessing.Process.is_alive method to always return False
+        # This simulates that all processes have finished their work
+        for _, processes in mock_queues_processes.items():
+            for _, process in processes:
+                process.is_alive = MagicMock(return_value=False)
+
+        results = list(result_chunk._iterate_multi_threaded_window_mixture(mock_queues_processes))
+
+        expected_results = ["instance4", "instance1", "instance2", "instance3"]
+        self.assertEqual(results, expected_results)
+
+        # Since we are testing with multiprocessing queues and processes, there's no direct way to assert calls
+        # like in the single-threaded version. However, we ensure that the expected instances are yielded
+        # in the correct order and quantity according to the window size and element counts.
+
+    def test_iterate_multi_threaded_window_mixture_complex(self):
+        mock_element_counts = [("property1", 3), ("property2", 2), ("property3", 1)]
+        mock_queues_processes = {
+            "property1": [(mp.Queue(), mp.Process()), (mp.Queue(), mp.Process()), (mp.Queue(), mp.Process())],
+            "property2": [(mp.Queue(), mp.Process()), (mp.Queue(), mp.Process())],
+            "property3": [(mp.Queue(), mp.Process())],
+        }
+
+        # Populate queues with mock data
+        mock_queues_processes["property1"][0][0].put("instance1")
+        mock_queues_processes["property1"][0][0].put("instance2")
+        mock_queues_processes["property1"][1][0].put("instance3")
+        mock_queues_processes["property1"][2][0].put("instance4")
+        mock_queues_processes["property2"][0][0].put("instance5")
+        mock_queues_processes["property2"][1][0].put("instance6")
+        mock_queues_processes["property3"][0][0].put("instance7")
+
+        # Mock the _get_element_counts method to return predefined counts
+        result_chunk = ResultChunk(
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            self.chunk_size,
+            MagicMock(),
+        )
+        result_chunk._get_element_counts = MagicMock(return_value=mock_element_counts)
+        result_chunk._window_size = 6
+
+        # Mock the multiprocessing.Process.is_alive method to always return False
+        # This simulates that all processes have finished their work
+        for _, processes in mock_queues_processes.items():
+            for _, process in processes:
+                process.is_alive = MagicMock(return_value=False)
+
+        results = list(result_chunk._iterate_multi_threaded_window_mixture(mock_queues_processes))
+
+        expected_results = [
+            "instance5",
+            "instance1",
+            "instance7",
+            "instance2",
+            "instance6",
+            "instance3",
+            "instance4",
+        ]
+        self.assertEqual(results, expected_results)
+
+        # Since we are testing with multiprocessing queues and processes, there's no direct way to assert calls
+        # like in the single-threaded version. However, we ensure that the expected instances are yielded
+        # in the correct order and quantity according to the window size and element counts.
 
     def test_iterate_single_threaded_overall_mixture(self):
         mock_result_index = {
@@ -287,6 +384,45 @@ class TestResultChunk(unittest.TestCase):
         mock_dataset_type_dict[2].read_ranges_from_files.assert_called_once_with(
             {"file1": [(7, 8)]}, mock_parsing_func_dict[2], mock_server_connection
         )
+
+    def test_iterate_multi_threaded_overall_mixture(self):
+        mock_element_counts = [("property1", 3), ("property2", 1)]
+        mock_queues_processes = {
+            "property1": [(mp.Queue(), mp.Process()), (mp.Queue(), mp.Process())],
+            "property2": [(mp.Queue(), mp.Process())],
+        }
+
+        # Populate queues with mock data
+        mock_queues_processes["property1"][0][0].put("instance1")
+        mock_queues_processes["property1"][0][0].put("instance2")
+        mock_queues_processes["property1"][1][0].put("instance3")
+        mock_queues_processes["property2"][0][0].put("instance4")
+
+        # Mock the _get_element_counts method to return predefined counts
+        result_chunk = ResultChunk(
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            self.chunk_size,
+            MagicMock(),
+        )
+        result_chunk._get_element_counts = MagicMock(return_value=mock_element_counts)
+
+        # Mock the multiprocessing.Process.is_alive method to always return False
+        # This simulates that all processes have finished their work
+        for _, processes in mock_queues_processes.items():
+            for _, process in processes:
+                process.is_alive = MagicMock(return_value=False)
+
+        results = list(result_chunk._iterate_multi_threaded_overall_mixture(mock_queues_processes))
+
+        expected_results = ["instance1", "instance2", "instance3", "instance4"]
+        self.assertCountEqual(results, expected_results)
+
+        # Since we are testing with multiprocessing queues and processes, there's no direct way to assert calls
+        # like in the single-threaded version. However, we ensure that the expected instances are yielded
+        # in the correct order and quantity according to the overall mixture.
 
     def test_get_element_counts(self):
         # Mocking the Mixture class and its method mixture_in_rows

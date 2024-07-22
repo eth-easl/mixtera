@@ -1,14 +1,13 @@
 import multiprocessing as mp
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from integrationtests.utils import TestMetadataParser, get_expected_js_and_html_samples, get_job_id, setup_test_dataset
 from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Mixture, Query, StaticMixture
+from mixtera.core.query import ArbitraryMixture, Query, StaticMixture
 
 TEST_LOCAL_INSTANCE_COUNT = 1000
 TEST_LOCAL_FILE_COUNT = 5
@@ -26,15 +25,13 @@ def parsing_func(sample):
 
 
 def test_filter_javascript(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ) -> None:
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
+    client.execute_query(query, query_exec_args)
     result_samples = []
-    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
+    for sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
 
     assert (
@@ -45,16 +42,14 @@ def test_filter_javascript(
 
 
 def test_filter_html(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
-    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
+    client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
+    for sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
 
     assert (
@@ -65,9 +60,7 @@ def test_filter_html(
 
 
 def test_filter_both(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
     query = (
@@ -75,10 +68,10 @@ def test_filter_both(
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
     )
-    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
+    client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
+    for sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
 
     assert (
@@ -89,16 +82,14 @@ def test_filter_both(
 
 
 def test_filter_license(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "CC"))
-    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
+    client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
+    for sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
 
     assert (
@@ -109,22 +100,16 @@ def test_filter_license(
 
 
 def test_filter_unknown_license(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
-    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
-    assert (
-        len(list(client.stream_results(ResultStreamingArgs(job_id=job_id)))) == 0
-    ), "Got results back for expected empty results."
+    client.execute_query(query, query_exec_args)
+    assert len(list(client.stream_results(result_streaming_args))) == 0, "Got results back for expected empty results."
 
 
 def test_filter_license_and_html(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
     query = (
@@ -132,10 +117,10 @@ def test_filter_license_and_html(
         .select(("language", "==", "HTML"))
         .union(Query.for_job(job_id).select(("license", "==", "CC")))
     )
-    client.execute_query(query, QueryExecutionArgs(mixture=mixture))
+    client.execute_query(query, query_exec_args)
     result_samples = []
 
-    for sample in client.stream_results(ResultStreamingArgs(job_id=job_id)):
+    for sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
 
     assert (
@@ -146,24 +131,24 @@ def test_filter_license_and_html(
 
 
 def test_reproducibility(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
-    mixture = StaticMixture(mixture.chunk_size, {"language:JavaScript": 0.6, "language:HTML": 0.4})
+    mixture = StaticMixture(query_exec_args.mixture.chunk_size, {"language:JavaScript": 0.6, "language:HTML": 0.4})
     result_list = []
 
     for i in range(10):
         job_id = get_job_id()
+        result_streaming_args.job_id = job_id
         query = (
             Query.for_job(job_id)
             .select(("language", "==", "HTML"))
             .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
         )
-        client.execute_query(query, mixture)
+        query_exec_args.mixture = mixture
+        client.execute_query(query, query_exec_args)
         result_samples = []
 
-        for sample in client.stream_results(job_id, False, **args):
+        for sample in client.stream_results(result_streaming_args):
             result_samples.append(sample)
 
         result_list.append(result_samples)
@@ -173,17 +158,15 @@ def test_reproducibility(
 
 
 def test_client_chunksize(
-    client: MixteraClient,
-    mixture: Mixture,
-    **args: Any,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
-    test_filter_javascript(client, mixture, **args)
-    test_filter_html(client, mixture, **args)
-    test_filter_both(client, mixture, **args)
-    test_filter_license(client, mixture, **args)
-    test_filter_unknown_license(client, mixture, **args)
-    test_filter_license_and_html(client, mixture, **args)
-    test_reproducibility(client, mixture, **args)
+    test_filter_javascript(client, query_exec_args, result_streaming_args)
+    test_filter_html(client, query_exec_args, result_streaming_args)
+    test_filter_both(client, query_exec_args, result_streaming_args)
+    test_filter_license(client, query_exec_args, result_streaming_args)
+    test_filter_unknown_license(client, query_exec_args, result_streaming_args)
+    test_filter_license_and_html(client, query_exec_args, result_streaming_args)
+    test_reproducibility(client, query_exec_args, result_streaming_args)
 
 
 def test_chunk_readers(dir: Path) -> None:
@@ -202,16 +185,19 @@ def test_chunk_readers(dir: Path) -> None:
         for degree_of_parallelism in degrees_of_parallelisms:
             for per_window_mixture in per_window_mixtures:
                 for window_size in window_sizes:
-                    args = {
-                        "degree_of_parallelism": degree_of_parallelism,
-                        "per_window_mixture": per_window_mixture,
-                        "window_size": window_size,
-                    }
+                    job_id = get_job_id()
+                    query_exec_args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size))
+                    result_streaming_args = ResultStreamingArgs(
+                        job_id,
+                        chunk_reading_degree_of_parallelism=degree_of_parallelism,
+                        chunk_reading_per_window_mixture=per_window_mixture,
+                        chunk_reading_window_size=window_size,
+                    )
                     logger.debug(
                         f"Running chunk reader tests with chunk_size={chunk_size}, degree_of_parallelism={degree_of_parallelism}, "
                         f"per_window_mixture={per_window_mixture}, window_size={window_size}"
                     )
-                    test_client_chunksize(client, ArbitraryMixture(chunk_size), **args)
+                    test_client_chunksize(client, query_exec_args, result_streaming_args)
 
     print("Successfully ran chunk reader tests!")
 
