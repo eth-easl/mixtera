@@ -15,7 +15,9 @@ class ChunkDistributor:
     A class responsible for distributing data chunks across multiple data parallel groups, nodes, and workers.
 
     This class manages the distribution of data chunks, ensuring efficient caching and usage tracking
-    to minimize data fetching and optimize performance in distributed computing environments.
+    to minimize data fetching and optimize performance in distributed computing environments. Caching is only
+    used when required, i.e., when using more than one node per data parallel group. In this case, serialized
+    chunks are cached to avoid serializing multiple times.
     """
 
     def __init__(
@@ -76,6 +78,8 @@ class ChunkDistributor:
         This method manages the distribution of chunks by tracking their usage
         and caching them to minimize data fetching.
         It ensures that each worker receives the appropriate chunk as needed for processing.
+        Chunks are cached serialized (when Mixtera is used as expected) to avoid the overhead
+        of serializing multiple times.
 
         Note:
             This method is not thread-safe. In the server case, asyncio coroutines will not be executed in parallel.
@@ -119,6 +123,9 @@ class ChunkDistributor:
             raise RuntimeError(
                 f"We seem to have forked ({curr_pid} vs {self._constructor_pid}) but we're in server mode."
             )
+        
+        if deserialize:
+            logger.warning("You are using Mixtera with caching, but do not serialize the chunks. This is unexpected behavior.")
 
         next_chunk_id = self._next_chunk[dp_group][node_id][worker_id]
         # The data parallel groups operate on different chunks, i.e., chunk 1 is different for dp 0 and 1

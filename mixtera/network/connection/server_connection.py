@@ -193,6 +193,7 @@ class ServerConnection:
         # Get meta object
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
+    # TODO(#35): Use some ResultChunk type
     async def _get_next_result(
         self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
     ) -> Optional["ChunkerIndex"]:
