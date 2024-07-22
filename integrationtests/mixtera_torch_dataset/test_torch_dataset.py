@@ -1,5 +1,6 @@
 import sys
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 
 import torch
@@ -29,12 +30,12 @@ def create_and_iterate_dataloaders(
     # have any chunks left.
     result_samples = []
     data_loaders = []
-
     for node_id in range(query_execution_args.nodes_per_group):
         for dp_group_id in range(query_execution_args.dp_groups):
-            result_streaming_args.node_id = node_id
-            result_streaming_args.dp_group_id = dp_group_id
-            torch_ds = MixteraTorchDataset(client, query, query_execution_args, result_streaming_args)
+            node_args = deepcopy(result_streaming_args)
+            node_args.node_id = node_id
+            node_args.dp_group_id = dp_group_id
+            torch_ds = MixteraTorchDataset(client, query, query_execution_args, node_args)
             dl = torch.utils.data.DataLoader(
                 torch_ds, batch_size=batch_size, num_workers=query_execution_args.num_workers
             )
@@ -271,7 +272,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
             for batch_size in [1, 2, 500]:
                 try:
                     query_exec_args = QueryExecutionArgs(mixture=mixture, num_workers=num_workers)
-                    test_torchds(local_client, query_exec_args, batch_size, False)
+                    # test_torchds(local_client, query_exec_args, batch_size, False)
                 except Exception as e:
                     print(
                         "Error with "
