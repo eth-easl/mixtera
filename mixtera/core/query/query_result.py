@@ -1,13 +1,16 @@
 import multiprocessing as mp
-from typing import Callable, Optional, Type
+from collections import defaultdict
+from typing import Any, Callable, Generator, Type
 
 import dill
-from loguru import logger
+import portion
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, raw_index_dict_instantiator
-from mixtera.utils import defaultdict_to_dict
+from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, InvertedIndex
+from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
+from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
+
+from .mixture import Mixture
 
 
 class QueryResult:
@@ -19,24 +22,32 @@ class QueryResult:
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    def __init__(self, mdc: MixteraDataCollection, results: IndexType, chunk_size: int = 1) -> None:
+    def __init__(self, mdc: MixteraDataCollection, results: Index, mixture: Mixture) -> None:
         """
         Args:
             mdc (LocalDataCollection): The LocalDataCollection object.
             results (IndexType): The results of the query.
-            chunk_size (int): The chunk size of the results.
+            mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
-        self.chunk_size = chunk_size
+        # Prepare structures for iterable chunking
+        self._mixture = mixture
         self.results = results
+        self._inverted_index: InvertedIndex = self._invert_result(self.results)
+        self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(self._inverted_index)
+
+        # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
-        self._chunks: list[IndexType] = []
-        self.chunking()
+
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
-        self._manager = mp.Manager()
-        self._lock = self._manager.Lock()
-        self._index = self._manager.Value("i", 0)
-        logger.debug(f"Instantiated QueryResult with {len(self._chunks)} chunks.")
+
+        # Cross-process iterator state
+        self._lock = mp.Lock()
+        self._index = mp.Value("i", 0)
+
+        #  The generator will be created lazily when calling __next__
+        self._generator: Generator[ChunkerIndex, tuple[Mixture, int], None] | None = None
+        self._num_returns_gen = 0
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
         dataset_ids = set()
@@ -58,80 +69,249 @@ class QueryResult:
             "total_length": total_length,
         }
 
-    def chunking(self) -> None:
-        # structure of self.chunks: [index_type, index_type, ...]
-        # each index_type is an index, but contains exactly
-        # chunk_size items, except the last one.
-        chunks: list[dict] = []
-        # here we chunk the self.results from a large index_type
-        # into smaller index_types.
-        current_chunk: IndexType = raw_index_dict_instantiator()
-        current_chunk_length = 0
-        # this is likely not a good impl, optimize it later.
-        # now just ensure correct chunk_size and each chunk is an index.
-        # pylint: disable-next=too-many-nested-blocks
-        for property_name in self.results.get_all_features():
-            for property_value, property_dict in self.results.get_dict_index_by_feature(property_name).items():
-                for did, files in property_dict.items():
-                    for fid, file_ranges in files.items():
-                        for start, end in file_ranges:
-                            # TODO(#35): we may want to optimize this later together with mixture.
-                            # for now this is a simple implementaion (for testing)
-                            # case 1: the entire range fits into the current chunk, add it to the current chunk
-                            if end - start < self.chunk_size - current_chunk_length:
-                                current_chunk[property_name][property_value][did][fid].append((start, end))
-                                current_chunk_length += end - start
-                                # chunk is not full yet
-                            # case 2: the entire range does not fit into the current chunk
-                            else:
-                                # # step 1: add the first part of the range to the current chunk, to fill it up
-                                current_chunk[property_name][property_value][did][fid].append(
-                                    (start, start + self.chunk_size - current_chunk_length)
+    @staticmethod
+    def _invert_result(index: Index) -> InvertedIndex:
+        """
+        Returns an InvertedIndex that points from files to an ordered dictionary
+        of ranges (from portion) annotated with properties:
+            {
+                "dataset_id": {
+                    "file_id": {
+                        portion.Interval: {
+                            feature_1_name: [feature_1_value_0, ...],
+                            ...
+                            feature_n_name: [feature_n_value_0, ...],
+                        },
+                        ...
+                    },
+                    ...
+                },
+                ...
+            }
+
+        Args:
+            index: an IndexType object that will be inverted.
+
+        Returns:
+            An InvertedIndex
+        """
+        raw_index = index.get_full_dict_index(copy=False)
+        inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
+
+        for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
+            for property_value, datasets in property_values.items():
+                for dataset_id, files in datasets.items():
+                    for file_id, ranges in files.items():
+                        interval_dict = inverted_dictionary[dataset_id][file_id]
+                        for row_range in ranges:
+                            range_interval = portion.closedopen(row_range[0], row_range[1])
+                            intersections = interval_dict[range_interval]
+                            interval_dict[range_interval] = {property_name: [property_value]}
+                            for intersection_range, intersection_properties in intersections.items():
+                                interval_dict[intersection_range] = merge_property_dicts(
+                                    interval_dict[intersection_range].values()[0], intersection_properties
                                 )
-                                # this time the chunk is full
-                                chunks.append(current_chunk)
-                                # step 2: calculate how many chunks are needed for the rest of the range
-                                remaining_length = end - (start + self.chunk_size - current_chunk_length)
-                                remaining_chunks = remaining_length // self.chunk_size
-                                if remaining_chunks > 0:
-                                    # step 3: add the remaining chunks
-                                    for i in range(remaining_chunks):
-                                        new_chunk = raw_index_dict_instantiator()
-                                        new_chunk[property_name] = {
-                                            property_value: {
-                                                did: {
-                                                    fid: [
-                                                        (
-                                                            start
-                                                            + self.chunk_size
-                                                            - current_chunk_length
-                                                            + i * self.chunk_size,
-                                                            start
-                                                            + self.chunk_size
-                                                            - current_chunk_length
-                                                            + (i + 1) * self.chunk_size,
-                                                        )
-                                                    ]
-                                                }
-                                            }
-                                        }
-                                        chunks.append(new_chunk)
-                                remaining_length = remaining_length % self.chunk_size
-                                current_chunk = raw_index_dict_instantiator()
-                                current_chunk_length = 0
-                                start_new = start + remaining_chunks * self.chunk_size
-                                if remaining_length > 0:
-                                    current_chunk[property_name] = {
-                                        property_value: {did: {fid: [(start_new, start_new + remaining_length)]}}
-                                    }
-                                    current_chunk_length += remaining_length
-                        # reset current chunk after this file - we anyway need a new index for the next file
-        if current_chunk_length > 0:
-            chunks.append(current_chunk)
-        for chunk in chunks:
-            chunk_index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
-            chunk_index._index = defaultdict_to_dict(chunk)
-            self._chunks.append(chunk_index)
+
+        return inverted_dictionary
+
+    @staticmethod
+    def _create_chunker_index(inverted_index: InvertedIndex) -> ChunkerIndex:
+        """
+        Create a ChunkerIndex object from an InvertedIndex object. A ChunkerIndex has the following structure:
+        {
+            "prop_0_name:prop_0_value;prop_1_name:prop_1_value...": {
+                dataset_0_id: {
+                    file_0_id: [
+                        [lo_bound_0, hi_bound_0],
+                        ...
+                        [lo_bound_n, hi_bound_n],
+                    ],
+                    ...
+                },
+                ...
+            },
+            ...
+        }
+
+        The ChunkerIndex object is useful for creating mixture chunks. It is guaranteed that all generated intervals
+        are disjoint, and only represent one possible combination of properties and their values.
+
+        Args:
+            inverted_index: an InvertedIndex object.
+
+        Returns: a ChunkerIndex object.
+
+        """
+        chunker_index: ChunkerIndex = create_chunker_index()
+
+        for document_id, document_entries in inverted_index.items():
+            for file_id, file_entries in document_entries.items():
+                for intervals, interval_properties in file_entries.items():
+                    # Intervals can be a simplified interval (e.g. '[-7,-2) | [11,15)') so we need a for loop
+                    for interval in intervals:
+                        # Create a key that identifies the properties and values covered in this interval
+                        property_names = list(interval_properties.keys())
+                        property_values = [interval_properties[property_name] for property_name in property_names]
+                        hashable_key = generate_hashable_search_key(property_names, property_values)
+
+                        # Add the interval to the chunk index based on the generated key
+                        chunker_index[hashable_key][document_id][file_id].append([interval.lower, interval.upper])
+
+        return chunker_index
+
+    @staticmethod
+    def _generate_per_mixture_component_chunks(
+        chunker_index: ChunkerIndex, component_key: str
+    ) -> Generator[ChunkerIndexDatasetEntries, int, None]:
+        """
+        This method computes the partial chunks for each component of a mixture. A component here is considered one
+        of the chunk's fundamental property value combinations (e.g. 25% of a chunk is Medicine in English). The method
+        identifies the target intervals using the passed component_key parameter (for the aforementioned example,
+        this would be language:english;topic:medicine). The cardinality of a partial chunk is given by the
+        cardinality of the chunk multiplied with the fraction of this property combination.
+
+        This method is a coroutine that accepts an integer indicating the size of this component in a chunk as input.
+
+        Args:
+            chunker_index: The chunking index
+            component_key: chunking index key
+
+        Returns:
+            Yields component chunks. The list has the following format:
+            [
+                {
+                    dataset_0_id: {
+                        file_0_id: [
+                            [low_bound_0, high_bound_0],
+                            ...
+                        },
+                        ...
+                    },
+                    ...
+                },
+                ...
+            ]
+
+            Each chunk has the same property combination. In the given example, all dictionaries in the list contain
+            ranges that identify component_cardinality rows with the property combination specified by component_key.
+        """
+        target_ranges = chunker_index[component_key]
+
+        component_cardinality = yield
+        current_cardinality = 0
+
+        # dataset_id -> file_id -> list[intervals]
+        current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
+
+        for dataset_id, document_entries in target_ranges.items():
+            for file_id, ranges in document_entries.items():
+                for base_range in ranges:
+                    current_range = (base_range[0], base_range[1])
+                    continue_processing = current_range[1] > current_range[0]
+                    while continue_processing:
+                        range_cardinality = current_range[1] - current_range[0]
+                        if current_cardinality + range_cardinality < component_cardinality:
+                            # This is the case when the remaining part of the range is smaller than the
+                            # current_partition. We have now completed processing the original range, and can move on
+                            # to the next which is given by the innermost for loop (i.e. the one looping over 'ranges').
+                            current_partition[dataset_id][file_id].append(current_range)
+                            current_cardinality += range_cardinality
+                            continue_processing = False
+                        else:
+                            # This is the case where the current range is greater than the size of a chunk. We take as
+                            # much as needed from the current range to add to create the chunk (which is now fully
+                            # occupied by this range), create a new chunk, and split the current range such that we
+                            # do not consider the range added to the previous chunk.
+                            diff = current_cardinality + range_cardinality - component_cardinality
+                            current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
+                            component_cardinality = yield defaultdict_to_dict(current_partition)
+
+                            # Prepare the rest of the range and new component
+                            current_range = (current_range[1] - diff, current_range[1])
+                            current_partition = defaultdict(lambda: defaultdict(list))
+                            current_cardinality = 0
+
+                            # Stop if range has been exhausted perfectly
+                            continue_processing = current_range[1] > current_range[0]
+
+        if current_cardinality > 0:
+            # Normally we would want to record the component cardinality here as well, but since this is the last
+            # generated chunk, it does not make sense to capture it as there is no other data left
+            yield defaultdict_to_dict(current_partition)
+
+    def update_mixture(self, mixture: Mixture) -> None:
+        """
+        Updates the mixture to be used for future chunks
+
+        Args:
+            mixture: the new mixture object
+        """
+        with self._lock:
+            self._mixture = mixture
+
+    def _chunk_generator(self) -> Generator[ChunkerIndex, tuple[Mixture, int], None]:
+        """
+        Implements the chunking logic. This method yields chunks relative to  a mixture object.
+
+        This method is a coroutine that accepts a mixture object that dictates the size of each chunk and potentially
+        the mixture itself. The coroutine also accepts a target index specifying which chunk should be yielded next.
+        This latter parameter is useful when chunking in a multiprocessed environment and at most once visitation
+        guarantees are required.
+        """
+        # Variables for an arbitrary mixture
+        current_chunk_index = 0
+        chunker_index_keys_idx = 0
+        chunker_index_keys = list(self._chunker_index.keys())
+
+        # Create coroutines for component iterators and advance them to the first yield
+        component_iterators = {
+            key: self._generate_per_mixture_component_chunks(self._chunker_index, key)
+            for key in self._chunker_index.keys()
+        }
+        for _, component_iterator in component_iterators.items():
+            try:
+                next(component_iterator)
+            except StopIteration:
+                return
+
+        base_mixture, target_chunk_index = yield
+        while True:
+            # Get the mixture from the caller as it might have changed
+            mixture = base_mixture.mixture_in_rows()
+
+            if mixture:
+                # Try to fetch a chunk part from each of the components. Here one of two things will happen:
+                #   1. All the chunk's components can yield --> we will be able to build a chunk, or
+                #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
+                #      and the coroutine will pass the exception upstream to __next__
+                try:
+                    chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
+                except StopIteration:
+                    return
+                if current_chunk_index == target_chunk_index:
+                    base_mixture, target_chunk_index = yield chunk
+            else:
+                chunk = None
+                while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
+                    key = chunker_index_keys[chunker_index_keys_idx]
+                    try:
+                        chunk = component_iterators[key].send(base_mixture.chunk_size)
+                    except StopIteration:
+                        # The current key is exhausted; will need to produce chunks from the next available key
+                        chunker_index_keys_idx += 1
+
+                if chunk is None:
+                    # There were no more available chunks; we mark the end of this query result with StopIteration
+                    return
+
+                # Chunk has been successfully generated
+                if current_chunk_index == target_chunk_index:
+                    base_mixture, target_chunk_index = yield {chunker_index_keys[chunker_index_keys_idx]: chunk}
+            current_chunk_index += 1
+
+    @property
+    def chunk_size(self) -> int:
+        return self._mixture.chunk_size
 
     @property
     def dataset_type(self) -> dict[int, Type[Dataset]]:
@@ -148,36 +328,45 @@ class QueryResult:
     def __iter__(self) -> "QueryResult":
         return self
 
-    def __next__(self) -> IndexType:
-        """Iterate over the results of the query with a chunk size thread-safe.
-        This method is very dummy right now without ensuring the correct mixture.
-        """
-        local_index: Optional[int] = None
+    def __next__(self) -> ChunkerIndex:
+        """Iterate over the results of the query."""
+        with self._index.get_lock():
+            chunk_target_index = self._index.get_obj().value
+            self._index.get_obj().value += 1
+
         with self._lock:
-            if self._index.value < len(self._chunks):
-                local_index = self._index.value
-                self._index.value += 1
-        # We exit the scope of the lock as early as possible.
-        # For now the actual slicing does not need to be locked.
+            #  The generator is created lazily since the QueryResult object might be pickled
+            # (and the generator was deleted from the state)
+            if self._generator is None:
+                self._generator = self._chunk_generator()
+                next(self._generator)
 
-        if local_index is not None:
-            return self._chunks[local_index]
+                assert (
+                    self._num_returns_gen == 0
+                ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
 
-        raise StopIteration
+            self._num_returns_gen += 1
+            return self._generator.send((self._mixture, chunk_target_index))
 
     def __getstate__(self) -> dict:
-        # _meta is not pickable using the default pickler (used by torch),
-        # so we have to rely on dill here
         state = self.__dict__.copy()
-        meta_pickled = dill.dumps(state["_meta"])
-        del state["_meta"]
-        # Also, we cannot pickle the manager, but also don't need it in the subclasses.
-        if "_manager" in state:
-            del state["_manager"]
+
+        # Remove the generator since it is not pickable (and will be recreated on __next__)
+        del state["_generator"]
+
+        #  The following attributes are pickled using dill since they are not pickable by
+        # the default pickler (used by torch)
+        dill_pickled_attributes = {}
+        for attrib in ["_meta", "_chunker_index", "_inverted_index"]:
+            attrib_pickled = dill.dumps(state[attrib])
+            del state[attrib]
+            dill_pickled_attributes[attrib] = attrib_pickled
 
         # Return a dictionary with the pickled attribute and other picklable attributes
-        return {"other": state, "meta_pickled": meta_pickled}
+        return {"other": state, "dilled": dill_pickled_attributes}
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__ = state["other"]
-        self._meta = dill.loads(state["meta_pickled"])
+        self._generator = None
+        for attrib, attrib_pickled in state["dilled"].items():
+            setattr(self, attrib, dill.loads(attrib_pickled))

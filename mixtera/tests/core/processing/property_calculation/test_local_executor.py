@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import numpy as np
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.datacollection.datasets.crossaint_dataset import CrossaintDataset
+from mixtera.core.datacollection.datasets.croissant_dataset import CroissantDataset
 from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
 
 
@@ -13,9 +13,11 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
     def setUp(self):
         self.setup_func = MagicMock()
         self.calc_func = MagicMock()
-        self.dop = 1
+        self.degree_of_parallelism = 1
         self.batch_size = 2
-        self.executor = LocalPropertyCalculationExecutor(self.dop, self.batch_size, self.setup_func, self.calc_func)
+        self.executor = LocalPropertyCalculationExecutor(
+            self.degree_of_parallelism, self.batch_size, self.setup_func, self.calc_func
+        )
 
     def test_initialization_calls_setup(self):
         self.setup_func.assert_called_once_with(self.executor)
@@ -67,7 +69,7 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
 
     def test_read_samples_from_jsonldataset_file_raises_not_implemented_error(self):
         with self.assertRaises(NotImplementedError):
-            list(LocalPropertyCalculationExecutor._read_samples_from_file("file.txt", CrossaintDataset))
+            list(LocalPropertyCalculationExecutor._read_samples_from_file("file.txt", CroissantDataset))
 
     def test_run_aggregates_results(self):
         self.executor._batches = [

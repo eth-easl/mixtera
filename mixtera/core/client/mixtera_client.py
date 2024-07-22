@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import IndexType
+from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Query
+from mixtera.core.query import Mixture, Query
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
@@ -86,7 +86,7 @@ class MixteraClient(ABC):
     def register_dataset(
         self,
         identifier: str,
-        loc: str,
+        loc: str | Path,
         dtype: Type[Dataset],
         parsing_func: Callable[[str], str],
         metadata_parser_identifier: str,
@@ -118,7 +118,7 @@ class MixteraClient(ABC):
         self,
         identifier: str,
         parser: Type[MetadataParser],
-    ) -> None:
+    ) -> bool:
         """
         This method registers a metadata parser in Mixtera.
 
@@ -172,16 +172,14 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def execute_query(self, query: Query, chunk_size: int) -> bool:
+    def execute_query(self, query: Query, mixture: Mixture) -> bool:
         """
         Executes the query on the MixteraClient. Afterwards, result can be obtained using `stream_results`.
 
         Args:
             query (Query): The query to execute.
-            chunk_size (int): chunk_size is used to set the size of `subresults` in the QueryResult object.
-                Defaults to 1. When iterating over a :py:class:`QueryResult`
-                object, the results are yielded in chunks of size `chunk_size`. Relevant for throughput
-                optimization.
+            mixture: Mixture object
+
         Returns:
             bool indicating success
         """
@@ -207,7 +205,7 @@ class MixteraClient(ABC):
             yield from self._iterate_result_chunk(result_chunk, *result_metadata, tunnel_via_server=tunnel_via_server)
 
     @abstractmethod
-    def _stream_result_chunks(self, job_id: str) -> Generator[IndexType, None, None]:
+    def _stream_result_chunks(self, job_id: str) -> Generator[ChunkerIndex, None, None]:
         """
         Given a job ID, iterates over the result chunks.
 
@@ -240,7 +238,7 @@ class MixteraClient(ABC):
 
     def _iterate_result_chunk(
         self,
-        result_chunk: IndexType,
+        result_chunk: ChunkerIndex,
         dataset_type_dict: dict[int, Type[Dataset]],
         parsing_func_dict: dict[int, Callable[[str], str]],
         file_path_dict: dict[int, str],
@@ -250,7 +248,7 @@ class MixteraClient(ABC):
         Given a result chunk, iterates over the samples.
 
         Args:
-            result_chunk (IndexType): The result chunk object.
+            result_chunk (ChunkerIndex): The result chunk object.
             dataset_type_dict (dict): A mapping from dataset ID to dataset type.
             parsing_func_dict (dict): A mapping from dataset ID to parsing function.
             file_path_dict (dict): A mapping from file ID to file path.
@@ -274,13 +272,12 @@ class MixteraClient(ABC):
                     "Currently, tunneling samples via the server is only supported when using a ServerStub."
                 )
 
-        for _, property_dict in result_chunk._index.items():
-            for _, val_dict in property_dict.items():
-                for did, file_dict in val_dict.items():
-                    filename_dict = {file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_dict.items()}
-                    yield from dataset_type_dict[did].read_ranges_from_files(
-                        filename_dict, parsing_func_dict[did], server_connection
-                    )
+        for _0, dataset_entries in result_chunk.items():
+            for did, file_entries in dataset_entries.items():
+                filename_dict = {file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
+                yield from dataset_type_dict[did].read_ranges_from_files(
+                    filename_dict, parsing_func_dict[did], server_connection
+                )
 
     @abstractmethod
     def is_remote(self) -> bool:
@@ -304,7 +301,7 @@ class MixteraClient(ABC):
         max_val: float = 1,
         num_buckets: int = 10,
         batch_size: int = 1,
-        dop: int = 1,
+        degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
     ) -> None:
         """
@@ -325,7 +322,7 @@ class MixteraClient(ABC):
             max_val (float): Optional value for numerical properties specifying the max value the property can take
             num_buckets (int): The number of buckets for numeritcal properties
             batch_size (int): Size of one batch passed to one processing instance
-            dop (int): Degree of parallelism. How many processing units should be used in parallel.
+            degree_of_parallelism (int): Degree of parallelism. How many processing units should be used in parallel.
                        Meaning depends on execution_mode
             data_only_on_primary (bool): If False, the processing units (may be remote machines)
                                          have access to the same paths as the primary.

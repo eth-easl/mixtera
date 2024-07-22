@@ -1,15 +1,18 @@
 # pylint: disable=attribute-defined-outside-init
 
 import asyncio
+import struct
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call
 
 import dill
 from mixtera.network.network_utils import (
     read_bytes,
+    read_float,
     read_int,
     read_pickeled_object,
     read_utf8_string,
+    write_float,
     write_int,
     write_pickeled_object,
     write_utf8_string,
@@ -118,3 +121,26 @@ class TestNetworkUtils(unittest.IsolatedAsyncioTestCase):
         self.reader.read = AsyncMock(side_effect=[b"\x00\x00\x00\x04", asyncio.TimeoutError()])
         with self.assertRaises(asyncio.TimeoutError):
             await read_pickeled_object(4, self.reader)
+
+    async def test_write_float_success(self):
+        data = 123.456
+        await write_float(data, self.writer)
+        self.writer.write.assert_called_with(struct.pack(">d", data))
+        self.writer.drain.assert_awaited_once()
+
+    async def test_read_float_success(self):
+        data = 123.456
+        data_bytes = struct.pack(">d", data)
+        self.reader.read = AsyncMock(return_value=data_bytes)
+        result = await read_float(self.reader, self.timeout)
+        self.assertEqual(result, data)
+
+    async def test_read_float_timeout(self):
+        self.reader.read = AsyncMock(side_effect=asyncio.TimeoutError)
+        with self.assertRaises(asyncio.TimeoutError):
+            await read_float(self.reader, self.timeout)
+
+    async def test_read_float_connection_closed(self):
+        self.reader.read = AsyncMock(side_effect=[b"\x00\x00\x00\x04", b""])
+        with self.assertRaises(ConnectionError):
+            await read_float(self.reader, self.timeout)

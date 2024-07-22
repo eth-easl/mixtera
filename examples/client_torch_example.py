@@ -21,7 +21,7 @@ import torch
 from mixtera.core.client import MixteraClient
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
-from mixtera.core.query import Query
+from mixtera.core.query import ArbitraryMixture, Mixture, Query
 from mixtera.torch import MixteraTorchDataset
 
 
@@ -69,9 +69,9 @@ def setup_local_client(directory: Path):
     
     return client
 
-def setup_torch_dataset(client: MixteraClient, job_id: str, query: Query, chunk_size: int, tunnel: bool):
+def setup_torch_dataset(client: MixteraClient, job_id: str, query: Query, mixture: Mixture, tunnel: bool):
     # Creating a torch dataset.
-    torch_ds = MixteraTorchDataset(client, query, job_id, chunk_size, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
     return torch_ds
 
 
@@ -81,9 +81,10 @@ def main():
         # This also populates the database with a dummy dataset, where 50% of data is tagged HTML and 50% is tagged JavaScript.
         client = setup_local_client(Path(temp_dir))
         job_id = str(round(time.time() * 1000))
+        mixture = ArbitraryMixture(chunk_size=42)
         query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
         
-        torch_ds = setup_torch_dataset(client, job_id, query, chunk_size=42, tunnel=False)
+        torch_ds = setup_torch_dataset(client, job_id, query, mixture=mixture, tunnel=False)
         dataloader = torch.utils.data.DataLoader(torch_ds, batch_size=10, num_workers=2)
         
         for batch in dataloader:

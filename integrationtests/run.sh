@@ -26,22 +26,53 @@ fi
 
 function shutdown_server {
   echo "Shutting down server"
+
+  # Determine OS
+  unameOut="$(uname -s)"
+  case "$unameOut" in
+      Linux*)     os=Linux;;
+      Darwin*)    os=macOS;;
+      *)          os="UNKNOWN:${unameOut}"
+  esac
+
+  # Use appropriate command based on OS
+  if [ "$os" = "Linux" ]; then
+    fuser -k 6666/tcp
+  elif [ "$os" = "macOS" ]; then
+    port_pid=$(lsof -ti tcp:6666)
+    if [ -n "$port_pid" ]; then
+      echo "Killing process on port 6666 with PID $port_pid"
+      kill -15 "$port_pid"
+      echo "Killed process on port 6666"
+    fi
+  else
+    echo "Unsupported OS"
+  fi
+
+  sleep 2 # Wait for server to shut down, otherwise we trigger a rerun of this script unnecessarily by killing the server again
+
   if kill -0 "$server_pid" 2>/dev/null; then
     echo "Server is still running, killing it"
     # We need to get the PID of the Python server, which is a child of the bash script
     python_pid=$(pgrep -P "$server_pid")
     if [ -n "$python_pid" ]; then
       echo "Killing Python server process with PID $python_pid"
-      pkill -15 -P "$python_pid"
+      kill -15 "$python_pid"
       echo "Killed Python server"
     fi
 
     echo "Killing bash script"
-    pkill -15 -P "$server_pid"
+    kill -15 "$server_pid"
     echo "Killed it."
 
   fi
   echo "Server shut down."
+}
+
+function empty_work_dir {
+  echo "Emptying work directory $WORK_DIR"
+  find "$WORK_DIR" -type f ! -name '*.sqlite' -exec rm -f {} +
+  echo "Emptied work directory $WORK_DIR"
 }
 
 function cleanup {
@@ -62,9 +93,6 @@ function cleanup {
 }
 trap cleanup EXIT
 
-# TODO(#56): After the server has a better interface, there is no need to manually register the dataset before starting the server.
-python $SCRIPT_DIR/prep_server.py $WORK_DIR
-
 echo "Starting Mixtera server"
 
 server_output=$(mktemp)
@@ -83,13 +111,15 @@ echo "Server started."
 script_exit_status=0
 
 echo "Running server tests"
-python $SCRIPT_DIR/server/test_server.py || script_exit_status=$?
+python $SCRIPT_DIR/server/test_server.py $WORK_DIR || script_exit_status=$?
 
 if [ $script_exit_status -ne 0 ]; then
   cleanup
 fi
 
+empty_work_dir
+
 echo "Running mixtera torch dataset tests"
-python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py || script_exit_status=$?
+python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py $WORK_DIR || script_exit_status=$?
 
 echo "Ran all integration tests."

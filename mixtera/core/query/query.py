@@ -6,6 +6,8 @@ from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.query_plan import QueryPlan
 from mixtera.core.query.query_result import QueryResult
 
+from .mixture import Mixture
+
 
 class Query:
     def __init__(self, job_id: str) -> None:
@@ -17,7 +19,7 @@ class Query:
         return self.query_plan.is_empty()
 
     @classmethod
-    def register(cls, operator: Operator) -> None:
+    def register(cls, operator: type[Operator]) -> None:
         """
         This method registers operators for the query.
         By default, all built-in operators (under ./operators) are registered.
@@ -66,15 +68,14 @@ class Query:
     def __str__(self) -> str:
         return str(self.query_plan)
 
-    def execute(self, mdc: MixteraDataCollection, chunk_size: int = 1) -> None:
+    def execute(self, mdc: MixteraDataCollection, mixture: Mixture) -> None:
         """
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
-            chunk_size (int): chunk_size is used to set the size of `subresults` in the QueryResult object.
-                Defaults to 1. When iterating over a :py:class:`QueryResult`
-                object, the results are yielded in chunks of size `chunk_size`.
+            mdc: The MixteraDataCollection object required to execute the query
+            mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
-        logger.debug(f"Executing query locally with chunk size {chunk_size}")
+        logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
         self.root.post_order_traverse(mdc)
-        self.results = QueryResult(mdc, self.root.results, chunk_size=chunk_size)
+        self.results = QueryResult(mdc, self.root.results, mixture)
         logger.debug("Query executed.")

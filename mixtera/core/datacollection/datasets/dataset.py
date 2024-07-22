@@ -2,12 +2,13 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Type
 
+from mixtera.core.datacollection.datasets.dataset_type import DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network.connection import ServerConnection
 
 
 class Dataset(ABC):
-    type_id = 0
+    type: DatasetType = DatasetType.GENERIC_DATASET
 
     @staticmethod
     def from_type_id(type_id: int) -> "Type[Dataset]":
@@ -20,17 +21,19 @@ class Dataset(ABC):
         Returns:
             The class that belongs to the type_id.
         """
-        if type_id < 1:
-            raise RuntimeError(f"Invalid type id {type_id}")
+        try:
+            dataset_type = DatasetType(type_id)
 
-        from mixtera.core.datacollection.datasets.jsonl_dataset import (  # pylint: disable=import-outside-toplevel
-            JSONLDataset,
-        )
+            if dataset_type == DatasetType.JSONL_DATASET:
+                from mixtera.core.datacollection.datasets import JSONLDataset  # pylint: disable=import-outside-toplevel
 
-        if type_id == JSONLDataset.type_id:
-            return JSONLDataset
+                return JSONLDataset
+            if dataset_type == DatasetType.GENERIC_DATASET:
+                return Dataset
 
-        raise NotImplementedError(f"type_id {type_id} not yet supported")
+            raise NotImplementedError(f"Dataset type {dataset_type.name} not yet supported")
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid type id {type_id}") from exc
 
     @staticmethod
     @abstractmethod

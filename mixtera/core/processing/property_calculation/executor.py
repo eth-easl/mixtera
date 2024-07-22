@@ -10,7 +10,7 @@ class PropertyCalculationExecutor(ABC):
     @staticmethod
     def from_mode(
         mode: ExecutionMode,
-        dop: int,
+        degree_of_parallelism: int,
         batch_size: int,
         setup_func: Callable[[Any], None],
         calc_func: Callable[[Any, dict[str, np.ndarray]], list[Any]],
@@ -20,7 +20,7 @@ class PropertyCalculationExecutor(ABC):
 
         Args:
             mode (ExecutionMode): The execution mode to use
-            dop (int): Degree of parallelism. How many processing units should be used in parallel.
+            degree_of_parallelism (int): Degree of parallelism. How many processing units should be used in parallel.
                        Meaning depends on execution_mode
             setup_func (Callable): Function that performs setup (e.g., load model).
                                    It is passed an instance of a class (type "Any") to put attributes on.
@@ -35,17 +35,17 @@ class PropertyCalculationExecutor(ABC):
         Returns:
             An instance of a PropertyCalculationExecutor subclass.
         """
-        if dop < 1:
-            raise RuntimeError(f"dop = {dop} < 1")
+        if degree_of_parallelism < 1:
+            raise RuntimeError(f"Degree of parallelism = {degree_of_parallelism} < 1")
 
         if batch_size < 1:
-            raise RuntimeError(f"batch_size = {batch_size} < 1")
+            raise RuntimeError(f"Batch size = {batch_size} < 1")
 
         if mode == ExecutionMode.LOCAL:
             # pylint: disable-next=import-outside-toplevel
             from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor
 
-            return LocalPropertyCalculationExecutor(dop, batch_size, setup_func, calc_func)
+            return LocalPropertyCalculationExecutor(degree_of_parallelism, batch_size, setup_func, calc_func)
 
         raise NotImplementedError(f"Mode {mode} not yet implemented.")
 

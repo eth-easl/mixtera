@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
@@ -7,8 +8,6 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
 from mixtera.network.connection import ServerConnection
-
-# ServerStub class code goes here...
 
 
 class TestServerStub(unittest.TestCase):
@@ -68,25 +67,98 @@ class TestServerStub(unittest.TestCase):
         mock_get_result_metadata.assert_called_once_with(job_id)
         self.assertEqual(metadata, expected_metadata)
 
-    # Test NotImplementedError methods to remember to add tests later
-    def test_register_dataset_not_implemented(self):
-        with self.assertRaises(NotImplementedError):
-            self.server_stub.register_dataset("id", "loc", MagicMock(), MagicMock(), "metadata_parser")
+    @patch.object(ServerConnection, "register_dataset")
+    def test_register_dataset(self, mock_register_dataset):
+        identifier = "test_id"
+        loc = "test_loc"
+        dtype = MagicMock()
+        dtype.type = 0
+        parsing_func = MagicMock()
+        metadata_parser_identifier = "test_metadata_parser"
 
-    def test_check_dataset_exists_not_implemented(self):
-        with self.assertRaises(NotImplementedError):
-            self.server_stub.check_dataset_exists("id")
+        result = self.server_stub.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
 
-    def test_list_datasets_not_implemented(self):
-        with self.assertRaises(NotImplementedError):
-            self.server_stub.list_datasets()
+        mock_register_dataset.assert_called_once_with(
+            identifier, loc, dtype.type, parsing_func, metadata_parser_identifier
+        )
+        self.assertTrue(result)
 
-    def test_remove_dataset_not_implemented(self):
-        with self.assertRaises(NotImplementedError):
-            self.server_stub.remove_dataset("id")
+    @patch.object(ServerConnection, "register_dataset")
+    def test_register_dataset_loc_path(self, mock_register_dataset):
+        identifier = "test_id"
+        loc = Path("test_loc")
+        dtype = MagicMock()
+        dtype.type = 0
+        parsing_func = MagicMock()
+        metadata_parser_identifier = "test_metadata_parser"
 
-    def test_add_property_not_implemented(self):
-        with self.assertRaises(NotImplementedError):
-            self.server_stub.add_property(
-                "test_property", MagicMock(), MagicMock(), ExecutionMode.LOCAL, PropertyType.NUMERICAL
-            )
+        result = self.server_stub.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
+
+        mock_register_dataset.assert_called_once_with(
+            identifier, str(loc), dtype.type, parsing_func, metadata_parser_identifier
+        )
+        self.assertTrue(result)
+
+    @patch.object(ServerConnection, "register_metadata_parser")
+    def test_register_metadata_parser(self, mock_register_metadata_parser):
+        identifier = "test_id"
+        parser = MagicMock()
+        self.server_stub._server_connection.register_metadata_parser = mock_register_metadata_parser
+
+        result = self.server_stub.register_metadata_parser(identifier, parser)
+
+        mock_register_metadata_parser.assert_called_once_with(identifier, parser)
+        self.assertTrue(result)
+
+    @patch.object(ServerConnection, "check_dataset_exists")
+    def test_check_dataset_exists(self, mock_check_dataset_exists):
+        identifier = "test_id"
+
+        result = self.server_stub.check_dataset_exists(identifier)
+
+        mock_check_dataset_exists.assert_called_once_with(identifier)
+        self.assertTrue(result)
+
+    @patch.object(ServerConnection, "list_datasets")
+    def test_list_datasets(self, mock_list_datasets):
+        mock_list_datasets.return_value = ["test1", "test2"]
+
+        datasets = self.server_stub.list_datasets()
+
+        mock_list_datasets.assert_called_once()
+        self.assertEqual(datasets, ["test1", "test2"])
+
+    @patch.object(ServerConnection, "remove_dataset")
+    def test_remove_dataset(self, mock_remove_dataset):
+        identifier = "test_id"
+
+        result = self.server_stub.remove_dataset(identifier)
+
+        mock_remove_dataset.assert_called_once_with(identifier)
+        self.assertTrue(result)
+
+    @patch.object(ServerConnection, "add_property")
+    def test_add_property(self, mock_add_property):
+        property_name = "test_property"
+        setup_func = MagicMock()
+        calc_func = MagicMock()
+        execution_mode = ExecutionMode.LOCAL
+        property_type = PropertyType.NUMERICAL
+
+        self.server_stub.add_property(
+            property_name, setup_func, calc_func, execution_mode, property_type, 0.1, 0.9, 8, 2, 2, False
+        )
+
+        mock_add_property.assert_called_once_with(
+            property_name,
+            setup_func,
+            calc_func,
+            execution_mode,
+            property_type,
+            min_val=0.1,
+            max_val=0.9,
+            num_buckets=8,
+            batch_size=2,
+            degree_of_parallelism=2,
+            data_only_on_primary=False,
+        )
