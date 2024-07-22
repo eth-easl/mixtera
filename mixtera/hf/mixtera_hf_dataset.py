@@ -24,13 +24,13 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         )
         datasets.iterable_dataset._BaseExamplesIterable.__init__(self)
         self._shard_called = _shard_called
-        self._state_dict = ["random item to make huggingface happy"]
 
     def __getitem__(self, index: int) -> Any:
         raise NotImplementedError("This is just overwritten to satify pylint.")
 
     def _init_state_dict(self) -> dict:
         logger.info("_init_state_dict called.")
+        return ["random item to make huggingface happy"]
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> datasets.iterable_dataset._BaseExamplesIterable:
         logger.info("shuffle_data_sources called.")
