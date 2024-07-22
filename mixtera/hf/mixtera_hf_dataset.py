@@ -30,7 +30,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
 
     def _init_state_dict(self) -> dict:
         logger.info("_init_state_dict called.")
-        return ["random item to make huggingface happy"]
+        return {"key": "random item to make huggingface happy"}
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> datasets.iterable_dataset._BaseExamplesIterable:
         logger.info("shuffle_data_sources called.")
@@ -70,8 +70,8 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
     def validate_state(self) -> None:
         assert self._shard_called, "shard_data_sources should have been called - something went wrong."
         assert (
-            MixteraTorchDataset.worker_id(self) == self.worker_id
-        ), f"torch worker id = {MixteraTorchDataset.worker_id(self)} != self.worker_id = {self.worker_id}"
+            MixteraTorchDataset.worker_id.fget(self) == self.worker_id
+        ), f"torch worker id = {MixteraTorchDataset.worker_id.fget(self)} != self.worker_id = {self.worker_id}"
 
     def __iter__(self) -> Generator[Tuple[str, dict], None, None]:
         self.validate_state()
