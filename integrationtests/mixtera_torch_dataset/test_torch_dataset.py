@@ -7,7 +7,7 @@ from integrationtests.utils import TestMetadataParser, setup_test_dataset
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Mixture, Query
+from mixtera.core.query import ArbitraryMixture, Query
 from mixtera.torch import MixteraTorchDataset
 
 
