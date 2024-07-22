@@ -47,9 +47,9 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         # the iterable for the specific worker. In our case, Mixtera handles this implicitly.
         # Each worker handles one chunk at a time.
         logger.debug(f"shard_data_sources called with {worker_id} and {num_workers}")
-        assert num_workers == self._query_execution_args.num_workers, (
+        assert num_workers == max(self._query_execution_args.num_workers, 1), (
             f"num_workers = {num_workers} != query.num_workers ="
-            + f"{self._query_execution_args.num_workers} defined at query execution."
+            + f"{max(self._query_execution_args.num_workers,1)} defined at query execution."
         )
 
         if not self._shard_called:
