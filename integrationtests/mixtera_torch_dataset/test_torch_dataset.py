@@ -272,7 +272,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
             for batch_size in [1, 2, 500]:
                 try:
                     query_exec_args = QueryExecutionArgs(mixture=mixture, num_workers=num_workers)
-                    # test_torchds(local_client, query_exec_args, batch_size, False)
+                    test_torchds(local_client, query_exec_args, batch_size, False)
                 except Exception as e:
                     print(
                         "Error with "
