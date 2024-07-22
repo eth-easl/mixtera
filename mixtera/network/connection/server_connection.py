@@ -1,6 +1,7 @@
 import asyncio
 from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional, Type
 
+import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets.dataset_type import DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -8,6 +9,7 @@ from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.network_utils import (
+    read_bytes_obj,
     read_int,
     read_pickeled_object,
     read_utf8_string,
@@ -20,8 +22,9 @@ from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
+    from mixtera.core.client.mixtera_client import QueryExecutionArgs
     from mixtera.core.datacollection.index import ChunkerIndex
-    from mixtera.core.query import Mixture, Query
+    from mixtera.core.query import Query
 
 
 class ServerConnection:
@@ -115,7 +118,7 @@ class ServerConnection:
 
         return None, None
 
-    async def _execute_query(self, query: "Query", mixture: "Mixture") -> bool:
+    async def _execute_query(self, query: "Query", args: "QueryExecutionArgs") -> bool:
         """
         Asynchronously executes a query on the server and receives a confirmation of success.
 
@@ -135,7 +138,12 @@ class ServerConnection:
         await write_int(int(ServerTask.REGISTER_QUERY), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce mixture
-        await write_pickeled_object(mixture, NUM_BYTES_FOR_SIZES, writer)
+        await write_pickeled_object(args.mixture, NUM_BYTES_FOR_SIZES, writer)
+
+        # Announce other metadata
+        await write_int(args.dp_groups, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(args.nodes_per_group, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(args.num_workers, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Announce query
         await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
@@ -144,7 +152,7 @@ class ServerConnection:
         logger.debug(f"Got success = {success} from server.")
         return success
 
-    def execute_query(self, query: "Query", mixture: "Mixture") -> bool:
+    def execute_query(self, query: "Query", args: "QueryExecutionArgs") -> bool:
         """
         Executes a query on the server and returns whether it was successful.
 
@@ -155,7 +163,7 @@ class ServerConnection:
         Returns:
             A boolean indicating whether the query was successfully registered with the server.
         """
-        success = run_async_until_complete(self._execute_query(query, mixture))
+        success = run_async_until_complete(self._execute_query(query, args))
         return success
 
     async def _get_query_result_meta(self, job_id: str) -> Optional[dict]:
@@ -183,7 +191,9 @@ class ServerConnection:
         return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
 
     # TODO(#35): Use some ResultChunk type
-    async def _get_next_result(self, job_id: str) -> Optional["ChunkerIndex"]:
+    async def _get_next_result(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Optional["ChunkerIndex"]:
         """
         Asynchronously retrieves the next result chunk of a query from the server.
 
@@ -205,10 +215,21 @@ class ServerConnection:
         # Announce job ID
         await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        # Get meta object
-        return await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        # Announce worker info
+        await write_int(dp_group_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(node_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(worker_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-    def _stream_result_chunks(self, job_id: str) -> Generator["ChunkerIndex", None, None]:
+        # Get bytes
+        serialized_chunk = await read_bytes_obj(NUM_BYTES_FOR_SIZES, reader)
+        if serialized_chunk is not None:
+            serialized_chunk = dill.loads(serialized_chunk)
+
+        return serialized_chunk
+
+    def _stream_result_chunks(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
+    ) -> Generator["ChunkerIndex", None, None]:
         """
         Streams the result chunks of a query job from the server.
 
@@ -219,7 +240,9 @@ class ServerConnection:
             ChunkerIndex objects, each representing a chunk of the query results.
         """
         # TODO(#62): We might want to prefetch here
-        while (next_result := run_async_until_complete(self._get_next_result(job_id))) is not None:
+        while (
+            next_result := run_async_until_complete(self._get_next_result(job_id, dp_group_id, node_id, worker_id))
+        ) is not None:
             yield next_result
 
     def get_result_metadata(
