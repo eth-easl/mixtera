@@ -123,9 +123,11 @@ class ChunkDistributor:
             raise RuntimeError(
                 f"We seem to have forked ({curr_pid} vs {self._constructor_pid}) but we're in server mode."
             )
-        
+
         if deserialize:
-            logger.warning("You are using Mixtera with caching, but do not serialize the chunks. This is unexpected behavior.")
+            logger.warning(
+                "You are using Mixtera with caching, but do not serialize the chunks. This is unexpected behavior."
+            )
 
         next_chunk_id = self._next_chunk[dp_group][node_id][worker_id]
         # The data parallel groups operate on different chunks, i.e., chunk 1 is different for dp 0 and 1
