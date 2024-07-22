@@ -30,7 +30,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
 
     def _init_state_dict(self) -> dict:
         logger.info("_init_state_dict called.")
-        self._state_dict = {}
+        self._state_dict = {"some": "content"}
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> datasets.iterable_dataset._BaseExamplesIterable:
         logger.info("shuffle_data_sources called.")
