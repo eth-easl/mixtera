@@ -79,9 +79,7 @@ def test_filter_license(client: ServerStub, query_exec_args: QueryExecutionArgs,
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
-def test_filter_unknown_license(
-    client: ServerStub, mixture: Mixture, query_exec_args: QueryExecutionArgs, tunnel: bool
-):
+def test_filter_unknown_license(client: ServerStub, query_exec_args: QueryExecutionArgs, tunnel: bool):
     job_id = str(round(time.time() * 1000))
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     assert client.execute_query(query, query_exec_args)
