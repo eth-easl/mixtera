@@ -16,4 +16,4 @@ dependencies:
   - portion
   - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency
   - huggingface::datasets
-  - huggingface::transformers
+  - conda-forge::transformers
