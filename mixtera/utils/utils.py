@@ -202,10 +202,10 @@ def seed_everything(seed: int) -> None:
     """
     assert isinstance(seed, int), "Seed must be an integer"
 
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
     # Cap the seed to be within 0 and 2**32 - 1
     #  Since numpy only accepts 32-bit seeds
     seed = seed % 2**32
+
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)

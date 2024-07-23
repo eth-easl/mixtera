@@ -84,6 +84,9 @@ class ServerStub(MixteraClient):
     def is_remote(self) -> bool:
         return True
 
+    def get_server_connection(self) -> ServerConnection:
+        return self._server_connection
+
     def add_property(
         self,
         property_name: str,

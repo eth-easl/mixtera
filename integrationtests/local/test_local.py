@@ -28,6 +28,7 @@ def test_filter_javascript(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ) -> None:
     job_id = get_job_id()
+    result_streaming_args.job_id = job_id
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     client.execute_query(query, query_exec_args)
     result_samples = []
@@ -45,6 +46,7 @@ def test_filter_html(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
+    result_streaming_args.job_id = job_id
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     client.execute_query(query, query_exec_args)
     result_samples = []
@@ -63,6 +65,7 @@ def test_filter_both(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
+    result_streaming_args.job_id = job_id
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -85,6 +88,7 @@ def test_filter_license(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
+    result_streaming_args.job_id = job_id
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     client.execute_query(query, query_exec_args)
     result_samples = []
@@ -103,6 +107,7 @@ def test_filter_unknown_license(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
+    result_streaming_args.job_id = job_id
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     client.execute_query(query, query_exec_args)
     assert len(list(client.stream_results(result_streaming_args))) == 0, "Got results back for expected empty results."
@@ -112,6 +117,7 @@ def test_filter_license_and_html(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
     job_id = get_job_id()
+    result_streaming_args.job_id = job_id
     query = (
         Query.for_job(job_id)
         .select(("language", "==", "HTML"))
@@ -185,10 +191,12 @@ def test_chunk_readers(dir: Path) -> None:
         for degree_of_parallelism in degrees_of_parallelisms:
             for per_window_mixture in per_window_mixtures:
                 for window_size in window_sizes:
-                    job_id = get_job_id()
+                    #  Only run per_window_mixture tests for one window size (subsequent are equivalent)
+                    if not per_window_mixture and window_size > 64:
+                        continue
                     query_exec_args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size))
                     result_streaming_args = ResultStreamingArgs(
-                        job_id,
+                        None,
                         chunk_reading_degree_of_parallelism=degree_of_parallelism,
                         chunk_reading_per_window_mixture=per_window_mixture,
                         chunk_reading_window_size=window_size,

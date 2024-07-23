@@ -1,7 +1,7 @@
 import multiprocessing as mp
 import random
 from queue import Empty
-from typing import Callable, Iterator, Optional, Type
+from typing import TYPE_CHECKING, Callable, Iterator, Optional, Type
 
 import dill
 from loguru import logger
@@ -11,8 +11,13 @@ from mixtera.core.query.mixture import StaticMixture
 from mixtera.network.connection import ServerConnection
 from mixtera.utils import generate_hash_string_from_list, seed_everything
 
+if TYPE_CHECKING:
+    from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
+
 Workload = tuple[int, int, IndexRowRangeType]
 Workloads = list[Workload]
+
+MULTIPROCESSING_TIMEOUT = 5
 
 
 class ResultChunk:
@@ -39,17 +44,28 @@ class ResultChunk:
 
         self._iterator: Optional[Iterator[str]] = None
 
-    def configure_result_streaming(
-        self,
-        server_connection: ServerConnection,
-        degree_of_parallelism: int = 1,
-        per_window_mixture: bool = False,
-        window_size: int = 128,
-    ) -> None:
-        self._server_connection = server_connection
-        self._degree_of_parallelism = degree_of_parallelism
-        self._per_window_mixture = per_window_mixture
-        self._window_size = window_size
+    def configure_result_streaming(self, client: "MixteraClient", args: "ResultStreamingArgs") -> None:
+        """
+        Configure the result streaming for the ResultChunk. This function sets the degree of parallelism,
+        the window size, and the mixture based on the arguments.
+
+        Args:
+            client: The MixteraClient instance
+            args: The ResultStreamingArgs instance
+        """
+        self._degree_of_parallelism = args.chunk_reading_degree_of_parallelism
+        self._per_window_mixture = args.chunk_reading_per_window_mixture
+        self._window_size = args.chunk_reading_window_size
+
+        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
+
+        if args.tunnel_via_server:
+            if isinstance(client, ServerStub):
+                self._server_connection = client.get_server_connection()
+            else:
+                raise RuntimeError(
+                    "Currently, tunneling samples via the server is only supported when using a ServerStub."
+                )
 
         if self._degree_of_parallelism < 1:
             logger.warning(
@@ -110,128 +126,53 @@ class ResultChunk:
         return StaticMixture(total_count, partition_masses).mixture_in_rows()
 
     def _iterate_samples(self) -> Iterator[str]:
-        if self._degree_of_parallelism == 1:
-            yield_source = self._iterate_single_threaded()
-        else:
-            yield_source = self._iterate_multi_threaded()
-        yield from yield_source
+        """
+        Iterate over the samples in the result index. This function yields the samples in the correct mixture
+        and window size.
 
-    def _iterate_single_threaded(self) -> Iterator[str]:
+        Returns:
+            An iterator over the samples
+        """
+        active_iterators: dict[str, Iterator[str]] = self._get_active_iterators()
         if self._per_window_mixture:
-            yield_source = self._iterate_single_threaded_window_mixture()
+            yield_source = self._iterate_window_mixture(active_iterators)
         else:
-            yield_source = self._iterate_single_threaded_overall_mixture()
+            yield_source = self._iterate_overall_mixture(active_iterators)
         yield from yield_source
 
-    def _iterate_single_threaded_window_mixture(self) -> Iterator[str]:
+    def _get_active_iterators(self) -> dict[str, Iterator[str]]:
         """
-        Iterate over the result index with a windowed mixture. This means that the window size is fixed
-        (should be <= chunk size) and the mixture is applied per window. This means that the window size
-        is filled with the correct mixture of property combinations.
-
-        In this single threaded version, we iterate over the workloads for each property combination and yield instances
-        until the window is full. Then we start the next window.
-
-        Returns:
-            An iterator over the instances in the result index
-        """
-        element_counts = self._get_element_counts()
-        workloads: dict[str, Workloads] = self._prepare_workloads()
-
-        #  Create iterators for each property combination
-        current_iterators = {
-            property_name: iter(self._get_iterator_for_workload(property_workload))
-            for property_name, property_workload in workloads.items()
-        }
-
-        processed_items = {property_name: 0 for property_name in workloads}
-
-        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
-        seed_everything(generate_hash_string_from_list([x[0] for x in element_counts]))
-        random.shuffle(element_counts)
-
-        # Continue until all workloads are processed
-        while current_iterators:
-            items_yielded = 0
-            #  This inner while loop represents one window with the correct mixture
-            #  We continue until the window is full or there are no more workloads to yield
-            while current_iterators and items_yielded < self._window_size:
-                nothing_yielded_window = True
-                for property_name, property_count in element_counts:
-                    if property_name not in current_iterators or processed_items[property_name] >= property_count:
-                        #  If no more workloads for this property this window, skip
-                        continue
-                    try:
-                        # Yield the next instance from the iterator
-                        yield next(current_iterators[property_name])
-                        nothing_yielded_window = False
-                        processed_items[property_name] += 1
-                        items_yielded += 1
-                        if items_yielded >= self._window_size:
-                            #  If the window is full, break the inner loop, will also break the outer loop
-                            #  since the items_yielded >= self._window_size, start the next window
-                            processed_items = {property_name: 0 for property_name in workloads}
-                            break
-                    except StopIteration:
-                        # If no more workloads, this property is done
-                        del current_iterators[property_name]
-
-                if nothing_yielded_window:
-                    break
-
-    def _get_iterator_for_workload(self, workload: list[tuple[int, int, list]]) -> Iterator[str]:
-        """
-        Get an iterator for a workload. This iterator reads the instances from the files in the workload.
-        For each dataset_id, file_id and ranges tuple in the workload, the instances are read from the file
-        and yielded.
-
-        Args:
-            workload: a list of tuples with dataset_id, file_id and ranges
-
-        Returns:
-            An iterator over the instances in the workload
-        """
-        for dataset_id, file_id, ranges in workload:
-            filename_dict = {self._file_path_dict[file_id]: ranges}
-            yield from self._dataset_type_dict[dataset_id].read_ranges_from_files(
-                filename_dict, self._parsing_func_dict[dataset_id], self._server_connection
-            )
-
-    def _iterate_single_threaded_overall_mixture(self) -> Iterator[str]:
-        """
-        Iterate over the result index with an overall mixture. This means that the mixture is applied to the entire
-        result chunk. This means that the instances are yielded in a random, reproducible, order, but the mixture
-        is respected.
-
-        In this single threaded version, we iterate over the workloads for each property combination and yield instances
-        until all workloads are processed.
-
-        Returns:
-            An iterator over the instances in the result index
+        Get the active iterators for the result index. This function prepares the workloads and spins up the
+        reader processes if required by the degree of parallelism.
         """
         workloads: dict[str, Workloads] = self._prepare_workloads()
 
-        active_iterators = [
-            (property_name, self._get_iterator_for_workload(workload)) for property_name, workload in workloads.items()
-        ]
+        active_iterators: dict[str, Iterator[str]] = {}
+        if self._degree_of_parallelism == 1:
+            active_iterators = {
+                property_name: self._get_iterator_for_workload_st(workload)
+                for property_name, workload in workloads.items()
+            }
+        elif self._degree_of_parallelism > 1:
+            process_counts = self._get_process_counts(workloads)
 
-        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
-        seed_everything(generate_hash_string_from_list([x[0] for x in active_iterators]))
-        random.shuffle(active_iterators)
+            processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = self._spin_up_readers(workloads, process_counts)
 
-        while active_iterators:
-            for property_name, iterator in active_iterators:
-                try:
-                    yield next(iterator)
-                except StopIteration:
-                    active_iterators.remove((property_name, iterator))
+            active_iterators = {
+                property_name: self._get_iterator_for_workload_mt(process)
+                for property_name, process in processes.items()
+            }
 
-    def _iterate_multi_threaded(self) -> Iterator[str]:
-        assert isinstance(self._mixture, dict), "Mixture must be defined for parallel reading, this should not happen."
+        return active_iterators
 
-        # Collect the workloads (i.e. did+fid+ranges) and group them by the property combination they belong to
-        workloads: dict[str, Workloads] = self._prepare_workloads()
-
+    def _get_process_counts(self, workloads: dict[str, Workloads]) -> dict[str, int]:
+        """
+        Get the number of processes per property combination. This function determines the number of processes
+        to use based on the degree of parallelism and the mixture.
+        """
+        assert isinstance(
+            self._mixture, dict
+        ), "Mixture must be defined for parallel reading when getting the process counts, this should not happen."
         # Determine the number of readers to use s.t. readers are not overprovisioned
         reader_count = min(
             sum(len(x) for x in workloads.values()),
@@ -243,13 +184,89 @@ class ResultChunk:
 
         process_counts[list(process_counts.keys())[0]] += reader_count - sum(process_counts.values())
 
-        processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = self._spin_up_readers(workloads, process_counts)
+        return process_counts
 
-        if self._per_window_mixture:
-            yield_source = self._iterate_multi_threaded_window_mixture(processes)
-        else:
-            yield_source = self._iterate_multi_threaded_overall_mixture(processes)
-        yield from yield_source
+    def _get_iterator_for_workload_st(self, workload: list[tuple[int, int, list]]) -> Iterator[str]:
+        """
+        Get the iterator for the workload in single-threaded mode. This function reads the instances from the
+        files in the workload and yields them.
+        """
+        for dataset_id, file_id, ranges in workload:
+            filename_dict = {self._file_path_dict[file_id]: ranges}
+            yield from self._dataset_type_dict[dataset_id].read_ranges_from_files(
+                filename_dict, self._parsing_func_dict[dataset_id], self._server_connection
+            )
+
+    def _get_iterator_for_workload_mt(self, processes: list[tuple[mp.Queue, mp.Process]]) -> Iterator[str]:
+        """
+        Get the iterator for the workload in multi-threaded mode. This function yields the instances from the
+        queues of the processes.
+        """
+        for queue, proc in processes:
+            while proc.is_alive() or not queue.empty():
+                try:
+                    instance = queue.get(timeout=MULTIPROCESSING_TIMEOUT)
+                except Empty:
+                    continue
+                yield instance
+
+    def _iterate_window_mixture(self, active_iterators: dict[str, Iterator[str]]) -> Iterator[str]:
+        """
+        Iterate over the samples in the result index with a windowed mixture. This function yields the samples
+        in the correct mixture withing a window.
+        """
+        element_counts = self._get_element_counts()
+
+        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
+        seed_everything(generate_hash_string_from_list([x[0] for x in element_counts]))
+        random.shuffle(element_counts)
+
+        # Continue until all workloads are processed
+        while active_iterators:
+            items_yielded = 0
+            processed_items = {property_tuple[0]: 0 for property_tuple in element_counts}
+            #  This inner while loop represents one window with the correct mixture
+            #  We continue until the window is full or there are no more workloads to yield
+            while active_iterators and items_yielded < self._window_size:
+                nothing_yielded_window = True
+                for property_name, property_count in element_counts:
+                    if property_name not in active_iterators or processed_items[property_name] >= property_count:
+                        #  If no more workloads for this property this window, skip
+                        continue
+                    try:
+                        # Yield the next instance from the iterator
+                        yield next(active_iterators[property_name])
+                        nothing_yielded_window = False
+                        processed_items[property_name] += 1
+                        items_yielded += 1
+                        if items_yielded >= self._window_size:
+                            #  If the window is full, break the inner loop, will also break the outer loop
+                            #  since the items_yielded >= self._window_size, start the next window
+                            break
+                    except StopIteration:
+                        # If no more workloads, this property is done
+                        del active_iterators[property_name]
+
+                if nothing_yielded_window:
+                    break
+
+    def _iterate_overall_mixture(self, active_iterators: dict[str, Iterator[str]]) -> Iterator[str]:
+        """
+        Iterate over the samples in the result index with an overall mixture. This function yields the samples
+        in the overall correct mixture.
+        """
+        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
+        property_names = list(active_iterators.keys())
+        seed_everything(generate_hash_string_from_list(property_names))
+        random.shuffle(property_names)
+
+        while active_iterators:
+            for property_name in property_names:
+                if property_name in active_iterators:
+                    try:
+                        yield next(active_iterators[property_name])
+                    except StopIteration:
+                        del active_iterators[property_name]
 
     def _get_element_counts(self) -> list[tuple[str, int]]:
         """
@@ -274,124 +291,6 @@ class ResultChunk:
         ]
 
         return adjusted_counts
-
-    def _iterate_multi_threaded_window_mixture(
-        self,
-        processes: dict[str, list[tuple[mp.Queue, mp.Process]]],
-    ) -> Iterator[str]:
-        """
-        Iterate over the result index with a windowed mixture. This means that the window size is fixed
-        (should be <= chunk size) and the mixture is applied per window. This means that the window size
-        is filled with the correct mixture of property combinations.
-
-        In this multi-threaded version, we iterate over the workloads for each property combination and yield instances
-        until the window is full. Then we start the next window.
-
-        Returns:
-            An iterator over the instances in the result index
-        """
-        element_counts = self._get_element_counts()
-
-        processed_items = {property_tuple[0]: 0 for property_tuple in element_counts}
-
-        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
-        seed_everything(generate_hash_string_from_list([x[0] for x in element_counts]))
-        random.shuffle(element_counts)
-
-        while len(processes) > 0:  # pylint: disable=too-many-nested-blocks
-            items_yielded = 0
-
-            #  This inner while loop represents one window with the correct mixture
-            #  We continue until the window is full or there are no more workloads to yield
-            while len(processes) > 0 and items_yielded < self._window_size:
-                nothing_yielded_window = True
-                for property_name, property_count in element_counts:
-                    if (
-                        property_name not in processes
-                        or processed_items[property_name] > property_count
-                        or len(processes[property_name]) == 0
-                    ):
-                        #  If no more workloads for this property this window, skip
-                        continue
-
-                    #  Get the first queue and process for this property combination
-                    # If this combination has no more processes, it will be removed from the list
-                    # and the next iteration a new "first" combination will be retrieved
-                    q, proc = processes[property_name][0]
-
-                    try:
-                        instance = q.get_nowait()
-                    except Empty:
-                        if not proc.is_alive():
-                            #  If the process is dead, remove it from the list
-                            processes[property_name].remove((q, proc))
-                            if len(processes[property_name]) == 0:
-                                del processes[property_name]
-                        continue
-
-                    yield instance
-                    processed_items[property_name] += 1
-                    items_yielded += 1
-                    logger.debug(f"Yielded instance {items_yielded} in window for {property_name}")
-                    nothing_yielded_window = False
-
-                    if items_yielded >= self._window_size:
-                        #  If the window is full, break the inner loop, will also break the outer loop
-                        #  since the items_yielded >= self._window_size, start the next window
-                        processed_items = {property_tuple[0]: 0 for property_tuple in element_counts}
-                        break
-
-            if nothing_yielded_window:
-                break
-
-    def _iterate_multi_threaded_overall_mixture(
-        self,
-        processes: dict[str, list[tuple[mp.Queue, mp.Process]]],
-    ) -> Iterator[str]:
-        """
-        Iterate over the result index with an overall mixture. This means that the mixture is applied to the entire
-        result chunk. This means that the instances are yielded in a random, reproducible, order,
-        but the mixture is respected.
-
-        In this multi-threaded version, we iterate over the workloads for each property combination and yield instances
-        until all workloads are processed.
-
-        Returns:
-            An iterator over the instances in the result index
-        """
-        property_order = list(processes.keys())
-
-        seed_everything(generate_hash_string_from_list(property_order))
-        random.shuffle(property_order)
-
-        while len(processes) > 0:
-            yielded_in_round = False
-
-            for property_name in property_order:
-                if not processes[property_name] or len(processes[property_name]) == 0:
-                    continue
-
-                #  Get the first queue and process for this property combination
-                # If this combination has no more processes, it will be removed from the list
-                # and the next iteration a new "first" combination will be retrieved
-                q, proc = processes[property_name][0]
-
-                try:
-                    instance = q.get_nowait()
-                except Empty:
-                    #  If the queue is empty, check if the process is still alive
-                    if not proc.is_alive():
-                        #  If the process is dead, remove it from the list
-                        processes[property_name].remove((q, proc))
-                        if len(processes[property_name]) == 0:
-                            del processes[property_name]
-                    continue
-
-                yield instance
-                yielded_in_round = True
-
-            if not yielded_in_round:
-                break
 
     def _spin_up_readers(
         self,

@@ -217,23 +217,10 @@ class MixteraClient(ABC):
         Raises:
             RuntimeError if query has not been executed.
         """
-
-        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
-
-        server_connection = None
-        if args.tunnel_via_server:
-            if isinstance(self, ServerStub):
-                server_connection = self._server_connection
-            else:
-                raise RuntimeError(
-                    "Currently, tunneling samples via the server is only supported when using a ServerStub."
-                )
         for result_chunk in self._stream_result_chunks(args.job_id, args.dp_group_id, args.node_id, args.worker_id):
             result_chunk.configure_result_streaming(
-                server_connection=server_connection,
-                degree_of_parallelism=args.chunk_reading_degree_of_parallelism,
-                per_window_mixture=args.chunk_reading_per_window_mixture,
-                window_size=args.chunk_reading_window_size,
+                client=self,
+                args=args,
             )
             yield from result_chunk
 
