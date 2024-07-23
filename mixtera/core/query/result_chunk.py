@@ -88,7 +88,7 @@ class ResultChunk:
             self._window_size = 128
 
         # To determine the number of processes per property combination, we need the mixture
-        #  for parallel reading. If the mixture is not defined, we infer it from the result index.
+        # for parallel reading. If the mixture is not defined, we infer it from the result index.
         if (self._per_window_mixture or self._degree_of_parallelism > 1) and (
             self._mixture is None or len(self._mixture) == 0
         ):
@@ -154,7 +154,7 @@ class ResultChunk:
                 for property_name, workload in workloads.items()
             }
         elif self._degree_of_parallelism > 1:
-            process_counts = self._get_process_counts(workloads)
+            process_counts = self._get_process_counts()
 
             processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = self._spin_up_readers(workloads, process_counts)
 
@@ -165,22 +165,26 @@ class ResultChunk:
 
         return active_iterators
 
-    def _get_process_counts(self, workloads: dict[str, Workloads]) -> dict[str, int]:
+    def _get_process_counts(self) -> dict[str, int]:
         """
         Get the number of processes per property combination. This function determines the number of processes
         to use based on the degree of parallelism and the mixture.
+
+        Each property combination is assigned a number of processes based on the mass of the property combination
+        in the mixture.
         """
         assert isinstance(
             self._mixture, dict
         ), "Mixture must be defined for parallel reading when getting the process counts, this should not happen."
-        # Determine the number of readers to use s.t. readers are not overprovisioned
+
+        #  Determine the number of processes to use
         reader_count = min(
-            sum(len(x) for x in workloads.values()),
             self._degree_of_parallelism if self._degree_of_parallelism is not None else mp.cpu_count(),
+            mp.cpu_count(),
         )
 
         # Determine how many processes should be assigned per property combination
-        process_counts = {key: int(val * reader_count) for key, val in self._mixture.items()}
+        process_counts = {key: int((val / self._chunk_size) * reader_count) for key, val in self._mixture.items()}
 
         process_counts[list(process_counts.keys())[0]] += reader_count - sum(process_counts.values())
 

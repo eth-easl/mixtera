@@ -193,15 +193,14 @@ class TestResultChunk(unittest.TestCase):
             None,
         )
         result_chunk._degree_of_parallelism = 4  # Trigger the mt path
-        result_chunk._mixture = {"property1": 0.5, "property2": 0.5}
+        result_chunk._mixture = {"property1": 5, "property2": 5}
 
-        workloads = {"property1": ["workload1", "workload2"], "property2": ["workload3"]}
-        expected_process_counts = {"property1": 2, "property2": 1}
+        expected_process_counts = {"property1": 2, "property2": 2}
 
         # Mocking mp.cpu_count() to return a fixed value
         mp.cpu_count = MagicMock(return_value=4)
 
-        process_counts = result_chunk._get_process_counts(workloads)
+        process_counts = result_chunk._get_process_counts()
         self.assertEqual(process_counts, expected_process_counts)
 
     def test_get_iterator_for_workload_st(self):
