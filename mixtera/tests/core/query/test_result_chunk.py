@@ -4,7 +4,7 @@ from queue import Empty
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client.server import ServerStub
-from mixtera.core.query import ResultChunk
+from mixtera.core.query.result_chunk import END_OF_STREAM_OBJECT, ResultChunk
 
 
 class TestResultChunk(unittest.TestCase):
@@ -95,8 +95,8 @@ class TestResultChunk(unittest.TestCase):
 
         result_chunk._per_window_mixture = True
         mock_iterators = [("property1", iter(["sample1", "sample2"]))]
-        result_chunk._get_active_iterators = MagicMock()
-        result_chunk._get_active_iterators.return_value = mock_iterators
+        result_chunk._init_active_iterators = MagicMock()
+        result_chunk._init_active_iterators.return_value = mock_iterators
         result_chunk._iterate_window_mixture = MagicMock()
         result_chunk._iterate_window_mixture.return_value = iter(["sample1", "sample2"])
 
@@ -117,8 +117,8 @@ class TestResultChunk(unittest.TestCase):
 
         result_chunk._per_window_mixture = False
         mock_iterators = [("property2", iter(["sample3", "sample4"]))]
-        result_chunk._get_active_iterators = MagicMock()
-        result_chunk._get_active_iterators.return_value = mock_iterators
+        result_chunk._init_active_iterators = MagicMock()
+        result_chunk._init_active_iterators.return_value = mock_iterators
         result_chunk._iterate_overall_mixture = MagicMock()
         result_chunk._iterate_overall_mixture.return_value = iter(["sample3", "sample4"])
 
@@ -146,7 +146,7 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._get_iterator_for_workload_st = MagicMock()
         result_chunk._get_iterator_for_workload_st.side_effect = [iter1, iter2]
 
-        active_iterators = result_chunk._get_active_iterators()
+        active_iterators = result_chunk._init_active_iterators()
 
         self.assertEqual(active_iterators, expected_iterators)
 
@@ -179,7 +179,7 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._get_iterator_for_workload_mt = MagicMock()
         result_chunk._get_iterator_for_workload_mt.side_effect = [iter1, iter2]
 
-        active_iterators = result_chunk._get_active_iterators()
+        active_iterators = result_chunk._init_active_iterators()
 
         self.assertEqual(active_iterators, expected_iterators)
 
@@ -235,9 +235,9 @@ class TestResultChunk(unittest.TestCase):
         mock_proc2.is_alive.return_value = False
 
         # Setting up the mock queues to return values then raise Empty
-        mock_queue1.get.side_effect = ["data1", "data2", Empty]
+        mock_queue1.get.side_effect = ["data1", "data2", END_OF_STREAM_OBJECT]
         mock_queue1.empty.side_effect = [False, False, True]
-        mock_queue2.get.side_effect = ["data3", Empty]
+        mock_queue2.get.side_effect = ["data3", END_OF_STREAM_OBJECT]
         mock_queue2.empty.side_effect = [False, True]
 
         processes = [(mock_queue1, mock_proc1), (mock_queue2, mock_proc2)]
@@ -254,6 +254,59 @@ class TestResultChunk(unittest.TestCase):
         data_collected = list(result_chunk._get_iterator_for_workload_mt(processes))
 
         expected_data = ["data1", "data2", "data3"]
+        self.assertEqual(data_collected, expected_data)
+
+    def test_get_iterator_for_workload_mt_with_timeout_and_process_alive(self):
+        # Mocking the Queue and Process
+        mock_queue1 = MagicMock()
+        mock_proc1 = MagicMock()
+
+        mock_proc1.is_alive.return_value = True
+
+        # Setting up the mock queue to timeout then return a value
+        mock_queue1.get.side_effect = [Empty, "data1", END_OF_STREAM_OBJECT]
+        mock_queue1.empty.return_value = False
+
+        processes = [(mock_queue1, mock_proc1)]
+
+        result_chunk = ResultChunk(
+            result_index=MagicMock(),
+            dataset_type_dict={1: MagicMock(), 2: MagicMock()},
+            file_path_dict={1: "path/to/file1", 2: "path/to/file2"},
+            parsing_func_dict={1: MagicMock(), 2: MagicMock()},
+            chunk_size=MagicMock(),
+        )
+
+        with self.assertRaises(RuntimeError) as context:
+            list(result_chunk._get_iterator_for_workload_mt(processes))
+
+        self.assertTrue("Queue timeout reached but process is still alive." in str(context.exception))
+
+    def test_get_iterator_for_workload_mt_process_dies_before_end_of_stream(self):
+        # Mocking the Queue and Process
+        mock_queue1 = MagicMock()
+        mock_proc1 = MagicMock()
+
+        mock_proc1.is_alive.side_effect = [True, True, False]  # Process dies after first check
+
+        # Setting up the mock queue to return a value then simulate process death before END_OF_STREAM_OBJECT
+        mock_queue1.get.side_effect = ["data1", Empty]
+        mock_queue1.empty.return_value = False
+
+        processes = [(mock_queue1, mock_proc1)]
+
+        result_chunk = ResultChunk(
+            result_index=MagicMock(),
+            dataset_type_dict={1: MagicMock(), 2: MagicMock()},
+            file_path_dict={1: "path/to/file1", 2: "path/to/file2"},
+            parsing_func_dict={1: MagicMock(), 2: MagicMock()},
+            chunk_size=MagicMock(),
+        )
+
+        # Collecting data from generator
+        data_collected = list(result_chunk._get_iterator_for_workload_mt(processes))
+
+        expected_data = ["data1"]
         self.assertEqual(data_collected, expected_data)
 
     def test_iterate_window_mixture(self):

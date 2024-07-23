@@ -34,11 +34,6 @@ def get_expected_js_and_html_samples(
     )
 
 
-def get_job_id() -> str:
-    current_time = datetime.now()
-    return str(int(current_time.timestamp() * 1000000))
-
-
 def setup_test_dataset(
     dir: Path, total_instance_count: int = 1000, file_count: int = 10, fraction_multiplier: int = 2
 ) -> None:

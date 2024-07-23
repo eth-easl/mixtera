@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 Workload = tuple[int, int, IndexRowRangeType]
 Workloads = list[Workload]
 
-MULTIPROCESSING_TIMEOUT = 5
+MULTIPROCESSING_TIMEOUT = 60
+END_OF_STREAM_OBJECT = "END_OF_STREAM"
 
 
 class ResultChunk:
@@ -61,7 +62,7 @@ class ResultChunk:
 
         if args.tunnel_via_server:
             if isinstance(client, ServerStub):
-                self._server_connection = client.get_server_connection()
+                self._server_connection = client.server_connection
             else:
                 raise RuntimeError(
                     "Currently, tunneling samples via the server is only supported when using a ServerStub."
@@ -133,14 +134,14 @@ class ResultChunk:
         Returns:
             An iterator over the samples
         """
-        active_iterators: dict[str, Iterator[str]] = self._get_active_iterators()
+        active_iterators: dict[str, Iterator[str]] = self._init_active_iterators()
         if self._per_window_mixture:
             yield_source = self._iterate_window_mixture(active_iterators)
         else:
             yield_source = self._iterate_overall_mixture(active_iterators)
         yield from yield_source
 
-    def _get_active_iterators(self) -> dict[str, Iterator[str]]:
+    def _init_active_iterators(self) -> dict[str, Iterator[str]]:
         """
         Get the active iterators for the result index. This function prepares the workloads and spins up the
         reader processes if required by the degree of parallelism.
@@ -190,12 +191,12 @@ class ResultChunk:
 
         return process_counts
 
-    def _get_iterator_for_workload_st(self, workload: list[tuple[int, int, list]]) -> Iterator[str]:
+    def _get_iterator_for_workload_st(self, workloads: Workloads) -> Iterator[str]:
         """
         Get the iterator for the workload in single-threaded mode. This function reads the instances from the
         files in the workload and yields them.
         """
-        for dataset_id, file_id, ranges in workload:
+        for dataset_id, file_id, ranges in workloads:
             filename_dict = {self._file_path_dict[file_id]: ranges}
             yield from self._dataset_type_dict[dataset_id].read_ranges_from_files(
                 filename_dict, self._parsing_func_dict[dataset_id], self._server_connection
@@ -210,8 +211,16 @@ class ResultChunk:
             while proc.is_alive() or not queue.empty():
                 try:
                     instance = queue.get(timeout=MULTIPROCESSING_TIMEOUT)
-                except Empty:
-                    continue
+                except Empty as exc:
+                    if not proc.is_alive():
+                        proc.join()
+                        break
+                    raise RuntimeError(
+                        "Queue timeout reached but process is still alive. Something went wrong."
+                    ) from exc
+                if instance == END_OF_STREAM_OBJECT:
+                    proc.join()
+                    break
                 yield instance
 
     def _iterate_window_mixture(self, active_iterators: dict[str, Iterator[str]]) -> Iterator[str]:
@@ -371,6 +380,8 @@ class ResultChunk:
             for instance in instance_iterator:
                 queue.put(instance)
 
+        queue.put(END_OF_STREAM_OBJECT)
+
         queue.close()
 
     def _prepare_workloads(self) -> dict[str, Workloads]:
@@ -388,6 +399,11 @@ class ResultChunk:
             for dataset_id, file_entries in dataset_entries.items():
                 for file_id, ranges in file_entries.items():
                     workloads[property_combination].append((dataset_id, file_id, ranges))
+
+            #  Shuffle the workloads to ensure that the order of the files is (reproducibly) random
+            seed_everything(generate_hash_string_from_list([property_combination]))
+            random.shuffle(workloads[property_combination])
+
         return workloads
 
     def __iter__(self) -> "ResultChunk":
