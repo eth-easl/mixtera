@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import psutil
 import torch
 from datasets import Dataset, Features, IterableDataset, Sequence, Value
 from datasets.distributed import split_dataset_by_node
@@ -18,13 +17,6 @@ from mixtera.hf import MixteraHFDataset
 from transformers import AutoTokenizer
 
 os.environ["TOKENIZERS_PARALLELISM"] = "True"
-
-
-def list_child_processes():
-    current_process = psutil.Process()
-    children = current_process.children(recursive=True)
-    for child in children:
-        print(f"Child pid is {child.pid} and name is {child.name()}")
 
 
 def sample_parsing_func(sample):
@@ -184,6 +176,7 @@ def test_hfds(server_dir: Path) -> None:
                             num_workers=num_workers,
                         )
                         curr_data = run_query(server_client, query_exec_args, batch_size, tunnel)
+                        print("Query done, start comparing data.")
                         if first_exec:
                             prev_data = curr_data
                             first_exec = False
@@ -199,7 +192,6 @@ def test_hfds(server_dir: Path) -> None:
                         raise e
 
     print("Finished huggingface integration test.")
-    list_child_processes()
 
 
 def main() -> None:

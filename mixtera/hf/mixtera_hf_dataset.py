@@ -108,3 +108,8 @@ class MixteraHFDataset(datasets.IterableDataset):
             assert self._ex_iterable._dp_group_id == 0
 
         yield from super().__iter__()
+
+        logger.info(
+            f"[{self._ex_iterable._dp_group_id}-{self._ex_iterable._node_id}-{self._ex_iterable.worker_id}]"
+            + " Finished yielding."
+        )
