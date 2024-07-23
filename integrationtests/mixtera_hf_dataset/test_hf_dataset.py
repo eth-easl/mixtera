@@ -158,11 +158,11 @@ def test_hfds(server_dir: Path) -> None:
     server_file = setup_test_dataset(server_dir)
     server_client = MixteraClient("127.0.0.1", 6666)
 
-    assert server_client.register_metadata_parser("TEST_PARSER_TORCH", TestMetadataParser)
+    assert server_client.register_metadata_parser("TEST_PARSER_HF", TestMetadataParser)
     assert server_client.register_dataset(
-        "ldc_torch_integrationtest_dataset", server_file, JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
+        "hf_integrationtest_dataset", server_file, JSONLDataset, sample_parsing_func, "TEST_PARSER_HF"
     )
-    assert server_client.check_dataset_exists("ldc_torch_integrationtest_dataset"), "Dataset does not exist!"
+    assert server_client.check_dataset_exists("hf_integrationtest_dataset"), "Dataset does not exist!"
 
     first_exec = True
     prev_data = []
