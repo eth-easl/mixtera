@@ -47,26 +47,22 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         return self._res_str_args.worker_id
 
     def shard_data_sources(self, worker_id: int, num_workers: int) -> "_MixteraHFIterable":
-        # This gets called by the IterableDataset from huggingface and should return
-        # the iterable for the specific worker. In our case, Mixtera handles this implicitly.
-        # Each worker handles one chunk at a time.
-        logger.debug(f"shard_data_sources called with {worker_id} and {num_workers}")
-        assert num_workers == max(self._query_execution_args.num_workers, 1), (
+        logger.debug(f"shard_data_sources called with worker_id={worker_id} and num_workers={num_workers}")
+        # This is called in two cases:
+        # On each dp node with num_workers = number of dp nodes
+        # On each dp nodes with num_workers = num data loading workers IF num_workers > 0
+
+        assert (
+            num_workers == max(self._query_execution_args.num_workers, 1)
+            or num_workers == self._query_execution_args.dp_groups
+        ), (
             f"num_workers = {num_workers} != query.num_workers ="
             + f"{max(self._query_execution_args.num_workers,1)} defined at query execution."
         )
 
-        if not self._shard_called:
-            res_args = deepcopy(self._res_str_args)
-            res_args.worker_id = worker_id
-            return _MixteraHFIterable(
-                self._client, self._query, self._query_execution_args, res_args, _shard_called=True
-            )
-
-        assert (
-            self._res_str_args.worker_id == worker_id
-        ), f"worker_id = {worker_id} != self.worker_id = {self._res_str_args.worker_id}"
-        return self
+        res_args = deepcopy(self._res_str_args)
+        res_args.worker_id = worker_id
+        return _MixteraHFIterable(self._client, self._query, self._query_execution_args, res_args, _shard_called=True)
 
     def validate_state(self) -> None:
         assert self._shard_called, "shard_data_sources should have been called - something went wrong."
