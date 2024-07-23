@@ -17,3 +17,5 @@ dependencies:
   - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency
   - huggingface::datasets
   - conda-forge::transformers
+  - pip:
+      - psutil
