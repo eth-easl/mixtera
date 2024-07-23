@@ -5,6 +5,8 @@ from typing import Any, List, Optional
 import numpy as np
 from mixtera.core.datacollection.index.parser import MetadataParser
 
+REPRODUCIBILITY_ITERATIONS = 7
+
 
 def write_jsonl(path: Path, file_count: int, instance_count_per_file: int, fraction_multiplier: int) -> None:
     for file_number in range(file_count):

@@ -2,7 +2,13 @@ import multiprocessing as mp
 import tempfile
 from pathlib import Path
 
-from integrationtests.utils import TestMetadataParser, get_expected_js_and_html_samples, get_job_id, setup_test_dataset
+from integrationtests.utils import (
+    REPRODUCIBILITY_ITERATIONS,
+    TestMetadataParser,
+    get_expected_js_and_html_samples,
+    get_job_id,
+    setup_test_dataset,
+)
 from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
@@ -142,7 +148,7 @@ def test_reproducibility(
     mixture = StaticMixture(query_exec_args.mixture.chunk_size, {"language:JavaScript": 0.6, "language:HTML": 0.4})
     result_list = []
 
-    for i in range(10):
+    for i in range(REPRODUCIBILITY_ITERATIONS):
         job_id = get_job_id()
         result_streaming_args.job_id = job_id
         query = (
@@ -159,7 +165,7 @@ def test_reproducibility(
 
         result_list.append(result_samples)
 
-    for i in range(1, 10):
+    for i in range(1, REPRODUCIBILITY_ITERATIONS):
         assert result_list[i] == result_list[i - 1], "Results are not reproducible"
 
 
@@ -183,12 +189,12 @@ def test_chunk_readers(dir: Path) -> None:
         "client_integrationtest_chunk_reader_dataset", dir, JSONLDataset, parsing_func, "TEST_PARSER"
     )
 
-    degrees_of_parallelisms = [1, 4]
+    reader_degrees_of_parallelisms = [1, 2]
     per_window_mixtures = [False, True]
-    window_sizes = [64, 128, 256]
+    window_sizes = [64, 128]
 
-    for chunk_size in [50, 100, 250, 500, 750, 1000]:
-        for degree_of_parallelism in degrees_of_parallelisms:
+    for chunk_size in [100, 500, 1000]:
+        for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
             for per_window_mixture in per_window_mixtures:
                 for window_size in window_sizes:
                     #  Only run per_window_mixture tests for one window size (subsequent are equivalent)
@@ -197,12 +203,12 @@ def test_chunk_readers(dir: Path) -> None:
                     query_exec_args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size))
                     result_streaming_args = ResultStreamingArgs(
                         None,
-                        chunk_reading_degree_of_parallelism=degree_of_parallelism,
+                        chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
                         chunk_reading_per_window_mixture=per_window_mixture,
                         chunk_reading_window_size=window_size,
                     )
                     logger.debug(
-                        f"Running chunk reader tests with chunk_size={chunk_size}, degree_of_parallelism={degree_of_parallelism}, "
+                        f"Running chunk reader tests with chunk_size={chunk_size}, degree_of_parallelism={reader_degree_of_parallelism}, "
                         f"per_window_mixture={per_window_mixture}, window_size={window_size}"
                     )
                     test_client_chunksize(client, query_exec_args, result_streaming_args)

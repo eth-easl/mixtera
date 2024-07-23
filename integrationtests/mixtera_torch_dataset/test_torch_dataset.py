@@ -4,7 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import torch
-from integrationtests.utils import TestMetadataParser, setup_test_dataset
+from integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
@@ -246,6 +246,58 @@ def test_filter_both_with_order_validation(
             assert batches == reference_batches, f"Mismatch in batch order for group {group_id}, node {node_id}"
 
 
+def test_reader_reproducibility(
+    client: MixteraClient,
+    query_exec_args: QueryExecutionArgs,
+    batch_size: int,
+    tunnel: bool,
+):
+    reader_degrees_of_parallelisms = [1, 4]
+    per_window_mixtures = [False, True]
+    window_sizes = [64, 128, 256]
+
+    for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
+        for per_window_mixture in per_window_mixtures:
+            for window_size in window_sizes:
+                result_list = []
+
+                for i in range(REPRODUCIBILITY_ITERATIONS):
+                    group_batches = {}
+                    for dp_group_id in range(query_exec_args.dp_groups):
+                        node_batches = {}
+                        for node_id in range(query_exec_args.nodes_per_group):
+                            job_id = (
+                                f"7_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+                                + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{reader_degree_of_parallelism}"
+                                + f"_{per_window_mixture}_{window_size}_{i}_{dp_group_id}_{node_id}"
+                            )
+                            query = (
+                                Query.for_job(job_id)
+                                .select(("language", "==", "HTML"))
+                                .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
+                            )
+                            torch_ds = MixteraTorchDataset(
+                                client,
+                                query,
+                                query_exec_args,
+                                ResultStreamingArgs(
+                                    job_id=job_id, dp_group_id=dp_group_id, node_id=node_id, tunnel_via_server=tunnel
+                                ),
+                            )
+                            dl = torch.utils.data.DataLoader(
+                                torch_ds, batch_size=batch_size, num_workers=query_exec_args.num_workers
+                            )
+                            batches = list(dl)
+                            node_batches[node_id] = batches
+                        group_batches[dp_group_id] = node_batches
+                    result_list.append(group_batches)
+
+                for i in range(1, REPRODUCIBILITY_ITERATIONS):
+                    for dp_group_id, node_batches in result_list[i].items():
+                        for node_id, batches in node_batches.items():
+                            assert batches == result_list[i - 1][dp_group_id][node_id], "Results are not reproducible"
+
+
 def test_torchds(
     client: MixteraClient,
     query_exec_args: QueryExecutionArgs,
@@ -259,6 +311,7 @@ def test_torchds(
     test_filter_unknown_license(client, query_exec_args, batch_size, tunnel)
     test_filter_license_and_html(client, query_exec_args, batch_size, tunnel)
     test_filter_both_with_order_validation(client, query_exec_args, batch_size, tunnel)
+    test_reader_reproducibility(client, query_exec_args, batch_size, tunnel)
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:

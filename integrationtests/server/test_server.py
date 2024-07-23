@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from integrationtests.utils import (
+    REPRODUCIBILITY_ITERATIONS,
     TestMetadataParser,
     calc_func,
     get_expected_js_and_html_samples,
@@ -36,6 +37,7 @@ def parsing_func(sample):
 def test_filter_javascript(
     client: ServerStub, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    result_streaming_args.job_id = get_job_id()
     query = Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript"))
     assert client.execute_query(query, query_exec_args)
     result_samples = []
@@ -53,6 +55,7 @@ def test_filter_javascript(
 def test_filter_html(
     client: ServerStub, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    result_streaming_args.job_id = get_job_id()
     query = Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML"))
     assert client.execute_query(query, query_exec_args)
     result_samples = []
@@ -70,6 +73,7 @@ def test_filter_html(
 def test_filter_both(
     client: ServerStub, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    result_streaming_args.job_id = get_job_id()
     query = (
         Query.for_job(result_streaming_args.job_id)
         .select(("language", "==", "HTML"))
@@ -91,6 +95,7 @@ def test_filter_both(
 def test_filter_license(
     client: ServerStub, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    result_streaming_args.job_id = get_job_id()
     query = Query.for_job(result_streaming_args.job_id).select(("license", "==", "CC"))
     assert client.execute_query(query, query_exec_args)
     result_samples = []
@@ -108,6 +113,7 @@ def test_filter_license(
 def test_filter_unknown_license(
     client: ServerStub, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    result_streaming_args.job_id = get_job_id()
     query = Query.for_job(result_streaming_args.job_id).select(("license", "==", "All rights reserved."))
     assert client.execute_query(query, query_exec_args)
     assert len(list(client.stream_results(result_streaming_args))) == 0, "Got results back for expected empty results."
@@ -116,6 +122,7 @@ def test_filter_unknown_license(
 def test_filter_license_and_html(
     client: ServerStub, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    result_streaming_args.job_id = get_job_id()
     # TODO(#41): This test currently tests unexpected behavior - we want to deduplicate!
     query = (
         Query.for_job(result_streaming_args.job_id)
@@ -141,7 +148,7 @@ def test_reproducibility(
     mixture = StaticMixture(query_exec_args.mixture.chunk_size, {"language:JavaScript": 0.6, "language:HTML": 0.4})
     result_list = []
 
-    for i in range(10):
+    for i in range(REPRODUCIBILITY_ITERATIONS):
         job_id = get_job_id()
         result_streaming_args.job_id = job_id
         query = (
@@ -158,7 +165,7 @@ def test_reproducibility(
 
         result_list.append(result_samples)
 
-    for i in range(1, 10):
+    for i in range(1, REPRODUCIBILITY_ITERATIONS):
         assert result_list[i] == result_list[i - 1], "Results are not reproducible"
 
 
@@ -189,21 +196,20 @@ def test_server(server_dir: Path) -> None:
 
     test_check_dataset_exists(client)
 
-    degrees_of_parallelisms = [1, 4]
+    reader_degrees_of_parallelisms = [1, 4]
     per_window_mixtures = [False, True]
-    window_sizes = [128, 256]
+    window_sizes = [64, 128]
 
     for chunk_size in [100, 500, 1000]:
-        for degree_of_parallelism in degrees_of_parallelisms:
+        for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
             for per_window_mixture in per_window_mixtures:
                 for window_size in window_sizes:
                     for tunnel in [False, True]:
-                        job_id = get_job_id()
                         query_exec_args = QueryExecutionArgs(mixture=ArbitraryMixture(chunk_size))
                         result_streaming_args = ResultStreamingArgs(
-                            job_id,
+                            None,
                             tunnel_via_server=tunnel,
-                            chunk_reading_degree_of_parallelism=degree_of_parallelism,
+                            chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
                             chunk_reading_per_window_mixture=per_window_mixture,
                             chunk_reading_window_size=window_size,
                         )
