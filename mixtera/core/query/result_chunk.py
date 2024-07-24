@@ -322,6 +322,15 @@ class ResultChunk:
         for key, process_count in process_counts.items():
             processes[key] = []
 
+            if process_count < 1:
+                # TODO(#85): This will currently lead to more processes than
+                # intended if degree_of_parallelism < properties
+                logger.warning(
+                    f"Number of processes for property combination {key} is set to {process_count} which is invalid. "
+                    "Setting number of processes to 1."
+                )
+                process_count = 1
+
             # Calculate per-process partition sizes
             partition_size = max(1, len(workloads[key]) // process_count)
             partition_ranges = list(range(0, len(workloads[key]), partition_size)) + [len(workloads[key])]
