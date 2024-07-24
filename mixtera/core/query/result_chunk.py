@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 Workload = tuple[int, int, IndexRowRangeType]
 Workloads = list[Workload]
 
-MULTIPROCESSING_TIMEOUT = 60
+MULTIPROCESSING_TIMEOUT = 90
 END_OF_STREAM_OBJECT = "END_OF_STREAM"
 
 
@@ -207,19 +207,21 @@ class ResultChunk:
         Get the iterator for the workload in multi-threaded mode. This function yields the instances from the
         queues of the processes.
         """
-        for queue, proc in processes:
-            while proc.is_alive() or not queue.empty():
+        while processes:
+            for queue, proc in processes:
                 try:
                     instance = queue.get(timeout=MULTIPROCESSING_TIMEOUT)
                 except Empty as exc:
                     if not proc.is_alive():
                         proc.join()
+                        processes.remove((queue, proc))
                         break
                     raise RuntimeError(
                         "Queue timeout reached but process is still alive. Something went wrong."
                     ) from exc
                 if instance == END_OF_STREAM_OBJECT:
                     proc.join()
+                    processes.remove((queue, proc))
                     break
                 yield instance
 

@@ -253,7 +253,7 @@ class TestResultChunk(unittest.TestCase):
         # Collecting data from generator
         data_collected = list(result_chunk._get_iterator_for_workload_mt(processes))
 
-        expected_data = ["data1", "data2", "data3"]
+        expected_data = ["data1", "data3", "data2"]
         self.assertEqual(data_collected, expected_data)
 
     def test_get_iterator_for_workload_mt_with_timeout_and_process_alive(self):
@@ -304,10 +304,7 @@ class TestResultChunk(unittest.TestCase):
         )
 
         # Collecting data from generator
-        data_collected = list(result_chunk._get_iterator_for_workload_mt(processes))
-
-        expected_data = ["data1"]
-        self.assertEqual(data_collected, expected_data)
+        self.assertRaises(RuntimeError, list, result_chunk._get_iterator_for_workload_mt(processes))
 
     def test_iterate_window_mixture(self):
         result_chunk = ResultChunk(
