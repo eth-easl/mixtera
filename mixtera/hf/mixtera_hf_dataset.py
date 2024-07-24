@@ -41,7 +41,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
 
     @property
     def n_shards(self) -> int:
-        return self._query_execution_args.num_workers * 8  # HF requires us to set some number.
+        return max(self._query_execution_args.num_workers * 8, 1)  # HF requires us to set some number.
 
     @property
     def worker_id(self) -> int:
