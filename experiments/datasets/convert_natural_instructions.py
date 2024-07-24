@@ -3,7 +3,7 @@ import json
 from tqdm import tqdm
 from protocol import Conversation
 
-data_path = ".cache/dataset/natural-instructions/tasks"
+data_path = ".cache/datasets/natural-instructions/tasks"
 tasks = [x for x in os.listdir(data_path) if x.endswith(".json")]
 conversations = []
 
@@ -32,7 +32,8 @@ for task in tqdm(tasks):
         conv.add_meta(meta)
         conversations.append(conv)
 
-with open(".cache/prepared/natural_instructions.jsonl", "w") as f:
+os.makedirs(".cache/datasets/prepared", exist_ok=True)
+with open(".cache/datasets/prepared/natural_instructions.jsonl", "w") as f:
     for conv in conversations:
-        conv.sanity_check()
+        conv.sanity_check() # this ensures no repeated user prompts
         f.write(conv.to_json() + "\n")
