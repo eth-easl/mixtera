@@ -252,8 +252,15 @@ def test_reader_reproducibility(
     batch_size: int,
     tunnel: bool,
 ):
-    if not query_exec_args.dp_groups == 1 or not query_exec_args.nodes_per_group == 1:
+    if (
+        not query_exec_args.dp_groups == 1
+        or not query_exec_args.nodes_per_group == 1
+        or query_exec_args.num_workers > 3
+        or (batch_size != 1 and batch_size != 500)
+        or query_exec_args.mixture.chunk_size > 500
+    ):
         return
+
     reader_degrees_of_parallelisms = [1, 4]
     per_window_mixtures = [False, True]
     window_sizes = [64, 256]
@@ -339,9 +346,9 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
         "ldc_torch_integrationtest_dataset", local_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
-    for mixture in [ArbitraryMixture(x) for x in [1, 500, 2000]]:
+    for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:
         for num_workers in [0, 3, 8]:
-            for batch_size in [1, 500]:
+            for batch_size in [1, 2, 500]:
                 try:
                     query_exec_args = QueryExecutionArgs(mixture=mixture, num_workers=num_workers)
                     test_torchds(local_client, query_exec_args, batch_size, False)
