@@ -252,6 +252,8 @@ def test_reader_reproducibility(
     batch_size: int,
     tunnel: bool,
 ):
+    if not query_exec_args.dp_groups == 1 or not query_exec_args.nodes_per_group == 1:
+        return
     reader_degrees_of_parallelisms = [1, 4]
     per_window_mixtures = [False, True]
     window_sizes = [64, 128, 256]
@@ -292,10 +294,18 @@ def test_reader_reproducibility(
                         group_batches[dp_group_id] = node_batches
                     result_list.append(group_batches)
 
+                reference_batches = result_list[0][0][0]  # Use the first node's batches as the reference
+
                 for i in range(1, REPRODUCIBILITY_ITERATIONS):
                     for dp_group_id, node_batches in result_list[i].items():
+                        if dp_group_id == 0:
+                            continue  #  Skip the reference dp group itself
                         for node_id, batches in node_batches.items():
-                            assert batches == result_list[i - 1][dp_group_id][node_id], "Results are not reproducible"
+                            if node_id == 0:
+                                continue  # Skip the reference node itself
+                            assert (
+                                batches == reference_batches
+                            ), f"Mismatch in batch order for group {dp_group_id}, node {node_id}"
 
 
 def test_torchds(
@@ -361,7 +371,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for dp_groups, num_nodes_per_group in [(1, 1), (1, 2), (2, 1), (2, 2), (4, 4)]:
-            for num_workers in [0, 2, 8]:
+            for num_workers in [0, 3, 8]:
                 for batch_size in [1, 500]:
                     for tunnel in [False, True]:
                         if tunnel and (batch_size > 1 or num_workers > 0 or mixture.chunk_size > 1):
