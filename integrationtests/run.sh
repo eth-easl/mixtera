@@ -122,4 +122,13 @@ empty_work_dir
 echo "Running mixtera torch dataset tests"
 python $SCRIPT_DIR/mixtera_torch_dataset/test_torch_dataset.py $WORK_DIR || script_exit_status=$?
 
+if [ $script_exit_status -ne 0 ]; then
+  cleanup
+fi
+
+empty_work_dir
+
+echo "Running mixtera huggingface dataset tests"
+python $SCRIPT_DIR/mixtera_hf_dataset/test_hf_dataset.py $WORK_DIR || script_exit_status=$?
+
 echo "Ran all integration tests."
