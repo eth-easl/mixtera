@@ -9,6 +9,8 @@ from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreami
 from mixtera.core.query import Query
 from mixtera.torch import MixteraTorchDataset
 
+datasets.logging.set_verbosity_debug()
+
 
 class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExamplesIterable):
     def __init__(
@@ -71,6 +73,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         ), f"torch worker id = {MixteraTorchDataset.worker_id.fget(self)} != self.worker_id = {self.worker_id}"
 
     def __iter__(self) -> Generator[Tuple[str, dict], None, None]:
+        datasets.logging.set_verbosity_debug()
         self.validate_state()
         idx = -1
         for idx, sample in enumerate(MixteraTorchDataset.__iter__(self)):
@@ -108,7 +111,6 @@ class MixteraHFDataset(datasets.IterableDataset):
             assert self._ex_iterable._dp_group_id == 0
 
         yield from super().__iter__()
-
         logger.info(
             f"[{self._ex_iterable._dp_group_id}-{self._ex_iterable._node_id}-{self._ex_iterable.worker_id}]"
             + " Finished yielding."

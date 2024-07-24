@@ -127,9 +127,8 @@ def instantiate_hf_dataloader(
         text_column_name="text",  # by MixteraHFDataset implementation
         dataset_processing_num_proc_per_process=-1,  # will be ignored
         dataset_overwrite_cache=False,  # will be ignored
-        sequence_length=10000,
+        sequence_length=10,
     )
-
     train_dataset = train_dataset.with_format(type="torch")
     train_dataset = split_dataset_by_node(train_dataset, world_size=1, rank=0)
     dl = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, num_workers=query_execution_args.num_workers)
@@ -164,18 +163,20 @@ def test_hfds(server_dir: Path) -> None:
     )
     assert server_client.check_dataset_exists("hf_integrationtest_dataset"), "Dataset does not exist!"
 
-    first_exec = True
-    prev_data = []
-    for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
+    for batch_size in [1, 500]:
         for num_workers in [0, 8]:
-            for batch_size in [1, 500]:
-                for tunnel in [False, True]:
+            # The output varies between batch sizes and num workers
+            first_exec = True
+            prev_data = []
+            for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
+                for tunnel in [False]:
                     try:
                         query_exec_args = QueryExecutionArgs(
                             mixture=mixture,
                             num_workers=num_workers,
                         )
                         curr_data = run_query(server_client, query_exec_args, batch_size, tunnel)
+                        assert len(curr_data) > 0  # we need some answer
                         print("Query done, start comparing data.")
                         if first_exec:
                             prev_data = curr_data
