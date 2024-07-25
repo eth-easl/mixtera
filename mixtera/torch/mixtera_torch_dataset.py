@@ -1,3 +1,5 @@
+import os
+import threading
 from typing import Any, Generator
 
 from loguru import logger
@@ -15,6 +17,7 @@ class MixteraTorchDataset(IterableDataset):
         query: Query,
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
+        execute_query: bool = True,
     ):
         # TODO(#63): This needs to be passed information on transformation, e.g., tokenization functions etc.
         # Alternative: Let people inherit from this.
@@ -26,8 +29,11 @@ class MixteraTorchDataset(IterableDataset):
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
 
-        if self._node_id == 0 and self._dp_group_id == 0:
-            logger.info("Since this is node 0 in data parallel group 0, executing query!")
+        if self._node_id == 0 and self._dp_group_id == 0 and execute_query:
+            logger.info(
+                f"[{os.getpid()}/{threading.get_native_id()}] "
+                + "Since this is node 0 in data parallel group 0, executing query!"
+            )
             # Execute query on primary node pre-fork, to share the results among all forked workers
             self._client.execute_query(query, self._query_execution_args)
 
@@ -47,10 +53,8 @@ class MixteraTorchDataset(IterableDataset):
     def num_workers(self) -> int:
         return max(self._query_execution_args.num_workers, 1)
 
-    def __getitem__(self, index: int) -> Any:
-        raise NotImplementedError("This is just overwritten to satify pylint.")
-
-    def __iter__(self) -> Generator[str, None, None]:
+    @property
+    def worker_id(self) -> int:
         worker_info = get_worker_info()
         if worker_info is None:
             # Non-multithreaded data loading. We use worker_id 0.
@@ -59,6 +63,12 @@ class MixteraTorchDataset(IterableDataset):
             worker_id = worker_info.id
 
         assert worker_id < self.num_workers, f"Number of workers was invalid: {worker_id} vs {self.num_workers}"
-        self._res_str_args.worker_id = worker_id
 
+        return worker_id
+
+    def __getitem__(self, index: int) -> Any:
+        raise NotImplementedError("This is just overwritten to satify pylint.")
+
+    def __iter__(self) -> Generator[str, None, None]:
+        self._res_str_args.worker_id = self.worker_id
         yield from self._client.stream_results(self._res_str_args)
