@@ -21,7 +21,7 @@ class TestServerStub(unittest.TestCase):
     def test_init(self):
         self.assertEqual(self.server_stub._host, "localhost")
         self.assertEqual(self.server_stub._port, 8080)
-        self.assertIsInstance(self.server_stub._server_connection, ServerConnection)
+        self.assertIsInstance(self.server_stub.server_connection, ServerConnection)
 
     def test_is_remote(self):
         self.assertTrue(self.server_stub.is_remote())
@@ -107,7 +107,7 @@ class TestServerStub(unittest.TestCase):
     def test_register_metadata_parser(self, mock_register_metadata_parser):
         identifier = "test_id"
         parser = MagicMock()
-        self.server_stub._server_connection.register_metadata_parser = mock_register_metadata_parser
+        self.server_stub.server_connection.register_metadata_parser = mock_register_metadata_parser
 
         result = self.server_stub.register_metadata_parser(identifier, parser)
 
