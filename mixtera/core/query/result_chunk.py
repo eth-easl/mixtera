@@ -208,22 +208,26 @@ class ResultChunk:
         queues of the processes.
         """
         while processes:
+            processes_to_remove = []
             for queue, proc in processes:
                 try:
                     instance = queue.get(timeout=MULTIPROCESSING_TIMEOUT)
                 except Empty as exc:
                     if not proc.is_alive():
                         proc.join()
-                        processes.remove((queue, proc))
-                        break
+                        processes_to_remove.append((queue, proc))
+                        continue
                     raise RuntimeError(
                         "Queue timeout reached but process is still alive. Something went wrong."
                     ) from exc
                 if instance == END_OF_STREAM_OBJECT:
                     proc.join()
-                    processes.remove((queue, proc))
-                    break
+                    processes_to_remove.append((queue, proc))
+                    continue
                 yield instance
+
+            for queue, proc in processes_to_remove:
+                processes.remove((queue, proc))
 
     def _iterate_window_mixture(self, active_iterators: dict[str, Iterator[str]]) -> Iterator[str]:
         """
@@ -236,16 +240,18 @@ class ResultChunk:
         seed_everything(generate_hash_string_from_list([x[0] for x in element_counts]))
         random.shuffle(element_counts)
 
+        deleted_iterators: set[str] = set()
+
         # Continue until all workloads are processed
-        while active_iterators:
+        while len(active_iterators) > len(deleted_iterators):
             items_yielded = 0
             processed_items = {property_tuple[0]: 0 for property_tuple in element_counts}
             #  This inner while loop represents one window with the correct mixture
             #  We continue until the window is full or there are no more workloads to yield
-            while active_iterators and items_yielded < self._window_size:
+            while len(active_iterators) > len(deleted_iterators) and items_yielded < self._window_size:
                 nothing_yielded_window = True
                 for property_name, property_count in element_counts:
-                    if property_name not in active_iterators or processed_items[property_name] >= property_count:
+                    if property_name in deleted_iterators or processed_items[property_name] >= property_count:
                         #  If no more workloads for this property this window, skip
                         continue
                     try:
@@ -260,7 +266,7 @@ class ResultChunk:
                             break
                     except StopIteration:
                         # If no more workloads, this property is done
-                        del active_iterators[property_name]
+                        deleted_iterators.add(property_name)
 
                 if nothing_yielded_window:
                     break
@@ -275,13 +281,17 @@ class ResultChunk:
         seed_everything(generate_hash_string_from_list(property_names))
         random.shuffle(property_names)
 
-        while active_iterators:
+        deleted_iterators: set[str] = set()
+
+        while len(active_iterators) > len(deleted_iterators):
             for property_name in property_names:
-                if property_name in active_iterators:
-                    try:
-                        yield next(active_iterators[property_name])
-                    except StopIteration:
-                        del active_iterators[property_name]
+                #  If the property is done, skip
+                if property_name in deleted_iterators:
+                    continue
+                try:
+                    yield next(active_iterators[property_name])
+                except StopIteration:
+                    deleted_iterators.add(property_name)
 
     def _get_element_counts(self) -> list[tuple[str, int]]:
         """
