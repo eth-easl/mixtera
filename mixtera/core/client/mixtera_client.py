@@ -6,10 +6,9 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Mixture, Query
+from mixtera.core.query import Mixture, Query, ResultChunk
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
@@ -31,6 +30,9 @@ class ResultStreamingArgs:
     node_id: int = 0
     worker_id: int = 0
     tunnel_via_server: bool = False
+    chunk_reading_degree_of_parallelism: int = 1
+    chunk_reading_per_window_mixture: bool = False
+    chunk_reading_window_size: int = 128
 
 
 class MixteraClient(ABC):
@@ -215,18 +217,17 @@ class MixteraClient(ABC):
         Raises:
             RuntimeError if query has not been executed.
         """
-        result_metadata = self._get_result_metadata(args.job_id)
         for result_chunk in self._stream_result_chunks(args.job_id, args.dp_group_id, args.node_id, args.worker_id):
-            # TODO(#35): When implementing the new sampling on the ResultChunk,
-            # the ResultChunk class should offer an iterator instead.
-            yield from self._iterate_result_chunk(
-                result_chunk, *result_metadata, tunnel_via_server=args.tunnel_via_server
+            result_chunk.configure_result_streaming(
+                client=self,
+                args=args,
             )
+            yield from result_chunk
 
     @abstractmethod
     def _stream_result_chunks(
         self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
-    ) -> Generator[ChunkerIndex, None, None]:
+    ) -> Generator[ResultChunk, None, None]:
         """
         Given a job ID, iterates over the result chunks.
 
@@ -256,49 +257,6 @@ class MixteraClient(ABC):
             RuntimeError if query has not been executed.
         """
         raise NotImplementedError()
-
-    def _iterate_result_chunk(
-        self,
-        result_chunk: ChunkerIndex,
-        dataset_type_dict: dict[int, Type[Dataset]],
-        parsing_func_dict: dict[int, Callable[[str], str]],
-        file_path_dict: dict[int, str],
-        tunnel_via_server: bool = False,
-    ) -> Generator[str, None, None]:
-        """
-        Given a result chunk, iterates over the samples.
-
-        Args:
-            result_chunk (ChunkerIndex): The result chunk object.
-            dataset_type_dict (dict): A mapping from dataset ID to dataset type.
-            parsing_func_dict (dict): A mapping from dataset ID to parsing function.
-            file_path_dict (dict): A mapping from file ID to file path.
-            tunnel_via_server (bool): If true, samples are streamed via the Mixtera server.
-
-        Returns:
-            A Generator of samples.
-        """
-        # TODO(#35): Currently, the result chunks are IndexType,
-        # but they should offer their own class with an iterator over samples.
-        # This should sample correctly from the chunk. Then, there is no need for this function anymore.
-
-        from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
-
-        server_connection = None
-        if tunnel_via_server:
-            if isinstance(self, ServerStub):
-                server_connection = self._server_connection
-            else:
-                raise RuntimeError(
-                    "Currently, tunneling samples via the server is only supported when using a ServerStub."
-                )
-
-        for _0, dataset_entries in result_chunk.items():
-            for did, file_entries in dataset_entries.items():
-                filename_dict = {file_path_dict[file_id]: file_ranges for file_id, file_ranges in file_entries.items()}
-                yield from dataset_type_dict[did].read_ranges_from_files(
-                    filename_dict, parsing_func_dict[did], server_connection
-                )
 
     @abstractmethod
     def is_remote(self) -> bool:

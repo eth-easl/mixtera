@@ -4,12 +4,16 @@ from copy import deepcopy
 from pathlib import Path
 
 import torch
-from integrationtests.utils import TestMetadataParser, setup_test_dataset
+from integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Query
 from mixtera.torch import MixteraTorchDataset
+
+TEST_PYTORCH_INSTANCE_COUNT = 1000
+TEST_PYTORCH_FILE_COUNT = 5
+TEST_PYTORCH_FRACTION_MULTIPLIER = 2
 
 
 def sample_parsing_func(sample):
@@ -242,6 +246,75 @@ def test_filter_both_with_order_validation(
             assert batches == reference_batches, f"Mismatch in batch order for group {group_id}, node {node_id}"
 
 
+def test_reader_reproducibility(
+    client: MixteraClient,
+    query_exec_args: QueryExecutionArgs,
+    batch_size: int,
+    tunnel: bool,
+):
+    if (
+        not query_exec_args.dp_groups == 1
+        or not query_exec_args.nodes_per_group == 1
+        or query_exec_args.num_workers > 3
+        or (batch_size != 1 and batch_size != 500)
+        or query_exec_args.mixture.chunk_size > 500
+    ):
+        return
+
+    reader_degrees_of_parallelisms = [1, 4]
+    per_window_mixtures = [False, True]
+    window_sizes = [64, 256]
+
+    for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
+        for per_window_mixture in per_window_mixtures:
+            for window_size in window_sizes:
+                result_list = []
+
+                for i in range(REPRODUCIBILITY_ITERATIONS):
+                    group_batches = {}
+                    for dp_group_id in range(query_exec_args.dp_groups):
+                        node_batches = {}
+                        for node_id in range(query_exec_args.nodes_per_group):
+                            job_id = (
+                                f"7_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+                                + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{reader_degree_of_parallelism}"
+                                + f"_{per_window_mixture}_{window_size}_{i}_{dp_group_id}_{node_id}"
+                            )
+                            query = (
+                                Query.for_job(job_id)
+                                .select(("language", "==", "HTML"))
+                                .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
+                            )
+                            torch_ds = MixteraTorchDataset(
+                                client,
+                                query,
+                                query_exec_args,
+                                ResultStreamingArgs(
+                                    job_id=job_id, dp_group_id=dp_group_id, node_id=node_id, tunnel_via_server=tunnel
+                                ),
+                            )
+                            dl = torch.utils.data.DataLoader(
+                                torch_ds, batch_size=batch_size, num_workers=query_exec_args.num_workers
+                            )
+                            batches = list(dl)
+                            node_batches[node_id] = batches
+                        group_batches[dp_group_id] = node_batches
+                    result_list.append(group_batches)
+
+                reference_batches = result_list[0][0][0]  # Use the first node's batches as the reference
+
+                for i in range(1, REPRODUCIBILITY_ITERATIONS):
+                    for dp_group_id, node_batches in result_list[i].items():
+                        if dp_group_id == 0:
+                            continue  #  Skip the reference dp group itself
+                        for node_id, batches in node_batches.items():
+                            if node_id == 0:
+                                continue  # Skip the reference node itself
+                            assert (
+                                batches == reference_batches
+                            ), f"Mismatch in batch order for group {dp_group_id}, node {node_id}"
+
+
 def test_torchds(
     client: MixteraClient,
     query_exec_args: QueryExecutionArgs,
@@ -255,16 +328,22 @@ def test_torchds(
     test_filter_unknown_license(client, query_exec_args, batch_size, tunnel)
     test_filter_license_and_html(client, query_exec_args, batch_size, tunnel)
     test_filter_both_with_order_validation(client, query_exec_args, batch_size, tunnel)
+    test_reader_reproducibility(client, query_exec_args, batch_size, tunnel)
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
-    local_file = setup_test_dataset(local_dir)
+    setup_test_dataset(
+        local_dir,
+        total_instance_count=TEST_PYTORCH_INSTANCE_COUNT,
+        file_count=TEST_PYTORCH_FILE_COUNT,
+        fraction_multiplier=TEST_PYTORCH_FRACTION_MULTIPLIER,
+    )
 
     # local tests
-    local_client = MixteraClient(local_dir)
+    local_client = MixteraClient.from_directory(local_dir)
     local_client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
     local_client.register_dataset(
-        "ldc_torch_integrationtest_dataset", local_file, JSONLDataset, sample_parsing_func, "TEST_PARSER"
+        "ldc_torch_integrationtest_dataset", local_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
     for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:
@@ -282,19 +361,24 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
                     raise e
 
     # server tests (smaller matrix)
-    server_file = setup_test_dataset(server_dir)
+    setup_test_dataset(
+        server_dir,
+        total_instance_count=TEST_PYTORCH_INSTANCE_COUNT,
+        file_count=TEST_PYTORCH_FILE_COUNT,
+        fraction_multiplier=TEST_PYTORCH_FRACTION_MULTIPLIER,
+    )
     server_client = MixteraClient("127.0.0.1", 6666)
 
     assert server_client.register_metadata_parser("TEST_PARSER_TORCH", TestMetadataParser)
     assert server_client.register_dataset(
-        "ldc_torch_integrationtest_dataset", server_file, JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
+        "ldc_torch_integrationtest_dataset", server_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER_TORCH"
     )
 
     assert server_client.check_dataset_exists("ldc_torch_integrationtest_dataset"), "Dataset does not exist!"
 
     for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for dp_groups, num_nodes_per_group in [(1, 1), (1, 2), (2, 1), (2, 2), (4, 4)]:
-            for num_workers in [0, 2, 8]:
+            for num_workers in [0, 3, 8]:
                 for batch_size in [1, 500]:
                     for tunnel in [False, True]:
                         if tunnel and (batch_size > 1 or num_workers > 0 or mixture.chunk_size > 1):

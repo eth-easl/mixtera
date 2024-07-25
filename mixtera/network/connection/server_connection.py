@@ -23,8 +23,7 @@ from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import QueryExecutionArgs
-    from mixtera.core.datacollection.index import ChunkerIndex
-    from mixtera.core.query import Query
+    from mixtera.core.query import Query, ResultChunk
 
 
 class ServerConnection:
@@ -193,7 +192,7 @@ class ServerConnection:
     # TODO(#35): Use some ResultChunk type
     async def _get_next_result(
         self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
-    ) -> Optional["ChunkerIndex"]:
+    ) -> Optional["ResultChunk"]:
         """
         Asynchronously retrieves the next result chunk of a query from the server.
 
@@ -201,7 +200,7 @@ class ServerConnection:
             job_id (str): The identifier of the job for which the next result chunk is requested.
 
         Returns:
-            An ChunkerIndex object representing the next result chunk,
+            An ResultChunk object representing the next result chunk,
             or None if there are no more results or the connection fails.
         """
         reader, writer = await self._connect_to_server()
@@ -229,7 +228,7 @@ class ServerConnection:
 
     def _stream_result_chunks(
         self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
-    ) -> Generator["ChunkerIndex", None, None]:
+    ) -> Generator["ResultChunk", None, None]:
         """
         Streams the result chunks of a query job from the server.
 
@@ -237,7 +236,7 @@ class ServerConnection:
             job_id (str): The identifier of the job whose result chunks are to be streamed.
 
         Yields:
-            ChunkerIndex objects, each representing a chunk of the query results.
+            ResultChunk objects, each representing a chunk of the query results.
         """
         # TODO(#62): We might want to prefetch here
         while (
