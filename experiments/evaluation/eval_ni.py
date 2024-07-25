@@ -16,13 +16,13 @@ def build_prompts(args, tokenizer, limit=0):
         tokenizer.chat_template = gemma_template
     else:
         print(f"Using chat_template from tokenizer")
-    # just take the first row, as it is the user-prompt, and we assume there's only one prompt-response pair
     if limit>0:
         data = data[0:limit]
+    # just take the first row, as it is the user-prompt, and we assume there's only one prompt-response pair
     raw_prompts = [x['conversations'][0] for x in data]
     ground_truth = [x['conversations'][1]['content'] for x in data]
     prompts = [tokenizer.apply_chat_template([x], tokenize=False, add_generation_prompt=True) for x in tqdm(raw_prompts)]
-    return raw_prompts, prompts, ground_truth
+    return data, prompts, ground_truth
 
 def build_llm(args):
     sampling_params = SamplingParams(temperature=args.temperature, top_p=args.top_p, max_tokens=args.max_tokens)
@@ -41,9 +41,10 @@ def evaluate(args):
     results = []
     for i in range(len(outputs)):
         result = {
-            'prompt': raw_prompts[i],
+            'prompt': raw_prompts[i]['conversations'][0],
             'output': outputs[i].outputs[0].text,
-            'ground_truth': ground_truth[i]
+            'ground_truth': ground_truth[i],
+            'meta': raw_prompts[i]['meta']
         }
         results.append(result)
     # make dirs if not exists
@@ -51,7 +52,6 @@ def evaluate(args):
     with open(args.output_jsonl, 'w') as f:
         for result in results:
             f.write(json.dumps(result) + "\n")
-    
 
     
 if __name__=="__main__":
@@ -60,7 +60,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf-model", type=str, default="google/gemma-2b-it")
     parser.add_argument("--revision", type=str, default="main")
-    parser.add_argument("--test-jsonl", type=str, default=".cache/datasets/prepared/ni_test.jsonl")
+    parser.add_argument("--test-jsonl", type=str, default="tmp/datasets/prepared/ni_test.jsonl")
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--top-p", type=float, default=0.95)
     parser.add_argument("--max-tokens", type=int, default=32)
