@@ -8,9 +8,9 @@ from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, InvertedIndex
 from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
+from mixtera.core.query.mixture import Mixture
+from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
-
-from .mixture import Mixture
 
 
 def process_task(task):
@@ -59,7 +59,7 @@ class QueryResult:
         self._index = mp.Value("i", 0)
 
         #  The generator will be created lazily when calling __next__
-        self._generator: Generator[ChunkerIndex, tuple[Mixture, int], None] | None = None
+        self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
@@ -267,7 +267,7 @@ class QueryResult:
         with self._lock:
             self._mixture = mixture
 
-    def _chunk_generator(self) -> Generator[ChunkerIndex, tuple[Mixture, int], None]:
+    def _chunk_generator(self) -> Generator[ResultChunk, tuple[Mixture, int], None]:
         """
         Implements the chunking logic. This method yields chunks relative to  a mixture object.
 
@@ -307,7 +307,9 @@ class QueryResult:
                 except StopIteration:
                     return
                 if current_chunk_index == target_chunk_index:
-                    base_mixture, target_chunk_index = yield chunk
+                    base_mixture, target_chunk_index = yield ResultChunk(
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
+                    )
             else:
                 chunk = None
                 while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
@@ -324,7 +326,10 @@ class QueryResult:
 
                 # Chunk has been successfully generated
                 if current_chunk_index == target_chunk_index:
-                    base_mixture, target_chunk_index = yield {chunker_index_keys[chunker_index_keys_idx]: chunk}
+                    chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
+                    base_mixture, target_chunk_index = yield ResultChunk(
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
+                    )
             current_chunk_index += 1
 
     @property
@@ -346,7 +351,7 @@ class QueryResult:
     def __iter__(self) -> "QueryResult":
         return self
 
-    def __next__(self) -> ChunkerIndex:
+    def __next__(self) -> ResultChunk:
         """Iterate over the results of the query."""
         with self._index.get_lock():
             chunk_target_index = self._index.get_obj().value

@@ -1,31 +1,45 @@
+from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
 
 import numpy as np
 from mixtera.core.datacollection.index.parser import MetadataParser
 
-
-def write_jsonl(path: Path) -> None:
-    data = ""
-    for i in range(1000):
-        data = (
-            data
-            + '{ "text": "'
-            + str(i)
-            + '", "meta": { "language": "'
-            + ("JavaScript" if i % 2 == 0 else "HTML")
-            + '", "license": "CC"}}\n'
-        )
-
-    with open(path, "w") as text_file:
-        text_file.write(data)
+REPRODUCIBILITY_ITERATIONS = 4
 
 
-def setup_test_dataset(dir: Path) -> str:
+def write_jsonl(path: Path, file_count: int, instance_count_per_file: int, fraction_multiplier: int) -> None:
+    for file_number in range(file_count):
+        data = ""
+        for i in range(instance_count_per_file):
+            data = (
+                data
+                + '{ "text": "'
+                + str(i)
+                + '", "meta": { "language": "'
+                + ("JavaScript" if i % fraction_multiplier == 0 else "HTML")
+                + '", "license": "CC"}}\n'
+            )
+
+        with open(path / f"data_{file_number}.jsonl", "w") as text_file:
+            text_file.write(data)
+
+
+def get_expected_js_and_html_samples(
+    total_instance_count: int, fraction_multiplier: int
+) -> tuple[List[int], List[int]]:
+    return (
+        total_instance_count // fraction_multiplier,
+        total_instance_count - total_instance_count // fraction_multiplier,
+    )
+
+
+def setup_test_dataset(
+    dir: Path, total_instance_count: int = 1000, file_count: int = 10, fraction_multiplier: int = 2
+) -> None:
     print(f"Prepping directory {dir}.")
-    write_jsonl(dir / "testd.jsonl")
+    write_jsonl(dir, file_count, total_instance_count // file_count, fraction_multiplier)
     print("Directory prepped.")
-    return dir / "testd.jsonl"
 
 
 def setup_func(some_class: Any):

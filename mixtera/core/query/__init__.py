@@ -8,6 +8,7 @@ from .operators._base import Operator
 from .query import Query
 from .query_plan import QueryPlan
 from .query_result import QueryResult
+from .result_chunk import ResultChunk
 
 Query.register(Select)
 Query.register(Union)
@@ -25,4 +26,5 @@ __all__ = [
     "Mixture",
     "StaticMixture",
     "ArbitraryMixture",
+    "ResultChunk",
 ]

@@ -1,4 +1,7 @@
 import asyncio
+import hashlib
+import os
+import random
 import time
 from collections import defaultdict
 from copy import deepcopy
@@ -170,3 +173,39 @@ def generate_hashable_search_key(
     if sort_lists:
         zipped.sort(key=lambda x: x[0])
     return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
+
+
+def generate_hash_string_from_list(string_list: list[str]) -> int:
+    """
+    Generate a hash string from a list of strings.
+
+    Args:
+        string_list: a list of strings to be hashed
+
+    Returns:
+        A hash string
+    """
+    hash_result = hashlib.blake2b()
+
+    for string in string_list:
+        hash_result.update(string.encode())
+
+    return int(hash_result.hexdigest(), 16)
+
+
+def seed_everything(seed: int) -> None:
+    """
+    Seed all random number generators for reproducibility.
+
+    Args:
+        seed: The seed to be used.
+    """
+    assert isinstance(seed, int), "Seed must be an integer"
+
+    # Cap the seed to be within 0 and 2**32 - 1
+    #  Since numpy only accepts 32-bit seeds
+    seed = seed % 2**32
+
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)

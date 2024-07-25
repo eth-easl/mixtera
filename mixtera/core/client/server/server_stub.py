@@ -6,10 +6,9 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index.index import ChunkerIndex
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
-from mixtera.core.query import Query
+from mixtera.core.query import Query, ResultChunk
 from mixtera.network.connection import ServerConnection
 
 
@@ -28,7 +27,7 @@ class ServerStub(MixteraClient):
                 " or keyword arguments 'host' and 'port'."
             )
 
-        self._server_connection = ServerConnection(host, port)
+        self.server_connection = ServerConnection(host, port)
         self._host: str = host
         self._port: int = port
 
@@ -43,7 +42,7 @@ class ServerStub(MixteraClient):
         if isinstance(loc, Path):
             loc = str(loc)
 
-        return self._server_connection.register_dataset(
+        return self.server_connection.register_dataset(
             identifier, loc, dtype.type, parsing_func, metadata_parser_identifier
         )
 
@@ -52,19 +51,19 @@ class ServerStub(MixteraClient):
         identifier: str,
         parser: Type[MetadataParser],
     ) -> bool:
-        return self._server_connection.register_metadata_parser(identifier, parser)
+        return self.server_connection.register_metadata_parser(identifier, parser)
 
     def check_dataset_exists(self, identifier: str) -> bool:
-        return self._server_connection.check_dataset_exists(identifier)
+        return self.server_connection.check_dataset_exists(identifier)
 
     def list_datasets(self) -> list[str]:
-        return self._server_connection.list_datasets()
+        return self.server_connection.list_datasets()
 
     def remove_dataset(self, identifier: str) -> bool:
-        return self._server_connection.remove_dataset(identifier)
+        return self.server_connection.remove_dataset(identifier)
 
     def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
-        if not self._server_connection.execute_query(query, args):
+        if not self.server_connection.execute_query(query, args):
             logger.error("Could not register query at server!")
             return False
 
@@ -74,13 +73,13 @@ class ServerStub(MixteraClient):
 
     def _stream_result_chunks(
         self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
-    ) -> Generator[ChunkerIndex, None, None]:
-        yield from self._server_connection._stream_result_chunks(job_id, dp_group_id, node_id, worker_id)
+    ) -> Generator[ResultChunk, None, None]:
+        yield from self.server_connection._stream_result_chunks(job_id, dp_group_id, node_id, worker_id)
 
     def _get_result_metadata(
         self, job_id: str
     ) -> tuple[dict[int, Type[Dataset]], dict[int, Callable[[str], str]], dict[int, str]]:
-        return self._server_connection.get_result_metadata(job_id)
+        return self.server_connection.get_result_metadata(job_id)
 
     def is_remote(self) -> bool:
         return True
@@ -99,7 +98,7 @@ class ServerStub(MixteraClient):
         degree_of_parallelism: int = 1,
         data_only_on_primary: bool = True,
     ) -> bool:
-        return self._server_connection.add_property(
+        return self.server_connection.add_property(
             property_name,
             setup_func,
             calc_func,
