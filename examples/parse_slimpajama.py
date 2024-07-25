@@ -4,7 +4,7 @@ import time
 from typing import Any, Optional
 
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.mixtera_client import QueryExecutionArgs
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.query import ArbitraryMixture, Query
@@ -15,11 +15,10 @@ client = MixteraClient.from_directory(directory)
 
 def run_query(client: MixteraClient, chunk_size: int):
     job_id = str(round(time.time() * 1000))
-    query = Query.for_job(job_id).select(("setname", "==", "RedPajamaCommonCrawl")) # In our example, we want to query all samples tagged JavaScript
+    query = Query.for_job(job_id).select(("setname", "==", "RedPajamaCommonCrawl"))
     mixture = ArbitraryMixture(chunk_size=chunk_size)
     client.execute_query(query, QueryExecutionArgs(mixture))
-    result_samples = list(client.stream_results(job_id))
-    return result_samples
+    return client.stream_results(ResultStreamingArgs(job_id=job_id))
 
 class TestMetadataParser(MetadataParser):
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
@@ -33,4 +32,9 @@ def parsing_func(sample):
 
 # client.register_dataset(f"slimpajama",directory, JSONLDataset, parsing_func,"TEST_PARSER")
 
-run_query(client, 1000)
+result = run_query(client, 1000)
+
+for res in result:
+    print('streaming result...')
+    print(res)
+    exit(0)

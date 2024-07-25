@@ -1,7 +1,8 @@
 import multiprocessing as mp
+import os
 from collections import defaultdict
 from typing import Any, Callable, Generator, Type
-import os
+
 import dill
 import portion
 from mixtera.core.datacollection import MixteraDataCollection
@@ -13,7 +14,7 @@ from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_ke
 from .mixture import Mixture
 
 
-def process_task(task):
+def process_task(task: Any) -> tuple[int, int, dict]:
     interval_dict = task["interval_dict"]
     for row_range in task["ranges"]:
         range_interval = portion.closedopen(row_range[0], row_range[1])
