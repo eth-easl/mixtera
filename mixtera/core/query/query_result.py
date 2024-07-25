@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from collections import defaultdict
 from typing import Any, Callable, Generator, Type
-
+import os
 import dill
 import portion
 from mixtera.core.datacollection import MixteraDataCollection
@@ -11,6 +11,19 @@ from mixtera.core.datacollection.index.index_collection import create_chunker_in
 from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
 
 from .mixture import Mixture
+
+
+def process_task(task):
+    interval_dict = task["interval_dict"]
+    for row_range in task["ranges"]:
+        range_interval = portion.closedopen(row_range[0], row_range[1])
+        intersections = interval_dict[range_interval]
+        interval_dict[range_interval] = {task["property_name"]: [task["property_value"]]}
+        for intersection_range, intersection_properties in intersections.items():
+            task["interval_dict"][intersection_range] = merge_property_dicts(
+                interval_dict[intersection_range].values()[0], intersection_properties
+            )
+    return task["dataset_id"], task["file_id"], task["interval_dict"]
 
 
 class QueryResult:
@@ -101,17 +114,22 @@ class QueryResult:
         for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
+                    tasks = []
                     for file_id, ranges in files.items():
-                        interval_dict = inverted_dictionary[dataset_id][file_id]
-                        for row_range in ranges:
-                            range_interval = portion.closedopen(row_range[0], row_range[1])
-                            intersections = interval_dict[range_interval]
-                            interval_dict[range_interval] = {property_name: [property_value]}
-                            for intersection_range, intersection_properties in intersections.items():
-                                interval_dict[intersection_range] = merge_property_dicts(
-                                    interval_dict[intersection_range].values()[0], intersection_properties
-                                )
-
+                        tasks.append(
+                            {
+                                "property_name": property_name,
+                                "property_value": property_value,
+                                "dataset_id": dataset_id,
+                                "file_id": file_id,
+                                "ranges": ranges,
+                                "interval_dict": inverted_dictionary[dataset_id][file_id],
+                            }
+                        )
+                    with mp.Pool(os.cpu_count()) as pool:
+                        results = pool.map(process_task, tasks)
+                    for dataset_id, file_id, interval_dict in results:
+                        inverted_dictionary[dataset_id][file_id] = interval_dict
         return inverted_dictionary
 
     @staticmethod
