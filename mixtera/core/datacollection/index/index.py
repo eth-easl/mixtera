@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Union
+from typing import TYPE_CHECKING, Callable, Dict, Union
 
 import portion
+
+if TYPE_CHECKING:
+    from mixtera.core.query.mixture import MixtureKey
 
 # Compressed hierarchy (i.e. uses ranges)
 IndexRowRangeType = list[tuple[int, int]]
@@ -31,9 +34,10 @@ InvertedIndex = dict[
     int, dict[str | int, list[tuple[Union[tuple[int, int], portion.Interval], dict[str, Union[int, float, str]]]]]
 ]
 
-# Chunker index: hashable_prop_key -> dataset_id -> file_id -> list of ranges
+# Chunker index: mixture_key -> dataset_id -> file_id -> list of ranges
 ChunkerIndexDatasetEntries = dict[int, dict[int | str, IndexRowRangeType]]
-ChunkerIndex = dict[str, ChunkerIndexDatasetEntries]
+#  We need to use the typing.Dict type here to avoid circular imports
+ChunkerIndex = Dict["MixtureKey", ChunkerIndexDatasetEntries]
 
 
 class Index(ABC):

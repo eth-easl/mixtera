@@ -7,9 +7,9 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType
-from mixtera.core.query.mixture import StaticMixture
+from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
-from mixtera.utils import generate_hash_string_from_list, seed_everything
+from mixtera.utils import hash_list, seed_everything
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
@@ -96,7 +96,7 @@ class ResultChunk:
             logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
-    def _infer_mixture(self) -> dict[str, int]:
+    def _infer_mixture(self) -> dict[MixtureKey, int]:
         """
         Infer the mixture from the result index. This is done by calculating the mass of each partition
         and normalizing it to the total mass.
@@ -105,7 +105,7 @@ class ResultChunk:
             The inferred mixture
         """
         total_count = 0
-        partition_masses: dict[str, int | float] = {}
+        partition_masses: dict[MixtureKey, int | float] = {}
 
         def calculate_partition_mass(partition: dict[int, dict[int, list[tuple[int, int]]]]) -> int:
             mass = sum(
@@ -237,7 +237,7 @@ class ResultChunk:
         element_counts = self._get_element_counts()
 
         #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
-        seed_everything(generate_hash_string_from_list([x[0] for x in element_counts]))
+        seed_everything(hash_list([x[0] for x in element_counts]))
         random.shuffle(element_counts)
 
         deleted_iterators: set[str] = set()
@@ -278,7 +278,7 @@ class ResultChunk:
         """
         #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
         property_names = list(active_iterators.keys())
-        seed_everything(generate_hash_string_from_list(property_names))
+        seed_everything(hash_list(property_names))
         random.shuffle(property_names)
 
         deleted_iterators: set[str] = set()
@@ -422,7 +422,7 @@ class ResultChunk:
                     workloads[property_combination].append((dataset_id, file_id, ranges))
 
             #  Shuffle the workloads to ensure that the order of the files is (reproducibly) random
-            seed_everything(generate_hash_string_from_list([property_combination]))
+            seed_everything(hash_list([property_combination]))
             random.shuffle(workloads[property_combination])
 
         return workloads

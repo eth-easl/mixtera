@@ -1,31 +1,29 @@
 from abc import ABC, abstractmethod
 
-# class MixtureKey(ABC):
-#
-#     def __eq__(self, other):
-#         raise NotImplementedError("Method must be implemented in subclass!")
-#
-#     def __hash__(self):
-#         raise NotImplementedError("Method must be implemented in subclass!")
+from mixtera.utils import hash_dict
 
-# class StringMixtureKey(MixtureKey):
-#     """
-#     The StringMixtureKey represents a chunk index key which receives one and only one value per property. Equality
-#     between two keys implies that they have the same exact keys and value for each key. This type of key also accepts
-#     a single property with the name "ANY"
-#     """
-#
-#     def __init__(self, property_names: list[str], property_values: list[list[str | int | float]]) -> None:
-#         """
-#         Creates a StringMixtureKey object.
-#
-#         Args:
-#             property_names: a list with the property names
-#             property_values: a list of lists with the property values
-#
-#         Returns:
-#             A string that can be used in a ChunkerIndex to identify ranges fulfilling a certain property
-#         """
+
+class MixtureKey:
+
+    def __init__(self, properties: dict[str, list[str | int | float]]) -> None:
+        """
+        Initialize a MixtureKey object.
+
+        Args:
+            properties: a dictionary of properties for the mixture key
+        """
+        self.properties = properties
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, MixtureKey):
+            return False
+        return self.properties == other.properties
+
+    def __hash__(self) -> int:
+        return hash_dict(self.properties)
+
+    def __str__(self) -> str:
+        return ";".join([f'{k}:{":".join([str(x) for x in v])}' for k, v in self.properties.items()])
 
 
 class Mixture(ABC):
@@ -45,7 +43,7 @@ class Mixture(ABC):
         return f'{{"mixture": "base_mixture", "chunk_size": {self.chunk_size}}}'
 
     @abstractmethod
-    def mixture_in_rows(self) -> dict[str, int]:
+    def mixture_in_rows(self) -> dict[MixtureKey, int]:
         """
         Returns the mixture dictionary:
         {
@@ -68,7 +66,7 @@ class Mixture(ABC):
 class ArbitraryMixture(Mixture):
     """This is a placeholder mixture that allows for chunks to be created without any particular mixture."""
 
-    def mixture_in_rows(self) -> dict[str, int]:
+    def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return {}
 
     def __str__(self) -> str:
@@ -79,7 +77,7 @@ class ArbitraryMixture(Mixture):
 class StaticMixture(Mixture):
     """Mixture class that simply stores a predefined mixture."""
 
-    def __init__(self, chunk_size: int, mixture: dict[str, float]) -> None:
+    def __init__(self, chunk_size: int, mixture: dict[MixtureKey, float]) -> None:
         """
         Initializer for StaticMixture.
 
@@ -104,5 +102,5 @@ class StaticMixture(Mixture):
         """String representation of this mixture object."""
         return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
 
-    def mixture_in_rows(self) -> dict[str, int]:
+    def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._mixture

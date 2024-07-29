@@ -8,9 +8,9 @@ from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, InvertedIndex
 from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
-from mixtera.core.query.mixture import Mixture
+from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
+from mixtera.utils.utils import defaultdict_to_dict, merge_property_dicts
 
 
 class QueryResult:
@@ -149,13 +149,10 @@ class QueryResult:
                 for intervals, interval_properties in file_entries.items():
                     # Intervals can be a simplified interval (e.g. '[-7,-2) | [11,15)') so we need a for loop
                     for interval in intervals:
-                        # Create a key that identifies the properties and values covered in this interval
-                        property_names = list(interval_properties.keys())
-                        property_values = [interval_properties[property_name] for property_name in property_names]
-                        hashable_key = generate_hashable_search_key(property_names, property_values)
+                        mixture_key = MixtureKey(interval_properties)
 
                         # Add the interval to the chunk index based on the generated key
-                        chunker_index[hashable_key][document_id][file_id].append([interval.lower, interval.upper])
+                        chunker_index[mixture_key][document_id][file_id].append([interval.lower, interval.upper])
 
         return chunker_index
 
@@ -260,8 +257,6 @@ class QueryResult:
         """
         # Variables for an arbitrary mixture
         current_chunk_index = 0
-        chunker_index_keys_idx = 0
-        chunker_index_keys = list(self._chunker_index.keys())
 
         # Create coroutines for component iterators and advance them to the first yield
         component_iterators = {
@@ -279,39 +274,21 @@ class QueryResult:
             # Get the mixture from the caller as it might have changed
             mixture = base_mixture.mixture_in_rows()
 
-            if mixture:
-                # Try to fetch a chunk part from each of the components. Here one of two things will happen:
-                #   1. All the chunk's components can yield --> we will be able to build a chunk, or
-                #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
-                #      and the coroutine will pass the exception upstream to __next__
-                try:
-                    chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
-                except StopIteration:
-                    return
-                if current_chunk_index == target_chunk_index:
-                    base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
-                    )
-            else:
-                chunk = None
-                while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
-                    key = chunker_index_keys[chunker_index_keys_idx]
-                    try:
-                        chunk = component_iterators[key].send(base_mixture.chunk_size)
-                    except StopIteration:
-                        # The current key is exhausted; will need to produce chunks from the next available key
-                        chunker_index_keys_idx += 1
+            mixture = mixture if mixture else {key: base_mixture.chunk_size for key in self._chunker_index.keys()}
 
-                if chunk is None:
-                    # There were no more available chunks; we mark the end of this query result with StopIteration
-                    return
+            # Try to fetch a chunk part from each of the components. Here one of two things will happen:
+            #   1. All the chunk's components can yield --> we will be able to build a chunk, or
+            #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
+            #      and the coroutine will pass the exception upstream to __next__
+            try:
+                chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
+            except StopIteration:
+                return
+            if current_chunk_index == target_chunk_index:
+                base_mixture, target_chunk_index = yield ResultChunk(
+                    chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
+                )
 
-                # Chunk has been successfully generated
-                if current_chunk_index == target_chunk_index:
-                    chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
-                    base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
-                    )
             current_chunk_index += 1
 
     @property

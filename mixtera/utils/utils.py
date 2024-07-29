@@ -154,36 +154,15 @@ def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) ->
     return new_dict
 
 
-def generate_hashable_search_key(
-    property_names: list[str], property_values: list[list[str | int | float]], sort_lists: bool = True
-) -> str:
+def hash_list(string_list: list[str]) -> int:
     """
-    Generate a string representation of a set of property names and values. By default,
-    these should be sorted and aligned.
-
-    Args:
-        property_names: a list with the property names
-        property_values: a list of lists with the property values
-        sort_lists: a boolean, indicating whether to sort the two lists (the property_values relative to property_names)
-
-    Returns:
-        A string that can be used in a ChunkerIndex to identify ranges fulfilling a certain property
-    """
-    zipped = list(zip(property_names, property_values))
-    if sort_lists:
-        zipped.sort(key=lambda x: x[0])
-    return ";".join([f"{x}:{y[0]}" for x, y in zipped])  # Take the first value
-
-
-def generate_hash_string_from_list(string_list: list[str]) -> int:
-    """
-    Generate a hash string from a list of strings.
+    Generate hash from a list of strings.
 
     Args:
         string_list: a list of strings to be hashed
 
     Returns:
-        A hash string
+        A hash
     """
     hash_result = hashlib.blake2b()
 
@@ -191,6 +170,29 @@ def generate_hash_string_from_list(string_list: list[str]) -> int:
         hash_result.update(string.encode())
 
     return int(hash_result.hexdigest(), 16)
+
+
+def hash_dict(d: dict) -> int:
+    """
+    Generate a hash from a dictionary.
+
+    Args:
+        d: a dictionary to be hashed
+
+    Returns:
+        A hash
+    """
+    #  Step 1: Convert the dictionary to a list of key-value pairs
+    items = list(d.items())
+
+    # Step 2: Sort the list of key-value pairs
+    items.sort()
+
+    #  Step 3: Convert each value list to a hash
+    items = [(k, hash_list(v)) for k, v in items]
+
+    # Step 4: Convert the list of key-value pairs to a hash
+    return hash_list([f"{k}:{v}" for k, v in items])
 
 
 def seed_everything(seed: int) -> None:
