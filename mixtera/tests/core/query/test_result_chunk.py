@@ -376,13 +376,11 @@ class TestResultChunk(unittest.TestCase):
 
         # Since the order is shuffled and reproducibly random, we need to mock the randomness to predict the output
         seed_everything_mock = MagicMock()
-        generate_hash_string_from_list_mock = MagicMock(return_value="some_hash_value")
         # Mock shuffle to sort instead, for predictability
         random_shuffle_mock = MagicMock(side_effect=lambda x: x.sort())
 
         with (
             patch("mixtera.utils.seed_everything", seed_everything_mock),
-            patch("mixtera.utils.generate_hash_string_from_list", generate_hash_string_from_list_mock),
             patch("random.shuffle", random_shuffle_mock),
         ):
 

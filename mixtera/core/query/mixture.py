@@ -17,13 +17,26 @@ class MixtureKey:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, MixtureKey):
             return False
-        return self.properties == other.properties
+
+        #  We compare the properties of the two MixtureKey objects
+        for k, v in self.properties.items():
+            #  If a property is not present in the other MixtureKey, we return False
+            if k not in other.properties:
+                return False
+            #  If the values of the two properties do not have any intersection, we return False
+            if not set(v).intersection(other.properties[k]):
+                return False
+        return True
 
     def __hash__(self) -> int:
         return hash_dict(self.properties)
 
     def __str__(self) -> str:
-        return ";".join([f'{k}:{":".join([str(x) for x in v])}' for k, v in self.properties.items()])
+        #  We sort the properties to ensure that the string representation is deterministic
+        return ";".join([f'{k}:{":".join([str(x) for x in v])}' for k, v in sorted(self.properties.items())])
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
 class Mixture(ABC):

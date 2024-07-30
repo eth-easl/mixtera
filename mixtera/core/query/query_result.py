@@ -257,6 +257,7 @@ class QueryResult:
         """
         # Variables for an arbitrary mixture
         current_chunk_index = 0
+        current_property_key_idx = 0
 
         # Create coroutines for component iterators and advance them to the first yield
         component_iterators = {
@@ -274,20 +275,37 @@ class QueryResult:
             # Get the mixture from the caller as it might have changed
             mixture = base_mixture.mixture_in_rows()
 
-            mixture = mixture if mixture else {key: base_mixture.chunk_size for key in self._chunker_index.keys()}
+            if not mixture:
+                properties_added = 0
+                any_property_added = True
+                chunk = None
+                while properties_added < base_mixture.chunk_size and any_property_added:
+                    any_property_added = False
+                    key = list(self._chunker_index.keys())[current_property_key_idx]
+                    try:
+                        entry = component_iterators[key].send(1)
+                    except StopIteration:
+                        continue
 
-            # Try to fetch a chunk part from each of the components. Here one of two things will happen:
-            #   1. All the chunk's components can yield --> we will be able to build a chunk, or
-            #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
-            #      and the coroutine will pass the exception upstream to __next__
-            try:
-                chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
-            except StopIteration:
-                return
-            if current_chunk_index == target_chunk_index:
-                base_mixture, target_chunk_index = yield ResultChunk(
-                    chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
-                )
+                    if entry:
+                        chunk.update(entry)
+                        any_property_added = True
+
+                    properties_added += 1
+                    current_property_key_idx = (current_property_key_idx + 1) % len(self._chunker_index)
+            else:
+                # Try to fetch a chunk part from each of the components. Here one of two things will happen:
+                #   1. All the chunk's components can yield --> we will be able to build a chunk, or
+                #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
+                #      and the coroutine will pass the exception upstream to __next__
+                try:
+                    chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
+                except StopIteration:
+                    return
+                if current_chunk_index == target_chunk_index:
+                    base_mixture, target_chunk_index = yield ResultChunk(
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
+                    )
 
             current_chunk_index += 1
 

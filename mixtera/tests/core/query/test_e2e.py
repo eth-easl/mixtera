@@ -7,7 +7,7 @@ from pathlib import Path
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Query
+from mixtera.core.query import ArbitraryMixture, MixtureKey, Query
 
 
 class TestQueryE2E(unittest.TestCase):
@@ -73,7 +73,7 @@ class TestQueryE2E(unittest.TestCase):
         assert self.client.execute_query(query, args)
         res = list(iter(query.results))
         for x in res:
-            self.assertEqual(x._result_index, {"language:Go": {1: {self.file1_id: [(0, 1)]}}})
+            self.assertEqual(x._result_index, {MixtureKey({"language": ["Go"]}): {1: {self.file1_id: [(0, 1)]}}})
             break
 
     def test_union(self):
@@ -90,15 +90,13 @@ class TestQueryE2E(unittest.TestCase):
         # TODO(#41): We should update the test case once we have the
         # deduplication operator and `deduplicate` parameter in Union
 
-        res = [r._result_index for r in res]
-
         self.assertCountEqual(
-            res,
-            [
-                {"language:Go": {1: {self.file1_id: [(0, 1)]}}},
-                {"language:Go": {1: {self.file1_id: [(1, 2)]}}},
-                {"language:CSS": {1: {self.file2_id: [(0, 1)]}}},
-            ],
+            res[0]._result_index,
+            {
+                MixtureKey({"language": ["Go"]}): {1: {self.file1_id: [(0, 1)]}},
+                MixtureKey({"language": ["Go", "CSS"]}): {1: {self.file1_id: [(1, 2)]}},
+                MixtureKey({"language": ["CSS"]}): {1: {self.file2_id: [(0, 1)]}},
+            },
         )
         # check metadata
         self.assertEqual(query_result.dataset_type, {1: JSONLDataset})
