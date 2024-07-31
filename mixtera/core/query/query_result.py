@@ -25,19 +25,21 @@ from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_ke
 #             )
 #     return task["dataset_id"], task["file_id"], task["interval_dict"]
 
+
 def process_task(task: Any):
-    properties = task['properties']
+    properties = task["properties"]
     for property_name, property_value, ranges, interval_dict in properties:
         for row_range in ranges:
             range_interval = portion.closedopen(row_range[0], row_range[1])
             intersections = interval_dict[range_interval]
             interval_dict[range_interval] = {property_name: [property_value]}
-            
+
             for intersection_range, intersection_properties in intersections.items():
                 interval_dict[intersection_range] = merge_property_dicts(
                     interval_dict[intersection_range].values()[0], intersection_properties
                 )
     return task["dataset_id"], task["file_id"], interval_dict
+
 
 class QueryResult:
     """QueryResult is a class that represents the results of a query.
@@ -173,7 +175,7 @@ class QueryResult:
         """
         raw_index = index.get_full_dict_index(copy=False)
         inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
-        
+
         """
         for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
             for property_value, datasets in property_values.items():
@@ -189,11 +191,10 @@ class QueryResult:
                                     interval_dict[intersection_range].values()[0], intersection_properties
                                 )
         """
-        
+
         # a parallelized version of the above
         tasks = {}
         task_pool = []
-        tasks_property_names = {}
         for property_name, property_values in raw_index.items():
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
@@ -202,8 +203,10 @@ class QueryResult:
                     for file_id, ranges in files.items():
                         if file_id not in tasks[dataset_id]:
                             tasks[dataset_id][file_id] = []
-                        tasks[dataset_id][file_id].append((property_name, property_value, ranges, inverted_dictionary[dataset_id][file_id]))
-        
+                        tasks[dataset_id][file_id].append(
+                            (property_name, property_value, ranges, inverted_dictionary[dataset_id][file_id])
+                        )
+
         for dataset_id in tasks.keys():
             for file_id in tasks[dataset_id].keys():
                 task_pool.append(

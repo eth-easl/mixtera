@@ -1,6 +1,8 @@
 import json
+import multiprocessing as mp
 import os
 import time
+from timeit import default_timer as timer
 from typing import Any, Optional
 
 from mixtera.core.client import MixteraClient
@@ -8,9 +10,6 @@ from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreami
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.query import ArbitraryMixture, Query
-from timeit import default_timer as timer
-import multiprocessing as mp
-
 
 if __name__ == "__main__":
     # mp.set_start_method('spawn')
