@@ -26,7 +26,7 @@ from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_ke
 #     return task["dataset_id"], task["file_id"], task["interval_dict"]
 
 
-def process_task(task: Any):
+def process_task(task: Any) -> tuple[int, int, dict]:
     properties = task["properties"]
     interval_dict = None
     for property_name, property_value, ranges, interval_dict in properties:
@@ -196,7 +196,7 @@ class QueryResult:
         """
 
         # a parallelized version of the above
-        tasks = {}
+        tasks: dict = {}
         task_pool = []
         for property_name, property_values in raw_index.items():
             for property_value, datasets in property_values.items():
