@@ -28,6 +28,7 @@ from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_ke
 
 def process_task(task: Any):
     properties = task["properties"]
+    interval_dict = None
     for property_name, property_value, ranges, interval_dict in properties:
         for row_range in ranges:
             range_interval = portion.closedopen(row_range[0], row_range[1])
@@ -176,7 +177,9 @@ class QueryResult:
         raw_index = index.get_full_dict_index(copy=False)
         inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
 
+        # pylint: disable=pointless-string-statement
         """
+        Serialized version of building inverted index
         for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
             for property_value, datasets in property_values.items():
                 for dataset_id, files in datasets.items():
@@ -207,13 +210,13 @@ class QueryResult:
                             (property_name, property_value, ranges, inverted_dictionary[dataset_id][file_id])
                         )
 
-        for dataset_id in tasks.keys():
-            for file_id in tasks[dataset_id].keys():
+        for dataset_id, files in tasks.items():
+            for file_id in files:
                 task_pool.append(
                     {
                         "dataset_id": dataset_id,
                         "file_id": file_id,
-                        "properties": tasks[dataset_id][file_id],
+                        "properties": files[file_id],
                     }
                 )
         with mp.Pool(os.cpu_count()) as pool:
