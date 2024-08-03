@@ -4,6 +4,7 @@ from queue import Empty
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client.server import ServerStub
+from mixtera.core.query.mixture import MixtureKey
 from mixtera.core.query.result_chunk import END_OF_STREAM_OBJECT, ResultChunk
 
 
@@ -63,11 +64,14 @@ class TestResultChunk(unittest.TestCase):
 
     def test_infer_mixture(self):
         mock_result_index = {
-            "property1": {0: {0: [(0, 10), (20, 30)]}},
-            "property2": {0: {0: [(0, 5)]}, 1: {0: [(5, 15)]}},
+            MixtureKey({"property1": ["value1"]}): {0: {0: [(0, 10), (20, 30)]}},
+            MixtureKey({"property2": ["value2"]}): {0: {0: [(0, 5)]}, 1: {0: [(5, 15)]}},
         }
 
-        expected_partition_masses = {"property1": 20, "property2": 15}
+        expected_partition_masses = {
+            MixtureKey({"property1": ["value1"]}): 20,
+            MixtureKey({"property2": ["value2"]}): 15,
+        }
 
         result_chunk = ResultChunk(
             mock_result_index,

@@ -105,6 +105,10 @@ class StaticMixture(Mixture):
                 }
         """
         super().__init__(chunk_size)
+        for key, val in mixture.items():
+            assert val >= 0, "Mixture values must be non-negative."
+            assert isinstance(key, MixtureKey), "Mixture keys must be of type MixtureKey."
+
         self._mixture = {key: int(chunk_size * val) for key, val in mixture.items()}
 
         # Ensure approximation errors do not affect final chunk size

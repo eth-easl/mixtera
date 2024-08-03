@@ -12,7 +12,7 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Query, StaticMixture
+from mixtera.core.query import ArbitraryMixture, MixtureKey, Query, StaticMixture
 
 TEST_LOCAL_INSTANCE_COUNT = 1000
 TEST_LOCAL_FILE_COUNT = 5
@@ -162,7 +162,10 @@ def test_filter_license_and_html(
 def test_reproducibility(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
-    mixture = StaticMixture(query_exec_args.mixture.chunk_size, {"language:JavaScript": 0.6, "language:HTML": 0.4})
+    mixture = StaticMixture(
+        query_exec_args.mixture.chunk_size,
+        {MixtureKey({"language": ["JavaScript"]}): 0.6, MixtureKey({"language": ["HTML"]}): 0.4},
+    )
     result_list = []
 
     for i in range(REPRODUCIBILITY_ITERATIONS):

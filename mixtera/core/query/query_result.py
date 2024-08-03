@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import random
 from collections import defaultdict
 from typing import Any, Callable, Generator, Type
 
@@ -10,7 +11,7 @@ from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetE
 from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import defaultdict_to_dict, merge_property_dicts
+from mixtera.utils.utils import defaultdict_to_dict, hash_list, merge_property_dicts, seed_everything
 
 
 class QueryResult:
@@ -158,7 +159,7 @@ class QueryResult:
 
     @staticmethod
     def _generate_per_mixture_component_chunks(
-        chunker_index: ChunkerIndex, component_key: str
+        chunker_index: ChunkerIndex, component_key: MixtureKey
     ) -> Generator[ChunkerIndexDatasetEntries, int, None]:
         """
         This method computes the partial chunks for each component of a mixture. A component here is considered one
@@ -257,7 +258,11 @@ class QueryResult:
         """
         # Variables for an arbitrary mixture
         current_chunk_index = 0
-        current_property_key_idx = 0
+        chunker_index_keys_idx = 0
+        chunker_index_keys = list(self._chunker_index.keys())
+        empty_key_idx: set[int] = set()
+        seed_everything(hash_list([str(key) for key in chunker_index_keys]))
+        random.shuffle(chunker_index_keys)
 
         # Create coroutines for component iterators and advance them to the first yield
         component_iterators = {
@@ -275,25 +280,7 @@ class QueryResult:
             # Get the mixture from the caller as it might have changed
             mixture = base_mixture.mixture_in_rows()
 
-            if not mixture:
-                properties_added = 0
-                any_property_added = True
-                chunk = None
-                while properties_added < base_mixture.chunk_size and any_property_added:
-                    any_property_added = False
-                    key = list(self._chunker_index.keys())[current_property_key_idx]
-                    try:
-                        entry = component_iterators[key].send(1)
-                    except StopIteration:
-                        continue
-
-                    if entry:
-                        chunk.update(entry)
-                        any_property_added = True
-
-                    properties_added += 1
-                    current_property_key_idx = (current_property_key_idx + 1) % len(self._chunker_index)
-            else:
+            if mixture:
                 # Try to fetch a chunk part from each of the components. Here one of two things will happen:
                 #   1. All the chunk's components can yield --> we will be able to build a chunk, or
                 #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
@@ -306,7 +293,31 @@ class QueryResult:
                     base_mixture, target_chunk_index = yield ResultChunk(
                         chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
                     )
+            else:
+                chunk = None
+                while len(empty_key_idx) < len(chunker_index_keys) and chunk is None:
+                    chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
+                    if chunker_index_keys_idx in empty_key_idx:
+                        chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
+                        continue
 
+                    key = chunker_index_keys[chunker_index_keys_idx]
+                    try:
+                        chunk = component_iterators[key].send(base_mixture.chunk_size)
+                    except StopIteration:
+                        # The current key is exhausted; will need to produce chunks from the next available key
+                        empty_key_idx.add(chunker_index_keys_idx)
+
+                if chunk is None:
+                    # There were no more available chunks; we mark the end of this query result with StopIteration
+                    return
+
+                # Chunk has been successfully generated
+                if current_chunk_index == target_chunk_index:
+                    chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
+                    base_mixture, target_chunk_index = yield ResultChunk(
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
+                    )
             current_chunk_index += 1
 
     @property
