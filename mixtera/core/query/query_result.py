@@ -1,16 +1,60 @@
 import multiprocessing as mp
+import os
 from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Any, Callable, Generator, Type
 
 import dill
 import portion
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries, Index, InvertedIndex
+from mixtera.core.datacollection.index import (
+    ChunkerIndex,
+    ChunkerIndexDatasetEntries,
+    Index,
+    IndexCommonType,
+    InvertedIndex,
+)
 from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
 from mixtera.core.query.mixture import Mixture
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
+
+INVERSION_POOL_SIZE = os.cpu_count()  # TODO(create issue): make this configurable.
+
+
+@dataclass
+class InversionFileTask:
+    dataset_id: str
+    file_id: str
+    ranges_per_property: (
+        defaultdict[tuple[str, str], list[IndexCommonType]] | dict[tuple[str, str], list[IndexCommonType]]
+    ) = field(
+        default_factory=lambda: defaultdict(lambda: [])  # pylint: disable=unnecessary-lambda
+    )  # The lambdas are necessary to satisfy mypy and defaultdict
+
+
+@dataclass
+class InversionFileTaskResult:
+    dataset_id: str
+    file_id: str
+    interval_dict: portion.IntervalDict
+
+
+def handle_inversion_task(task: InversionFileTask) -> InversionFileTaskResult:
+    interval_dict = portion.IntervalDict()
+    for (property_name, property_value), ranges in task.ranges_per_property.items():
+        for row_range in ranges:
+            range_interval = portion.closedopen(row_range[0], row_range[1])
+            intersections = interval_dict[range_interval]
+            interval_dict[range_interval] = {property_name: [property_value]}
+
+            for intersection_range, intersection_properties in intersections.items():
+                interval_dict[intersection_range] = merge_property_dicts(
+                    interval_dict[intersection_range].values()[0], intersection_properties
+                )
+
+    return InversionFileTaskResult(dataset_id=task.dataset_id, file_id=task.file_id, interval_dict=interval_dict)
 
 
 class QueryResult:
@@ -71,6 +115,96 @@ class QueryResult:
 
     @staticmethod
     def _invert_result(index: Index) -> InvertedIndex:
+        """
+        Returns an InvertedIndex that points from files to an ordered dictionary
+        of ranges (from portion) annotated with properties:
+            {
+                "dataset_id": {
+                    "file_id": {
+                        portion.Interval: {
+                            feature_1_name: [feature_1_value_0, ...],
+                            ...
+                            feature_n_name: [feature_n_value_0, ...],
+                        },
+                        ...
+                    },
+                    ...
+                },
+                ...
+            }
+
+        Args:
+            index: an IndexType object that will be inverted.
+
+        Returns:
+            An InvertedIndex
+        """
+        if INVERSION_POOL_SIZE == 1:
+            return QueryResult._invert_result_st(index)
+
+        return QueryResult._invert_result_mt(index)
+
+    @staticmethod
+    def _invert_result_mt(index: Index) -> InvertedIndex:
+        """
+        Returns an InvertedIndex that points from files to an ordered dictionary
+        of ranges (from portion) annotated with properties:
+            {
+                "dataset_id": {
+                    "file_id": {
+                        portion.Interval: {
+                            feature_1_name: [feature_1_value_0, ...],
+                            ...
+                            feature_n_name: [feature_n_value_0, ...],
+                        },
+                        ...
+                    },
+                    ...
+                },
+                ...
+            }
+
+        Args:
+            index: an IndexType object that will be inverted.
+
+        Returns:
+            An InvertedIndex
+        """
+        raw_index = index.get_full_dict_index(copy=False)
+        inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
+
+        # Build tasks
+        tasks: defaultdict[str, dict[str, InversionFileTask]] = defaultdict(
+            lambda: {}  # pylint: disable=unnecessary-lambda
+        )
+        for property_name, property_values in raw_index.items():
+            for property_value, datasets in property_values.items():
+                for dataset_id, files in datasets.items():
+                    for file_id, ranges in files.items():
+                        if file_id not in tasks[dataset_id]:
+                            tasks[dataset_id][file_id] = InversionFileTask(dataset_id=dataset_id, file_id=file_id)
+                        tasks[dataset_id][file_id].ranges_per_property[(property_name, property_value)].extend(ranges)
+
+        # Flattening the tasks dictionary into a list of task objects and converting defaultdict to dict
+        # We ignore the type here since mypy complains that setattr does not return, which we fix using "or task"
+        task_list = [
+            setattr(task, "ranges_per_property", defaultdict_to_dict(task.ranges_per_property)) or task  # type: ignore
+            for dataset_tasks in tasks.values()
+            for task in dataset_tasks.values()
+        ]
+
+        # Execute tasks
+        with mp.Pool(INVERSION_POOL_SIZE) as pool:
+            results = pool.map(handle_inversion_task, task_list)
+
+        # Collect results
+        for inversion_result in results:
+            inverted_dictionary[inversion_result.dataset_id][inversion_result.file_id] = inversion_result.interval_dict
+
+        return inverted_dictionary
+
+    @staticmethod
+    def _invert_result_st(index: Index) -> InvertedIndex:
         """
         Returns an InvertedIndex that points from files to an ordered dictionary
         of ranges (from portion) annotated with properties:
