@@ -6,6 +6,7 @@ from typing import Any, Callable, Generator, Type
 
 import dill
 import portion
+from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import (
@@ -20,7 +21,7 @@ from mixtera.core.query.mixture import Mixture
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
 
-INVERSION_POOL_SIZE = os.cpu_count()  # TODO(create issue): make this configurable.
+INVERSION_POOL_SIZE = os.cpu_count()  # TODO(#91): Make this configurable.
 
 
 @dataclass
@@ -76,8 +77,11 @@ class QueryResult:
         # Prepare structures for iterable chunking
         self._mixture = mixture
         self.results = results
+        logger.debug("Instantiating QueryResult. Inverting index.")
         self._inverted_index: InvertedIndex = self._invert_result(self.results)
+        logger.debug("Index inverted, creating chunker index.")
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(self._inverted_index)
+        logger.debug("Chunker index created, parsing metadata.")
 
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
@@ -92,6 +96,7 @@ class QueryResult:
         #  The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
+        logger.debug("QueryResult instantiated.")
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
         dataset_ids = set()
@@ -140,8 +145,10 @@ class QueryResult:
             An InvertedIndex
         """
         if INVERSION_POOL_SIZE == 1:
+            logger.debug("Using single-threaded inversion.")
             return QueryResult._invert_result_st(index)
 
+        logger.debug("Using multi-threaded inversion.")
         return QueryResult._invert_result_mt(index)
 
     @staticmethod
@@ -192,6 +199,8 @@ class QueryResult:
             for dataset_tasks in tasks.values()
             for task in dataset_tasks.values()
         ]
+
+        logger.debug(f"Prepared {len(task_list)} parsing tasks. Execution with pool of size {INVERSION_POOL_SIZE}.")
 
         # Execute tasks
         with mp.Pool(INVERSION_POOL_SIZE) as pool:
