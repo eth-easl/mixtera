@@ -21,7 +21,8 @@ from mixtera.core.query.mixture import Mixture
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
 
-INVERSION_POOL_SIZE = os.cpu_count() // 2  # TODO(#91): Make this configurable.
+_NUM_CPU = os.cpu_count() or 1
+INVERSION_POOL_SIZE = max(_NUM_CPU // 2, 1)  # TODO(#91): Make this configurable.
 
 
 @dataclass
