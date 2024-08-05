@@ -147,7 +147,9 @@ class ServerConnection:
         # Announce query
         await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
 
-        success = bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+        # TODO(#92): Execution at server can take some time. THerefore, we have a long timeout here.
+        # However, it would be best to switch to a polling based model.
+        success = bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 15))
         logger.debug(f"Got success = {success} from server.")
         return success
 
