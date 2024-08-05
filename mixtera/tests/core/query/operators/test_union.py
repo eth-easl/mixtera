@@ -23,7 +23,6 @@ class TestUnion(unittest.TestCase):
         query_b = Query.for_job("job_id").select(("field1", "==", "value2"))
         query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         query_b.root.results.append_entry("field1", "value2", "did", "fid", (0, 2))
-        query_b.root.results.append_entry("field1", "value1", "did", "fid", (0, 2))
         gt_result = {"field1": {"value1": {"did": {"fid": (0, 2)}}, "value2": {"did": {"fid": (0, 2)}}}}
         self.union.children.append(query_b.root)
         self.union.execute(self.client)
