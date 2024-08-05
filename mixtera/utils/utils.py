@@ -215,6 +215,8 @@ def ranges_to_intervals(list_of_ranges: List[Tuple[int, int]]) -> List[P.Interva
 def intervals_to_ranges(intervals: List[P.Interval]) -> List[Tuple[int, int]]:
     """Convert a list of intervals to a list of ranges."""
     return [(int(interval.lower), int(interval.upper)) for interval in intervals]
+
+
 def generate_hash_string_from_list(string_list: list[str]) -> int:
     """
     Generate a hash string from a list of strings.

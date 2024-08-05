@@ -5,9 +5,9 @@ This submodule contains general utility functions
 from .utils import (  # noqa: F401
     defaultdict_to_dict,
     flatten,
+    generate_hash_string_from_list,
     intersect_dicts,
     intervals_to_ranges,
-    generate_hash_string_from_list,
     merge_dicts,
     numpy_to_native_type,
     ranges,
