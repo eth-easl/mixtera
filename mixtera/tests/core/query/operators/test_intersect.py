@@ -1,28 +1,19 @@
 import unittest
 
-from mixtera.core.query import Operator, QueryPlan
+from mixtera.core.client import MixteraClient
+from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query.operators.intersect import Intersection
-
-
-class MockOperator(Operator):
-    def __init__(self, name, results: list):
-        super().__init__()
-        self.name = name
-        self.results = results
-
-    def display(self, level):
-        print(" " * level + self.name)
-
-    def execute(self, mdc):
-        del mdc
+from mixtera.core.query.query import Query
+from mixtera.utils import defaultdict_to_dict
 
 
 class TestIntersection(unittest.TestCase):
     def setUp(self):
-        self.query_a = QueryPlan()
-        self.query_b = QueryPlan()
-        self.query_a.root = MockOperator("query_a", [1, 2, 3])
-        self.query_b.root = MockOperator("query_b", [2, 3, 4])
+        self.client = MixteraClient.from_directory(".")
+        self.query_a = Query.for_job("job_id").select(("field1", "==", "value1"))
+        self.query_a.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+
+        self.query_a.root.results.append_entry("field1", "value1", "did", "fid", (0, 2))
         self.intersection = Intersection(self.query_a)
 
     def test_init(self):
@@ -30,10 +21,41 @@ class TestIntersection(unittest.TestCase):
         self.assertEqual(len(self.intersection.children), 1)
         self.assertEqual(self.intersection.children[0], self.query_a.root)
 
-    def test_execute(self):
-        self.intersection.children.append(self.query_b.root)
-        self.intersection.execute(None)
-        self.assertEqual(self.intersection.results, [2, 3])
+    def test_execute_overlapping_field(self):
+        query_b = Query.for_job("job_id").select(("field1", "==", "value2"))
+        query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        query_b.root.results.append_entry("field1", "value2", "did", "fid", (0, 2))
+        gt_result = {"field1": {}}
+        self.intersection.children.append(query_b.root)
+        self.intersection.execute(self.client)
+        self.assertDictEqual(defaultdict_to_dict(self.intersection.results._index), gt_result)
+
+    def test_execute_no_overlapping_field(self):
+        query_b = Query.for_job("job_id").select(("field2", "==", "value2"))
+        query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        query_b.root.results.append_entry("field2", "value2", "did", "fid", (0, 2))
+        gt_result = {}
+        self.intersection.children.append(query_b.root)
+        self.intersection.execute(self.client)
+        self.assertDictEqual(defaultdict_to_dict(self.intersection.results._index), gt_result)
+
+    def test_execute_no_overlapping_ranges(self):
+        query_b = Query.for_job("job_id").select(("field1", "==", "value1"))
+        query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        query_b.root.results.append_entry("field1", "value1", "did", "fid", (3, 4))
+        gt_result = {"field1": {"value1": {"did": {"fid": []}}}}
+        self.intersection.children.append(query_b.root)
+        self.intersection.execute(self.client)
+        self.assertDictEqual(defaultdict_to_dict(self.intersection.results._index), gt_result)
+
+    def test_execute_overlapping_ranges(self):
+        query_b = Query.for_job("job_id").select(("field1", "==", "value1"))
+        query_b.root.results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
+        query_b.root.results.append_entry("field1", "value1", "did", "fid", (1, 4))
+        gt_result = {"field1": {"value1": {"did": {"fid": [(1, 2)]}}}}
+        self.intersection.children.append(query_b.root)
+        self.intersection.execute(self.client)
+        self.assertDictEqual(defaultdict_to_dict(self.intersection.results._index), gt_result)
 
     def test_execute_with_incorrect_children(self):
         with self.assertRaises(AssertionError):
