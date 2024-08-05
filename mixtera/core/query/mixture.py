@@ -121,6 +121,19 @@ class InferringMixture(Mixture):
         logger.info("InferringMixture starts inferring mixture.")
         total, inferred_mixture_dict = infer_mixture_from_chunkerindex(chunker_index)
         logger.debug(f"total={total}, inferred_dict = {inferred_mixture_dict}")
+
+        if total == 0:
+            assert (
+                not inferred_mixture_dict
+            ), f"Inconsistent state: total = 0, inferred_mixture_dict = {inferred_mixture_dict}"
+            logger.warning("Cannot infer mixture since chunker index is empty.")
+            self._mixture = {}
+            return
+
+        assert (
+            total > 0 and len(inferred_mixture_dict.keys()) > 0
+        ), f"Inconsistent state: total = {total}, inferred_mixture_dict={inferred_mixture_dict}"
+
         self._mixture = StaticMixture.parse_user_mixture(self.chunk_size, inferred_mixture_dict)
         logger.info("Mixture inferred.")
 
