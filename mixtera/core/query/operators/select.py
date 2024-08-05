@@ -44,9 +44,12 @@ class Select(Operator):
         condition (Union[Condition, Tuple]): The condition to filter the data.
     """
 
-    def __init__(self, condition: Union[Condition, tuple[str, str, str]]) -> None:
+    def __init__(self, condition: Union[Condition, tuple[str, str, str]] | None) -> None:
         super().__init__()
-        if isinstance(condition, Condition):
+
+        if condition is None:
+            self.condition = None
+        elif isinstance(condition, Condition):
             self.condition = condition
         elif isinstance(condition, tuple):
             assert len(condition) == 3, "Condition must be a tuple of length 3"
@@ -60,10 +63,16 @@ class Select(Operator):
         # TODO(#42): In a future PR, we may want to only load the
         # index that meets the condition, instead of loading the entire index
         # and then filter the results.
-        if (index := mdc.get_index(self.condition.field)) is None:
+        property_name = self.condition.field if self.condition is not None else None
+        if (index := mdc.get_index(property_name)) is None:
             self.results = {}
             return
-        self.results = index.get_index_by_predicate(self.condition.field, self.condition.meet)
+
+        self.results = (
+            index.get_index_by_predicate(self.condition.field, self.condition.meet)
+            if self.condition is not None
+            else index
+        )
 
     def __str__(self) -> str:
         return f"select<>({self.condition})"
