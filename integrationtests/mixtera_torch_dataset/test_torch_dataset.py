@@ -9,6 +9,7 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Query
+from mixtera.core.query.mixture import InferringMixture
 from mixtera.torch import MixteraTorchDataset
 
 TEST_PYTORCH_INSTANCE_COUNT = 1000
@@ -346,7 +347,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
         "ldc_torch_integrationtest_dataset", local_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
-    for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:
+    for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]] + [InferringMixture(x) for x in [1, 2000]]:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
                 try:
@@ -376,7 +377,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
 
     assert server_client.check_dataset_exists("ldc_torch_integrationtest_dataset"), "Dataset does not exist!"
 
-    for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
+    for mixture in [ArbitraryMixture(x) for x in [1, 2000]] + [InferringMixture(1)]:
         for dp_groups, num_nodes_per_group in [(1, 1), (1, 2), (2, 1), (2, 2), (4, 4)]:
             for num_workers in [0, 3, 8]:
                 for batch_size in [1, 500]:

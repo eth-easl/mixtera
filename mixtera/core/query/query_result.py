@@ -82,7 +82,9 @@ class QueryResult:
         self._inverted_index: InvertedIndex = self._invert_result(self.results)
         logger.debug("Index inverted, creating chunker index.")
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(self._inverted_index)
-        logger.debug("Chunker index created, parsing metadata.")
+        logger.debug("Chunker index created, informing mixture and parsing metadata.")
+
+        self._mixture.inform(self._chunker_index)
 
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc)
