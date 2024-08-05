@@ -131,7 +131,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_pickeled_object.assert_any_await(mixture_mock, NUM_BYTES_FOR_SIZES, mock_writer)
         mock_write_pickeled_object.assert_any_await(query_mock, NUM_BYTES_FOR_SIZES, mock_writer)
         self.assertEqual(mock_write_pickeled_object.await_count, 2)
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=60 * 15)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     @patch("mixtera.network.connection.server_connection.read_pickeled_object")
