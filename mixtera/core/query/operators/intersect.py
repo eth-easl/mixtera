@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from loguru import logger
 from mixtera.core.query.query_plan import QueryPlan
 
 from ._base import Operator
@@ -25,6 +26,9 @@ class Intersection(Operator):
         if self.children[0].results and self.children[1].results:
             self.children[0].results.intersect(self.children[1].results)
             self.results = self.children[0].results
+        else:
+            logger.warning("One of the queries has no results, returning empty results")
+            self.results = []
 
     def __str__(self) -> str:
         return "intersection<>()"
