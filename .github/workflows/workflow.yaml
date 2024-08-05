@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   flake8:
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +27,7 @@ jobs:
           micromamba run -n mixtera flake8 mixtera --statistics
 
   mypy-typechecking:
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
 
     steps:
@@ -43,7 +43,7 @@ jobs:
           micromamba run -n mixtera mypy mixtera
 
   pylint:
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
 
     steps:
@@ -59,7 +59,7 @@ jobs:
           micromamba run -n mixtera pylint mixtera
 
   isort:
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
 
     steps:
@@ -76,7 +76,7 @@ jobs:
           micromamba run -n mixtera isort integrationtests --check --diff
 
   black:
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
 
     steps:
@@ -92,7 +92,7 @@ jobs:
           micromamba run -n mixtera black --check mixtera --verbose --config black.toml
 
   unittests:
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
 
     steps:

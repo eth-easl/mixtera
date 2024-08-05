@@ -39,6 +39,16 @@ class TestSelect(unittest.TestCase):
         self.select.execute(mdc)
         self.assertEqual(self.select.results._index, returned_index._index)
 
+    def test_empty_select(self):
+        mdc = MagicMock()
+        self.select = Select(None)
+        returned_index = InMemoryDictionaryRangeIndex()
+        returned_index.append_entry("field", "value", "did", "fid", (0, 2))
+        returned_index.append_entry("field2", "value2", "did", "fid", (42, 43))
+        mdc.get_index.return_value = returned_index
+        self.select.execute(mdc)
+        self.assertEqual(self.select.results._index, returned_index._index)
+
     def test_execute_with_one_child(self):
         returned_index = InMemoryDictionaryRangeIndex()
         returned_index.append_entry("field", "value", "did", "fid", (0, 2))
