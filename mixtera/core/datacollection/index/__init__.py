@@ -24,6 +24,7 @@ from .index import (
     InvertedIndex,
 )
 from .index_collection import InMemoryDictionaryIndex, InMemoryDictionaryLineIndex, InMemoryDictionaryRangeIndex
+from .index_utils import infer_mixture_from_chunkerindex
 
 # The raw index types that are returned by the Index data structures
 
@@ -52,4 +53,6 @@ __all__ = [
     "InvertedIndex",
     "ChunkerIndex",
     "ChunkerIndexDatasetEntries",
+    # Functions
+    "infer_mixture_from_chunkerindex",
 ]

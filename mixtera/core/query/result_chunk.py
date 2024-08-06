@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Callable, Iterator, Optional, Type
 import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType
+from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
 from mixtera.core.query.mixture import StaticMixture
 from mixtera.network.connection import ServerConnection
 from mixtera.utils import generate_hash_string_from_list, seed_everything
@@ -97,34 +97,7 @@ class ResultChunk:
             self._mixture = self._infer_mixture()
 
     def _infer_mixture(self) -> dict[str, int]:
-        """
-        Infer the mixture from the result index. This is done by calculating the mass of each partition
-        and normalizing it to the total mass.
-
-        Returns:
-            The inferred mixture
-        """
-        total_count = 0
-        partition_masses: dict[str, int | float] = {}
-
-        def calculate_partition_mass(partition: dict[int, dict[int, list[tuple[int, int]]]]) -> int:
-            mass = sum(
-                end - start
-                for file_entry in partition.values()
-                for ranges in file_entry.values()
-                for start, end in ranges
-            )
-            return mass
-
-        for property_combination, partition_entry in self._result_index.items():
-            partition_mass = calculate_partition_mass(partition_entry)
-            partition_masses[property_combination] = partition_mass
-            total_count += partition_mass
-
-        for key in partition_masses:
-            partition_masses[key] /= total_count
-
-        return StaticMixture(total_count, partition_masses).mixture_in_rows()
+        return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
 
     def _iterate_samples(self) -> Iterator[str]:
         """

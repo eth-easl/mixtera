@@ -9,6 +9,7 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, Query
+from mixtera.core.query.mixture import InferringMixture
 from mixtera.torch import MixteraTorchDataset
 
 TEST_PYTORCH_INSTANCE_COUNT = 1000
@@ -61,14 +62,11 @@ def create_and_iterate_dataloaders(
 
 
 def test_filter_javascript(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     job_id = (
         f"0_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
     result_samples = create_and_iterate_dataloaders(
@@ -84,14 +82,11 @@ def test_filter_javascript(
 
 
 def test_filter_html(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     job_id = (
         f"1_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
     query = Query.for_job(job_id).select(("language", "==", "HTML"))
     result_samples = create_and_iterate_dataloaders(
@@ -107,14 +102,11 @@ def test_filter_html(
 
 
 def test_filter_both(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     job_id = (
         f"2_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
     query = (
         Query.for_job(job_id)
@@ -134,14 +126,11 @@ def test_filter_both(
 
 
 def test_filter_license(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     job_id = (
         f"3_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
     query = Query.for_job(job_id).select(("license", "==", "CC"))
     result_samples = create_and_iterate_dataloaders(
@@ -158,14 +147,11 @@ def test_filter_license(
 
 
 def test_filter_unknown_license(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     job_id = (
         f"4_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
     query = Query.for_job(job_id).select(("license", "==", "All rights reserved."))
     result_samples = create_and_iterate_dataloaders(
@@ -176,14 +162,11 @@ def test_filter_unknown_license(
 
 
 def test_filter_license_and_html(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     job_id = (
         f"5_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
     query = (
         Query.for_job(job_id)
@@ -203,17 +186,14 @@ def test_filter_license_and_html(
 
 
 def test_filter_both_with_order_validation(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     if query_exec_args.nodes_per_group <= 1:
         return  # This test is only relevant if there are multiple nodes per group
 
     job_id = (
         f"6_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
     query = (
         Query.for_job(job_id)
@@ -247,10 +227,7 @@ def test_filter_both_with_order_validation(
 
 
 def test_reader_reproducibility(
-    client: MixteraClient,
-    query_exec_args: QueryExecutionArgs,
-    batch_size: int,
-    tunnel: bool,
+    client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     if (
         not query_exec_args.dp_groups == 1
@@ -278,7 +255,7 @@ def test_reader_reproducibility(
                             job_id = (
                                 f"7_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
                                 + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{reader_degree_of_parallelism}"
-                                + f"_{per_window_mixture}_{window_size}_{i}_{dp_group_id}_{node_id}"
+                                + f"_{per_window_mixture}_{window_size}_{i}_{dp_group_id}_{node_id}_{mixture_str}"
                             )
                             query = (
                                 Query.for_job(job_id)
@@ -321,14 +298,15 @@ def test_torchds(
     batch_size: int,
     tunnel: bool,
 ):
-    test_filter_javascript(client, query_exec_args, batch_size, tunnel)
-    test_filter_html(client, query_exec_args, batch_size, tunnel)
-    test_filter_both(client, query_exec_args, batch_size, tunnel)
-    test_filter_license(client, query_exec_args, batch_size, tunnel)
-    test_filter_unknown_license(client, query_exec_args, batch_size, tunnel)
-    test_filter_license_and_html(client, query_exec_args, batch_size, tunnel)
-    test_filter_both_with_order_validation(client, query_exec_args, batch_size, tunnel)
-    test_reader_reproducibility(client, query_exec_args, batch_size, tunnel)
+    mixture_str = "arbitrary" if isinstance(query_exec_args.mixture, ArbitraryMixture) else "inferring"
+    test_filter_javascript(client, query_exec_args, batch_size, tunnel, mixture_str)
+    test_filter_html(client, query_exec_args, batch_size, tunnel, mixture_str)
+    test_filter_both(client, query_exec_args, batch_size, tunnel, mixture_str)
+    test_filter_license(client, query_exec_args, batch_size, tunnel, mixture_str)
+    test_filter_unknown_license(client, query_exec_args, batch_size, tunnel, mixture_str)
+    test_filter_license_and_html(client, query_exec_args, batch_size, tunnel, mixture_str)
+    test_filter_both_with_order_validation(client, query_exec_args, batch_size, tunnel, mixture_str)
+    test_reader_reproducibility(client, query_exec_args, batch_size, tunnel, mixture_str)
 
 
 def test_tds(local_dir: Path, server_dir: Path) -> None:
@@ -346,7 +324,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
         "ldc_torch_integrationtest_dataset", local_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
-    for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]]:
+    for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]] + [InferringMixture(x) for x in [2, 2000]]:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
                 try:
@@ -376,7 +354,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
 
     assert server_client.check_dataset_exists("ldc_torch_integrationtest_dataset"), "Dataset does not exist!"
 
-    for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
+    for mixture in [ArbitraryMixture(x) for x in [1, 2000]] + [InferringMixture(2)]:
         for dp_groups, num_nodes_per_group in [(1, 1), (1, 2), (2, 1), (2, 2), (4, 4)]:
             for num_workers in [0, 3, 8]:
                 for batch_size in [1, 500]:
