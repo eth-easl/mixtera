@@ -34,7 +34,7 @@ class MixtureKey:
             if k not in other.properties:
                 return False
             #  If the values of the two properties do not have any intersection, we return False
-            if not set(v).intersection(other.properties[k]):
+            if not set(v).intersection(other.properties[k]) and (len(v) > 0 or len(other.properties[k]) > 0):
                 return False
         return True
 
