@@ -18,6 +18,10 @@ class MixtureKey:
         if not isinstance(other, MixtureKey):
             return False
 
+        #  If there are no overlapping properties, we return False
+        if not set(self.properties.keys()).intersection(other.properties.keys()):
+            return False
+
         #  We compare the properties of the two MixtureKey objects
         for k, v in self.properties.items():
             #  If a property is not present in the other MixtureKey, we return False
@@ -27,6 +31,40 @@ class MixtureKey:
             if not set(v).intersection(other.properties[k]):
                 return False
         return True
+
+    #  Mixture keys with multiple values for the same property are "greater" than those with a single value
+    #  Where we count the number of values for each property (compare per property)
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, MixtureKey):
+            return False
+
+        less_than_count = 0
+        for k, v in self.properties.items():
+            if k not in other.properties:
+                continue
+            if len(v) < len(other.properties[k]):
+                less_than_count += 1
+
+        if less_than_count > 0:
+            return True
+
+        return len(self.properties) < len(other.properties)
+
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, MixtureKey):
+            return False
+
+        greater_than_count = 0
+        for k, v in self.properties.items():
+            if k not in other.properties:
+                continue
+            if len(v) > len(other.properties[k]):
+                greater_than_count += 1
+
+        if greater_than_count > 0:
+            return True
+
+        return len(self.properties) > len(other.properties)
 
     def __hash__(self) -> int:
         return hash_dict(self.properties)

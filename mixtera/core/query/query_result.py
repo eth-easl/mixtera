@@ -276,7 +276,7 @@ class QueryResult:
                 return
 
         base_mixture, target_chunk_index = yield
-        while True:
+        while True:  # pylint: disable=too-many-nested-blocks
             # Get the mixture from the caller as it might have changed
             mixture = base_mixture.mixture_in_rows()
 
@@ -285,10 +285,22 @@ class QueryResult:
                 #   1. All the chunk's components can yield --> we will be able to build a chunk, or
                 #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
                 #      and the coroutine will pass the exception upstream to __next__
-                try:
-                    chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
-                except StopIteration:
+                chunk = {}
+                number_of_keys_yielded = 0
+                for mixture_key in mixture.keys():
+                    for key in sorted(self._chunker_index.keys()):
+                        try:
+                            if mixture_key == key:
+                                chunk[key] = component_iterators[key].send(mixture[mixture_key])
+                                number_of_keys_yielded += 1
+                                break
+                        except StopIteration:
+                            continue
+
+                if number_of_keys_yielded != len(mixture):
+                    # One of the components could not yield; we will not be able to build a chunk
                     return
+
                 if current_chunk_index == target_chunk_index:
                     base_mixture, target_chunk_index = yield ResultChunk(
                         chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture

@@ -474,22 +474,23 @@ class TestQuery(unittest.TestCase):
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(56, 68)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(102, 106)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(50, 54)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(68, 80)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(106, 110)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(54, 58)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(80, 92)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(110, 114)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(58, 62)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(92, 100)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(114, 118)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(62, 66)]}},
             },
+            {MixtureKey({"language": ["english", "french"]}): {0: {0: [(78, 82)]}}},
+            {MixtureKey({"language": ["english", "french"]}): {0: {0: [(94, 98)]}}},
         ]
-
         reference_chunker_index = {
             MixtureKey({"language": ["french"]}): {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
             MixtureKey({"language": ["english", "french"]}): {0: {0: [[50, 100]]}},
@@ -531,7 +532,6 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         reference_chunks = [
-            # Mixture should contain 12 'language:french' instances and 4 'language:english' instances
             {
                 MixtureKey({"language": ["french"]}): {0: {0: [(0, 12)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(100, 104)]}},
@@ -572,7 +572,6 @@ class TestQuery(unittest.TestCase):
                 MixtureKey({"language": ["french"]}): {0: {1: [(8, 20)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(136, 140)]}},
             },
-            # Mixture should contain 8 'language:french' instances and 8 'language:english' instances
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(20, 28)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(140, 148)]}},
@@ -583,24 +582,31 @@ class TestQuery(unittest.TestCase):
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(36, 44)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(106, 114)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(50, 58)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(44, 52)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(114, 122)]}},
-            },
-            # Mixture should contain 10 'language:french' instances and 10 'language:english' instances
-            {
-                MixtureKey({"language": ["french"]}): {0: {1: [(52, 62)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(122, 132)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(58, 66)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(62, 72)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(132, 142)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(52, 60)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(66, 74)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(72, 82)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(142, 150)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(60, 68)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(74, 82)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(68, 76)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(82, 90)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(76, 84)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(90, 98)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(84, 92)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(98, 100)]}},
             },
         ]
 
@@ -624,7 +630,7 @@ class TestQuery(unittest.TestCase):
         result_iterator = iter(query.results)
         chunks = [next(result_iterator) for _ in range(10)]
         query.results.update_mixture(mixture_2)
-        chunks.extend([next(result_iterator) for _ in range(2)])
+        chunks.extend([next(result_iterator) for _ in range(9)])
         self.assertRaises(StopIteration, next, result_iterator)
 
         # Check the equality of the chunks
@@ -718,63 +724,93 @@ class TestQuery(unittest.TestCase):
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {0: {1: [(73, 77)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {1: {1: [(33, 39)]}},
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {0: {0: [(125, 131)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {0: {1: [(77, 81)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(139, 145)]}},
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {0: {0: [(131, 137)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {0: {1: [(81, 85)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(145, 150), (200, 201)]}},
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {
+                    0: {0: [(137, 140)], 1: [(200, 203)]}
+                },
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {0: {1: [(85, 89)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(201, 207)]}},
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {0: {1: [(203, 209)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {0: {1: [(89, 93)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(207, 210), (210, 213)]}},
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {0: {1: [(209, 210)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {0: {1: [(93, 97)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(213, 219)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {0: [(25, 31)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {
                     0: {1: [(97, 100)]},
                     1: {0: [(100, 101)]},
                 },
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(219, 225)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {0: [(31, 37)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(101, 105)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(225, 231)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {0: [(37, 43)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(105, 109)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(231, 237)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {0: [(43, 49)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(109, 110), (130, 133)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(237, 243)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {
+                    0: {0: [(49, 50), (140, 145)]}
+                },
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(133, 137)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(243, 249)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {
+                    0: {0: [(145, 150)], 1: [(100, 101)]}
+                },
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(137, 141)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(249, 250)]}, 1: {0: [(25, 30)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(101, 107)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(141, 145)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {1: {0: [(30, 36)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(107, 113)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(145, 149)]}},
             },
             {
-                MixtureKey({"language": ["french"], "topic": ["law"]}): {1: {0: [(36, 40), (60, 62)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(113, 119)]}},
                 MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(149, 150)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(119, 125)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["medicine"]}): {1: {0: [(90, 94)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(125, 131)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["medicine"]}): {1: {0: [(94, 98)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(131, 137)]}},
+                MixtureKey({"language": ["french", "english"], "topic": ["medicine"]}): {1: {0: [(98, 100)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(137, 143)]}},
+                MixtureKey({"language": ["english"], "topic": ["law", "medicine"]}): {0: {0: [(150, 154)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(143, 149)]}},
+                MixtureKey({"language": ["english"], "topic": ["law", "medicine"]}): {0: {0: [(154, 158)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(149, 150)]}},
+                MixtureKey({"language": ["english"], "topic": ["law", "medicine"]}): {0: {0: [(158, 162)]}},
             },
         ]
 
@@ -790,37 +826,8 @@ class TestQuery(unittest.TestCase):
         assert self.client.execute_query(query, args)
         chunks = list(iter(query.results))
 
-        def _subchunk_counter(chunk, key):
-            count = 0
-            for _0, document_entry in chunk._result_index[key].items():
-                for _1, ranges in document_entry.items():
-                    for base_range in ranges:
-                        count += base_range[1] - base_range[0]
-            return count
-
-        expected_chunk_count = 18
-        expected_error_count_s1 = 1
-        expected_error_count_s2 = 0
-
-        real_error_count_s1 = 0
-        real_error_count_s2 = 0
-
         for i, chunk in enumerate(chunks):
             self.assertDictEqual(reference_chunks[i], chunk._result_index)
-
-        for chunk in chunks:
-            subchunk_1_count = _subchunk_counter(chunk, MixtureKey({"language": ["french"], "topic": ["law"]}))
-            subchunk_2_count = _subchunk_counter(chunk, MixtureKey({"language": ["english"], "topic": ["medicine"]}))
-
-            if subchunk_1_count != 6:
-                real_error_count_s1 += 1
-
-            if subchunk_2_count != 4:
-                real_error_count_s2 += 1
-
-        self.assertEqual(expected_chunk_count, len(chunks))
-        self.assertEqual(expected_error_count_s1, real_error_count_s1)
-        self.assertEqual(expected_error_count_s2, real_error_count_s2)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -1057,6 +1064,240 @@ class TestQuery(unittest.TestCase):
 
         self.assertEqual(expected_chunk_count, len(chunks))
         self.assertEqual(expected_error_count, real_error_count)
+
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
+    @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
+    def test_create_chunking_with_simple_dynamic_mixture_single_property(
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
+    ):
+        mock_get_file_path_by_id.return_value = "test_file_path"
+        mock_get_dataset_type_by_id.return_value = "test_dataset_type"
+        mock_get_dataset_func_by_id.return_value = lambda x: x
+
+        # This assumes keys are generated using a single (the first) value of a property
+        reference_result = [
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(100, 112)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(300, 304)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(112, 120), (210, 214)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(304, 308)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(214, 226)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(308, 312)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(226, 238)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(312, 316)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(238, 250)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(316, 320)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(250, 262)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(320, 324)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(262, 274)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(324, 328)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(274, 286)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(328, 332)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(286, 298)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(332, 336)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(298, 300)], 1: [(150, 160)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(336, 340)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(170, 182)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(340, 344)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(182, 194)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(344, 348)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(194, 200), (250, 256)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(348, 352)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(256, 268)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(352, 356)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(268, 280)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(356, 360)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(280, 292)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(360, 364)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(292, 304)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(364, 368)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(304, 316)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(368, 372)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(316, 328)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(372, 376)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(328, 340)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(376, 380)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(340, 350)]}, 1: {0: [(40, 42)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(380, 384)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {1: {0: [(42, 50), (75, 79)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(384, 388)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {1: {0: [(79, 90)], 1: [(0, 1)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(388, 392)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {1: {1: [(1, 13)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(392, 396)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {1: {1: [(13, 20)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(396, 400)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"]}): {0: {0: [(200, 210)]}},
+                MixtureKey({"language": ["english"]}): {0: {2: [(10, 14)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {0: [(0, 12)]}},
+                MixtureKey({"language": ["english"]}): {0: {2: [(14, 18)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {0: [(12, 24)]}},
+                MixtureKey({"language": ["english"]}): {0: {2: [(18, 20)]}, 2: {0: [(0, 2)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {0: [(24, 25)], 1: [(210, 221)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(2, 6)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(221, 233)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(6, 10)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(233, 245)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(10, 14)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(245, 250)]}, 1: {0: [(25, 32)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(14, 18)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {1: {0: [(32, 40), (60, 64)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(18, 22)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {1: {0: [(64, 75)], 1: [(20, 21)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(22, 26)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law"]}): {1: {1: [(21, 30)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(26, 30)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["medicine"]}): {0: {0: [(120, 125)], 1: [(160, 167)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(30, 34)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["medicine"]}): {0: {1: [(167, 170)]}, 1: {1: [(30, 39)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(34, 38)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["medicine"]}): {1: {1: [(39, 50)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(38, 42)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["medicine"]}): {1: {0: [(90, 100)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(42, 46)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {0: {0: [(125, 137)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(46, 50)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {
+                    0: {0: [(137, 140)], 1: [(200, 209)]}
+                },
+                MixtureKey({"language": ["english"]}): {2: {0: [(50, 54)]}},
+            },
+            {
+                MixtureKey({"language": ["french"], "topic": ["law", "medicine"]}): {0: {1: [(209, 210)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(54, 58)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {0: [(25, 37)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(58, 62)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {0: [(37, 49)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(62, 66)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {
+                    0: {0: [(49, 50), (140, 150)], 1: [(100, 101)]}
+                },
+                MixtureKey({"language": ["english"]}): {2: {0: [(66, 70)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(101, 113)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(70, 74)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(113, 125)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(74, 78)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(125, 137)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(78, 80), (150, 152)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(137, 149)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(152, 156)]}},
+            },
+            {
+                MixtureKey({"language": ["french", "english"], "topic": ["law", "medicine"]}): {0: {1: [(149, 150)]}},
+                MixtureKey({"language": ["english"]}): {2: {0: [(156, 160)]}},
+            },
+        ]
+        mixture_concentration = {
+            MixtureKey({"language": ["french"]}): 0.75,  # 12 instances per batch
+            MixtureKey({"language": ["english"]}): 0.25,  # 4 instances per batch
+        }
+        mixture = StaticMixture(16, mixture_concentration)
+
+        query = Query.for_job("job_id").complexmockoperator("test")
+        args = QueryExecutionArgs(mixture=mixture)
+        assert self.client.execute_query(query, args)
+        chunks = list(iter(query.results))
+
+        for i, chunk in enumerate(chunks):
+            self.assertDictEqual(reference_result[i], chunk._result_index)
 
 
 if __name__ == "__main__":
