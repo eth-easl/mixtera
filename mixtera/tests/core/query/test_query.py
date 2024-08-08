@@ -533,33 +533,68 @@ class TestQuery(unittest.TestCase):
         mock_get_dataset_func_by_id.return_value = lambda x: x
 
         reference_chunks = [
-            {"language:french": {0: {0: [(0, 20)]}}, "language:english": {0: {0: [(50, 60)]}}},
-            {"language:french": {0: {0: [(20, 40)]}}, "language:english": {0: {0: [(60, 70)]}}},
-            {"language:french": {0: {0: [(40, 50), (150, 160)]}}, "language:english": {0: {0: [(70, 80)]}}},
-            {"language:french": {0: {0: [(160, 180)]}}, "language:english": {0: {0: [(80, 90)]}}},
-            {"language:french": {0: {0: [(180, 200)]}}, "language:english": {0: {0: [(90, 100)]}}},
-            {"language:french": {0: {1: [(0, 20)]}}, "language:english": {0: {0: [(100, 110)]}}},
-            {"language:french": {0: {1: [(20, 40)]}}, "language:english": {0: {0: [(110, 120)]}}},
-            {"language:french": {0: {1: [(40, 60)]}}, "language:english": {0: {0: [(120, 130)]}}},
-            {"language:french": {0: {1: [(60, 80)]}}, "language:english": {0: {0: [(130, 140)]}}},
-            {"language:french": {0: {1: [(80, 100)]}}, "language:english": {0: {0: [(140, 150)]}}},
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(0, 20)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(50, 60)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(20, 40)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(60, 70)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(40, 50), (150, 160)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(70, 80)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(160, 180)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(80, 90)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(180, 200)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(90, 100)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(0, 20)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(100, 110)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(20, 40)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(110, 120)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(40, 60)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(120, 130)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(60, 80)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(130, 140)]}},
+            },
+            {
+                MixtureKey({"language": ["french"]}): {0: {1: [(80, 100)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(140, 150)]}},
+            },
         ]
 
         reference_chunker_index = {
-            "language:french": {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
-            "language:english": {0: {0: [[50, 100], [100, 150]]}},
+            MixtureKey({"language": ["french"]}): {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
+            MixtureKey({"language": ["english"]}): {0: {0: [[100, 150]]}},
+            MixtureKey({"language": ["english", "french"]}): {0: {0: [[50, 100]]}},
         }
 
         # We have 100 English and 200 French lines in the chunker index (see reference above)
         # This means we have 2/3 French data, and 1/3 English data per chunk
-        # Hence in the chunks above we always have 20 lines french 10 lines english for 30 lines per chunk.
+        # Hence in the chunks above we always have 20 lines french 5 lines english and 5 lines french+english.
 
         query = Query.for_job("job_id").simplemockoperator("test")
         mixture = InferringMixture(30)
         args = QueryExecutionArgs(mixture=mixture)
 
         assert self.client.execute_query(query, args)
-        assert mixture._mixture == {"language:french": 20, "language:english": 10}
+        assert mixture._mixture == {
+            MixtureKey({"language": ["french"]}): 20,
+            MixtureKey({"language": ["english"]}): 5,
+            MixtureKey({"language": ["english", "french"]}): 5,
+        }
 
         chunks = list(iter(query.results))
 
