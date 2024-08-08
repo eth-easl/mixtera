@@ -3,11 +3,10 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from mixtera.core.datacollection.index import infer_mixture_from_chunkerindex
+from mixtera.utils import hash_dict
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.index import ChunkerIndex
-
-from mixtera.utils import hash_dict
 
 
 class MixtureKey:
@@ -211,7 +210,7 @@ class StaticMixture(Mixture):
     def parse_user_mixture(chunk_size: int, user_mixture: dict[str, float]) -> dict[str, int]:
         """Given a chunk size and user mixture, return an internal adjusted representation
         that handles rounding errors and that adheres to the chunk size."""
-        for key, val in mixture.items():
+        for key, val in user_mixture.items():
             assert val >= 0, "Mixture values must be non-negative."
             assert isinstance(key, MixtureKey), "Mixture keys must be of type MixtureKey."
 

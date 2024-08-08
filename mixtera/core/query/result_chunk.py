@@ -7,7 +7,7 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
-from mixtera.core.query.mixture import StaticMixture, MixtureKey 
+from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
 from mixtera.utils import hash_list, seed_everything
 

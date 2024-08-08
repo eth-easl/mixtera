@@ -1,6 +1,6 @@
 import multiprocessing as mp
-import random
 import os
+import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Generator, Type
