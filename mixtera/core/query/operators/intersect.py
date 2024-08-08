@@ -23,14 +23,12 @@ class Intersection(Operator):
     def execute(self, mdc: "MixteraDataCollection") -> None:
         del mdc
         assert len(self.children) == 2, f"Intersection operator must have 2 children, got {len(self.children)}"
-        # TODO(#39): This is a dummy implementation, we need to implement the real intersection logic.
-        # Will do it in a following PR.
-        logger.warning(
-            "Intersection operator is not implemented properly yet, "
-            "returning the intersection of the results of the two queries."
-        )
         if self.children[0].results and self.children[1].results:
-            self.results = [x for x in self.children[0].results if x in self.children[1].results]
+            self.children[0].results.intersect(self.children[1].results)
+            self.results = self.children[0].results
+        else:
+            logger.warning("One of the queries has no results, returning empty results")
+            self.results = []
 
     def __str__(self) -> str:
         return "intersection<>()"

@@ -1,4 +1,11 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+from loguru import logger
+from mixtera.core.datacollection.index import infer_mixture_from_chunkerindex
+
+if TYPE_CHECKING:
+    from mixtera.core.datacollection.index import ChunkerIndex
 
 from mixtera.utils import hash_dict
 
@@ -113,9 +120,22 @@ class Mixture(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    @abstractmethod
+    def inform(self, chunker_index: "ChunkerIndex") -> None:
+        """
+        Function that is called to inform the mixture class about the overall chunker index, i.e.,
+        the overall distribution in the QueryResult.
+        """
+        raise NotImplementedError("Method must be implemented in subclass!")
+
 
 class ArbitraryMixture(Mixture):
-    """This is a placeholder mixture that allows for chunks to be created without any particular mixture."""
+    """
+    This is a mixture that allows for chunks to be created without any particular mixture.
+    This mixture makes no guarantees at all and yields chunks that may contain spurious correlations,
+    e.g., only data from one type. If you want a more balanced chunk without specifying a mixture,
+    consider using the `InferringMixture`.
+    """
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return {}
@@ -123,6 +143,48 @@ class ArbitraryMixture(Mixture):
     def __str__(self) -> str:
         """String representation of this mixture object."""
         return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}}}'
+
+    def inform(self, chunker_index: "ChunkerIndex") -> None:
+        del chunker_index
+
+
+class InferringMixture(Mixture):
+    """
+    This is a mixture that allows for chunks to be created without specifying a Mixture.
+    Each chunk is represented with the same mixture that is in the overall QueryResult,
+    to have a balanced sample per chunk.
+    """
+
+    def __init__(self, chunk_size: int) -> None:
+        super().__init__(chunk_size)
+        self._mixture: dict[str, int] = {}
+
+    def mixture_in_rows(self) -> dict[str, int]:
+        return self._mixture
+
+    def __str__(self) -> str:
+        """String representation of this mixture object."""
+        return f'{{"mixture": "{self._mixture}", "chunk_size": {self.chunk_size}}}'
+
+    def inform(self, chunker_index: "ChunkerIndex") -> None:
+        logger.info("InferringMixture starts inferring mixture.")
+        total, inferred_mixture_dict = infer_mixture_from_chunkerindex(chunker_index)
+        logger.debug(f"total={total}, inferred_dict = {inferred_mixture_dict}")
+
+        if total == 0:
+            assert (
+                not inferred_mixture_dict
+            ), f"Inconsistent state: total = 0, inferred_mixture_dict = {inferred_mixture_dict}"
+            logger.warning("Cannot infer mixture since chunker index is empty.")
+            self._mixture = {}
+            return
+
+        assert (
+            total > 0 and len(inferred_mixture_dict.keys()) > 0
+        ), f"Inconsistent state: total = {total}, inferred_mixture_dict={inferred_mixture_dict}"
+
+        self._mixture = StaticMixture.parse_user_mixture(self.chunk_size, inferred_mixture_dict)
+        logger.info("Mixture inferred.")
 
 
 class StaticMixture(Mixture):
@@ -143,15 +205,23 @@ class StaticMixture(Mixture):
                 }
         """
         super().__init__(chunk_size)
+        self._mixture = StaticMixture.parse_user_mixture(chunk_size, mixture)
+
+    @staticmethod
+    def parse_user_mixture(chunk_size: int, user_mixture: dict[str, float]) -> dict[str, int]:
+        """Given a chunk size and user mixture, return an internal adjusted representation
+        that handles rounding errors and that adheres to the chunk size."""
         for key, val in mixture.items():
             assert val >= 0, "Mixture values must be non-negative."
             assert isinstance(key, MixtureKey), "Mixture keys must be of type MixtureKey."
 
-        self._mixture = {key: int(chunk_size * val) for key, val in mixture.items()}
+        mixture = {key: int(chunk_size * val) for key, val in user_mixture.items()}
 
         # Ensure approximation errors do not affect final chunk size
-        if (diff := chunk_size - sum(self._mixture.values())) > 0:
-            self._mixture[list(self._mixture.keys())[0]] += diff
+        if (diff := chunk_size - sum(mixture.values())) > 0:
+            mixture[list(mixture.keys())[0]] += diff
+
+        return mixture
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
@@ -159,3 +229,6 @@ class StaticMixture(Mixture):
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._mixture
+
+    def inform(self, chunker_index: "ChunkerIndex") -> None:
+        del chunker_index

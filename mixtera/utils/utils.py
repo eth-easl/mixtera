@@ -8,6 +8,7 @@ from copy import deepcopy
 from typing import Any, List, Tuple, Union
 
 import numpy as np
+import portion as P
 
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
@@ -44,7 +45,38 @@ def merge_dicts(d1: dict, d2: dict) -> dict:
             d1[key] = merge_dicts(node, value)
         else:
             # We're at the innermost level, which has unique keys, so just add them
-            d1[key] = value
+            if isinstance(value, list):
+                d1[key] = value + d1[key] if key in d1 else value
+            else:
+                d1[key] = value
+    return d1
+
+
+def intersect_dicts(d1: dict, d2: dict) -> dict:
+    """
+    Recursively intersects two dict structures. Assumes that the innermost
+    dictionaries have unique keys and thus can be intersected without concern for collisions.
+    """
+    common_keys = d1.keys() & d2.keys()
+
+    #  Remove all keys and values from d1 that are not in d2
+    for key in set(d1.keys()) - common_keys:
+        del d1[key]
+
+    for key in common_keys:
+        if isinstance(d1[key], dict) and isinstance(d2[key], dict):
+            d1[key] = intersect_dicts(d1[key], d2[key])
+        else:
+            #  At the innermost level we either have a list of values or a list of ranges
+            if isinstance(d1[key], list) and isinstance(d1[key][0], int):
+                d1[key] = list(set(d1[key]) & set(d2[key]))
+            elif isinstance(d1[key], list) and isinstance(d1[key][0], tuple):
+                d1[key] = intervals_to_ranges(
+                    ranges_to_intervals(d1[key])
+                    & ranges_to_intervals(d2[key])  # type: ignore  # mypy can't handle & operators on Interval objects
+                )
+            else:
+                raise ValueError(f"Unsupported value type {type(d1[key])} for intersection.")
     return d1
 
 
@@ -152,6 +184,16 @@ def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) ->
                 new_dict[k] = v + left[k]
 
     return new_dict
+
+
+def ranges_to_intervals(list_of_ranges: List[Tuple[int, int]]) -> List[P.Interval]:
+    """Convert a list of ranges to a list of intervals."""
+    return P.Interval(*[P.closed(start, end) for start, end in list_of_ranges])
+
+
+def intervals_to_ranges(intervals: List[P.Interval]) -> List[Tuple[int, int]]:
+    """Convert a list of intervals to a list of ranges."""
+    return [(int(interval.lower), int(interval.upper)) for interval in intervals]
 
 
 def hash_list(string_list: list[str]) -> int:
