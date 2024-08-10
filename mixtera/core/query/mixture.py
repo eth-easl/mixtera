@@ -24,10 +24,6 @@ class MixtureKey:
         if not isinstance(other, MixtureKey):
             return False
 
-        #  If there are no overlapping properties, we return False
-        if not set(self.properties.keys()).intersection(other.properties.keys()):
-            return False
-
         #  We compare the properties of the two MixtureKey objects
         for k, v in self.properties.items():
             #  If a property is not present in the other MixtureKey, we return False
@@ -42,35 +38,45 @@ class MixtureKey:
     #  Where we count the number of values for each property (compare per property)
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, MixtureKey):
+            return NotImplemented
+
+        is_less_than, is_greater_than = self._compare_properties(other)
+
+        if is_less_than and not is_greater_than:
+            return True
+        if is_greater_than and not is_less_than:
             return False
 
-        less_than_count = 0
-        for k, v in self.properties.items():
-            if k not in other.properties:
-                continue
-            if len(v) < len(other.properties[k]):
-                less_than_count += 1
-
-        if less_than_count > 0:
-            return True
-
+        # If equal in all shared keys, compare the total number of properties
         return len(self.properties) < len(other.properties)
 
     def __gt__(self, other: object) -> bool:
         if not isinstance(other, MixtureKey):
+            return NotImplemented
+
+        is_less_than, is_greater_than = self._compare_properties(other)
+
+        if is_greater_than and not is_less_than:
+            return True
+        if is_less_than and not is_greater_than:
             return False
 
-        greater_than_count = 0
+        # If equal in all shared keys, compare the total number of properties
+        return len(self.properties) > len(other.properties)
+
+    def _compare_properties(self, other: "MixtureKey") -> tuple[bool, bool]:
+        is_less_than = False
+        is_greater_than = False
+
         for k, v in self.properties.items():
             if k not in other.properties:
                 continue
-            if len(v) > len(other.properties[k]):
-                greater_than_count += 1
+            if len(v) < len(other.properties[k]):
+                is_less_than = True
+            elif len(v) > len(other.properties[k]):
+                is_greater_than = True
 
-        if greater_than_count > 0:
-            return True
-
-        return len(self.properties) > len(other.properties)
+        return is_less_than, is_greater_than
 
     def __hash__(self) -> int:
         return hash_dict(self.properties)
@@ -156,9 +162,9 @@ class InferringMixture(Mixture):
 
     def __init__(self, chunk_size: int) -> None:
         super().__init__(chunk_size)
-        self._mixture: dict[str, int] = {}
+        self._mixture: dict[MixtureKey, int] = {}
 
-    def mixture_in_rows(self) -> dict[str, int]:
+    def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._mixture
 
     def __str__(self) -> str:
@@ -207,7 +213,7 @@ class StaticMixture(Mixture):
         self._mixture = StaticMixture.parse_user_mixture(chunk_size, mixture)
 
     @staticmethod
-    def parse_user_mixture(chunk_size: int, user_mixture: dict[str, float]) -> dict[str, int]:
+    def parse_user_mixture(chunk_size: int, user_mixture: dict[MixtureKey, float]) -> dict[MixtureKey, int]:
         """Given a chunk size and user mixture, return an internal adjusted representation
         that handles rounding errors and that adheres to the chunk size."""
         for key, val in user_mixture.items():

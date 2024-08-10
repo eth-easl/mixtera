@@ -9,7 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
 from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
-from mixtera.utils import hash_list, seed_everything
+from mixtera.utils import seed_everything_from_list
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
@@ -212,7 +212,7 @@ class ResultChunk:
         element_counts = self._get_element_counts()
 
         #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
-        seed_everything(hash_list([str(x[0]) for x in element_counts]))
+        seed_everything_from_list(element_counts)
         random.shuffle(element_counts)
 
         deleted_iterators: set[str] = set()
@@ -253,7 +253,7 @@ class ResultChunk:
         """
         #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
         property_names = list(active_iterators.keys())
-        seed_everything(hash_list([str(property_name) for property_name in property_names]))
+        seed_everything_from_list(property_names)
         random.shuffle(property_names)
 
         deleted_iterators: set[str] = set()
@@ -397,7 +397,7 @@ class ResultChunk:
                     workloads[property_combination].append((dataset_id, file_id, ranges))
 
             #  Shuffle the workloads to ensure that the order of the files is (reproducibly) random
-            seed_everything(hash_list([str(property_combination)]))
+            seed_everything_from_list([property_combination])
             random.shuffle(workloads[property_combination])
 
         return workloads

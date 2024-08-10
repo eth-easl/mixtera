@@ -206,6 +206,9 @@ def hash_list(string_list: list[str]) -> int:
     Returns:
         A hash
     """
+    # Sort the list of strings to ensure that the hash is deterministic
+    string_list.sort()
+
     hash_result = hashlib.blake2b()
 
     for string in string_list:
@@ -235,6 +238,19 @@ def hash_dict(d: dict) -> int:
 
     # Step 4: Convert the list of key-value pairs to a hash
     return hash_list([f"{k}:{v}" for k, v in items])
+
+
+def seed_everything_from_list(seed_list: List[Any]) -> None:
+    """
+    Generate a seed from a list of integers.
+
+    Args:
+        seed_list: a list of integers
+
+    Returns:
+        A seed
+    """
+    seed_everything(hash_list([str(x) for x in seed_list]))
 
 
 def seed_everything(seed: int) -> None:

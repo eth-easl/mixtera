@@ -20,7 +20,7 @@ from mixtera.core.datacollection.index import (
 from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import defaultdict_to_dict, hash_list, merge_property_dicts, seed_everything
+from mixtera.utils.utils import defaultdict_to_dict, merge_property_dicts, seed_everything_from_list
 
 _NUM_CPU = os.cpu_count() or 1
 INVERSION_POOL_SIZE = max(_NUM_CPU // 2, 1)  # TODO(#91): Make this configurable.
@@ -407,7 +407,7 @@ class QueryResult:
         chunker_index_keys_idx = 0
         chunker_index_keys = list(self._chunker_index.keys())
         empty_key_idx: set[int] = set()
-        seed_everything(hash_list([str(key) for key in chunker_index_keys]))
+        seed_everything_from_list(chunker_index_keys)
         random.shuffle(chunker_index_keys)
 
         # Create coroutines for component iterators and advance them to the first yield

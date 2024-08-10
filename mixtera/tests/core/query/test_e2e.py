@@ -94,8 +94,8 @@ class TestQueryE2E(unittest.TestCase):
             [x._result_index for x in res],
             [
                 {MixtureKey({"language": ["Go"]}): {1: {self.file1_id: [(0, 1)]}}},
-                {MixtureKey({"language": ["Go", "CSS"]}): {1: {self.file1_id: [(1, 2)]}}},
                 {MixtureKey({"language": ["CSS"]}): {1: {self.file2_id: [(0, 1)]}}},
+                {MixtureKey({"language": ["Go", "CSS"]}): {1: {self.file1_id: [(1, 2)]}}},
             ],
         )
         # check metadata
