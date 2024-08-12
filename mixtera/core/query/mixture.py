@@ -79,6 +79,7 @@ class MixtureKey:
         return is_less_than, is_greater_than
 
     def __hash__(self) -> int:
+        #  Since we are want to use this class as a key in a dictionary, we need to implement the __hash__ method
         return hash_dict(self.properties)
 
     def __str__(self) -> str:
