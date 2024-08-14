@@ -431,11 +431,16 @@ class QueryResult:
                 #   1. All the chunk's components can yield --> we will be able to build a chunk, or
                 #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
                 #      and the coroutine will pass the exception upstream to __next__
+                # TODO(#97): Improve that chunks are built from different component iterators,
+                # otherwise we might skip over samples when they are not exactly divisible by the
+                # mixture specific chunk size
                 chunk = {}
                 number_of_keys_yielded = 0
                 for mixture_key in mixture.keys():
                     for key in sorted(self._chunker_index.keys()):
                         try:
+                            #  The == operator is not commutative, hence the following logic
+                            #  works as expected, this should be improved in
                             if mixture_key == key:
                                 chunk[key] = component_iterators[key].send(mixture[mixture_key])
                                 number_of_keys_yielded += 1
