@@ -7,9 +7,9 @@ import dill
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
-from mixtera.core.query.mixture import StaticMixture
+from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
-from mixtera.utils import generate_hash_string_from_list, seed_everything
+from mixtera.utils import seed_everything_from_list
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
@@ -29,7 +29,7 @@ class ResultChunk:
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
         chunk_size: int,
-        mixture: Optional[dict[str, int]] = None,
+        mixture: Optional[dict[MixtureKey, int]] = None,
     ) -> None:
         self._result_index = result_index
         self._dataset_type_dict = dataset_type_dict
@@ -107,21 +107,21 @@ class ResultChunk:
         Returns:
             An iterator over the samples
         """
-        active_iterators: dict[str, Iterator[str]] = self._init_active_iterators()
+        active_iterators: dict[MixtureKey, Iterator[str]] = self._init_active_iterators()
         if self._per_window_mixture:
             yield_source = self._iterate_window_mixture(active_iterators)
         else:
             yield_source = self._iterate_overall_mixture(active_iterators)
         yield from yield_source
 
-    def _init_active_iterators(self) -> dict[str, Iterator[str]]:
+    def _init_active_iterators(self) -> dict[MixtureKey, Iterator[str]]:
         """
         Get the active iterators for the result index. This function prepares the workloads and spins up the
         reader processes if required by the degree of parallelism.
         """
-        workloads: dict[str, Workloads] = self._prepare_workloads()
+        workloads: dict[MixtureKey, Workloads] = self._prepare_workloads()
 
-        active_iterators: dict[str, Iterator[str]] = {}
+        active_iterators: dict[MixtureKey, Iterator[str]] = {}
         if self._degree_of_parallelism == 1:
             active_iterators = {
                 property_name: self._get_iterator_for_workload_st(workload)
@@ -130,7 +130,9 @@ class ResultChunk:
         elif self._degree_of_parallelism > 1:
             process_counts = self._get_process_counts()
 
-            processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = self._spin_up_readers(workloads, process_counts)
+            processes: dict[MixtureKey, list[tuple[mp.Queue, mp.Process]]] = self._spin_up_readers(
+                workloads, process_counts
+            )
 
             active_iterators = {
                 property_name: self._get_iterator_for_workload_mt(process)
@@ -202,7 +204,7 @@ class ResultChunk:
             for queue, proc in processes_to_remove:
                 processes.remove((queue, proc))
 
-    def _iterate_window_mixture(self, active_iterators: dict[str, Iterator[str]]) -> Iterator[str]:
+    def _iterate_window_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[str]:
         """
         Iterate over the samples in the result index with a windowed mixture. This function yields the samples
         in the correct mixture withing a window.
@@ -210,7 +212,7 @@ class ResultChunk:
         element_counts = self._get_element_counts()
 
         #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
-        seed_everything(generate_hash_string_from_list([x[0] for x in element_counts]))
+        seed_everything_from_list(element_counts)
         random.shuffle(element_counts)
 
         deleted_iterators: set[str] = set()
@@ -244,14 +246,14 @@ class ResultChunk:
                 if nothing_yielded_window:
                     break
 
-    def _iterate_overall_mixture(self, active_iterators: dict[str, Iterator[str]]) -> Iterator[str]:
+    def _iterate_overall_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[str]:
         """
         Iterate over the samples in the result index with an overall mixture. This function yields the samples
         in the overall correct mixture.
         """
         #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
         property_names = list(active_iterators.keys())
-        seed_everything(generate_hash_string_from_list(property_names))
+        seed_everything_from_list(property_names)
         random.shuffle(property_names)
 
         deleted_iterators: set[str] = set()
@@ -266,7 +268,7 @@ class ResultChunk:
                 except StopIteration:
                     deleted_iterators.add(property_name)
 
-    def _get_element_counts(self) -> list[tuple[str, int]]:
+    def _get_element_counts(self) -> list[tuple[MixtureKey, int]]:
         """
         Get the element counts for each property combination. This is used to determine how many instances
         of each property combination should be yielded in a window.
@@ -378,7 +380,7 @@ class ResultChunk:
 
         queue.close()
 
-    def _prepare_workloads(self) -> dict[str, Workloads]:
+    def _prepare_workloads(self) -> dict[MixtureKey, Workloads]:
         """
         Prepare the workloads for the result index. This function creates a dictionary with the workloads
         per property combination.
@@ -386,7 +388,7 @@ class ResultChunk:
         Returns:
             A dictionary with the workloads per property combination
         """
-        workloads: dict[str, Workloads] = {}
+        workloads: dict[MixtureKey, Workloads] = {}
         for property_combination, dataset_entries in self._result_index.items():
             if property_combination not in workloads:
                 workloads[property_combination] = []
@@ -395,7 +397,7 @@ class ResultChunk:
                     workloads[property_combination].append((dataset_id, file_id, ranges))
 
             #  Shuffle the workloads to ensure that the order of the files is (reproducibly) random
-            seed_everything(generate_hash_string_from_list([property_combination]))
+            seed_everything_from_list([property_combination])
             random.shuffle(workloads[property_combination])
 
         return workloads

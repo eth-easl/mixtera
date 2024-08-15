@@ -16,7 +16,7 @@ from mixtera.core.client.server import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
-from mixtera.core.query import ArbitraryMixture, Query, StaticMixture
+from mixtera.core.query import ArbitraryMixture, MixtureKey, Query, StaticMixture
 
 TEST_SERVER_INSTANCE_COUNT = 1000
 TEST_SERVER_FILE_COUNT = 5
@@ -174,7 +174,10 @@ def test_filter_license_and_html(
 def test_reproducibility(
     client: ServerStub, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
-    mixture = StaticMixture(query_exec_args.mixture.chunk_size, {"language:JavaScript": 0.6, "language:HTML": 0.4})
+    mixture = StaticMixture(
+        query_exec_args.mixture.chunk_size,
+        {MixtureKey({"language": ["JavaScript"]}): 0.6, MixtureKey({"language": ["HTML"]}): 0.4},
+    )
     result_list = []
 
     for i in range(REPRODUCIBILITY_ITERATIONS):

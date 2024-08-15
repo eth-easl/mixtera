@@ -16,7 +16,7 @@ from mixtera.utils import (
     run_async_until_complete,
     wait_for_key_in_dict,
 )
-from mixtera.utils.utils import generate_hashable_search_key, merge_property_dicts
+from mixtera.utils.utils import merge_property_dicts
 
 
 def test_flatten():
@@ -144,25 +144,6 @@ def test_merge_property_dicts():
         "c": [1],
         "d": [],
     }, "Merged w/ duplicates is incorrect"
-
-
-def test_generate_hashable_search_key():
-    properties_one = ["c", "b", "a"]
-    values_one = [["x", "y", "z"], list(range(3, -1, -1)), ["m", "n"]]
-
-    properties_two = ["b", "a", "c"]
-    values_two = [["x", "y", "z"], list(range(3, -1, -1))]
-
-    properties_three = ["c", "b"]
-    values_three = [["x", "y", "z"], list(range(3, -1, -1)), ["m", "n"]]
-
-    key_one = generate_hashable_search_key(properties_one, values_one, sort_lists=True)
-    key_two = generate_hashable_search_key(properties_two, values_two)
-    key_three = generate_hashable_search_key(properties_three, values_three, sort_lists=False)
-
-    assert key_one == "a:m;b:3;c:x", f"Generated key is incorrect; should be 'a:m;b:3;c:x' not {key_one}"
-    assert key_two == "a:3;b:x", f"Generated key is incorrect; should be 'a:3;b:x' not {key_two}"
-    assert key_three == "c:x;b:3", f"Generated key is incorrect; should be 'a:3;b:x' not {key_two}"
 
 
 def test_basic_merge():

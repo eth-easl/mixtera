@@ -9,7 +9,7 @@ from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Query, QueryResult, StaticMixture
+from mixtera.core.query import MixtureKey, Query, QueryResult, StaticMixture
 from mixtera.core.query.chunk_distributor import ChunkDistributor
 
 
@@ -73,7 +73,7 @@ class TestLocalStub(unittest.TestCase):
     def test_execute_query(self, mock_mdc):
         query = MagicMock(spec=Query)
         chunk_size = 100
-        mixture = StaticMixture(chunk_size, {"any": 1.0})
+        mixture = StaticMixture(chunk_size, {MixtureKey({"any": ["some"]}): 1.0})
         query.job_id = "test_job_id"
         self.local_stub._mdc = mock_mdc
         self.local_stub._register_query = MagicMock(return_value=True)
@@ -87,7 +87,7 @@ class TestLocalStub(unittest.TestCase):
     def test_execute_query_registration_fails(self, mock_mdc):
         query = MagicMock(spec=Query)
         chunk_size = 100
-        mixture = StaticMixture(chunk_size, {"any": 1.0})
+        mixture = StaticMixture(chunk_size, {MixtureKey({"any": ["some"]}): 1.0})
         query.job_id = "test_job_id"
         self.local_stub._register_query = MagicMock(return_value=False)
         self.local_stub._mdc = mock_mdc
@@ -188,3 +188,7 @@ class TestLocalStub(unittest.TestCase):
         result = self.local_stub._get_query_result(job_id)
         mock_wait_for_key.assert_called_once_with(self.local_stub._training_query_map, job_id, 60.0)
         self.assertEqual(result, query.results)
+
+
+if __name__ == "__main__":
+    unittest.main()

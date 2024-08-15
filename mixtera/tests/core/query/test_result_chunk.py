@@ -4,6 +4,7 @@ from queue import Empty
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client.server import ServerStub
+from mixtera.core.query.mixture import MixtureKey
 from mixtera.core.query.result_chunk import END_OF_STREAM_OBJECT, ResultChunk
 
 
@@ -63,11 +64,14 @@ class TestResultChunk(unittest.TestCase):
 
     def test_infer_mixture(self):
         mock_result_index = {
-            "property1": {0: {0: [(0, 10), (20, 30)]}},
-            "property2": {0: {0: [(0, 5)]}, 1: {0: [(5, 15)]}},
+            MixtureKey({"property1": ["value1"]}): {0: {0: [(0, 10), (20, 30)]}},
+            MixtureKey({"property2": ["value2"]}): {0: {0: [(0, 5)]}, 1: {0: [(5, 15)]}},
         }
 
-        expected_partition_masses = {"property1": 20, "property2": 15}
+        expected_partition_masses = {
+            MixtureKey({"property1": ["value1"]}): 20,
+            MixtureKey({"property2": ["value2"]}): 15,
+        }
 
         result_chunk = ResultChunk(
             mock_result_index,
@@ -322,7 +326,7 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._get_element_counts = MagicMock(return_value=[("prop1", 2), ("prop2", 1)])
 
         # Expected data to be yielded from the iterator
-        expected_data = ["data3", "data1", "data2"]
+        expected_data = ["data1", "data3", "data2"]
 
         # Collecting data from generator
         data_collected = list(result_chunk._iterate_window_mixture(active_iterators))
@@ -351,7 +355,7 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._window_size = 4  # Assuming a window size of 2 for this test
 
         # Expected data to be yielded from the iterator, considering the window size and distribution
-        expected_data = ["data1", "data6", "data4", "data2", "data3", "data5"]
+        expected_data = ["data6", "data1", "data4", "data2", "data3", "data5"]
 
         # Collecting data from generator
         data_collected = list(result_chunk._iterate_window_mixture(active_iterators))
@@ -375,14 +379,12 @@ class TestResultChunk(unittest.TestCase):
         }
 
         # Since the order is shuffled and reproducibly random, we need to mock the randomness to predict the output
-        seed_everything_mock = MagicMock()
-        generate_hash_string_from_list_mock = MagicMock(return_value="some_hash_value")
+        seed_everything_from_list_mock = MagicMock()
         # Mock shuffle to sort instead, for predictability
         random_shuffle_mock = MagicMock(side_effect=lambda x: x.sort())
 
         with (
-            patch("mixtera.utils.seed_everything", seed_everything_mock),
-            patch("mixtera.utils.generate_hash_string_from_list", generate_hash_string_from_list_mock),
+            patch("mixtera.utils.seed_everything_from_list", seed_everything_from_list_mock),
             patch("random.shuffle", random_shuffle_mock),
         ):
 

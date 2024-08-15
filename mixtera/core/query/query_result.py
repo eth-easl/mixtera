@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Generator, Type
@@ -17,9 +18,9 @@ from mixtera.core.datacollection.index import (
     InvertedIndex,
 )
 from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
-from mixtera.core.query.mixture import Mixture
+from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import defaultdict_to_dict, generate_hashable_search_key, merge_property_dicts
+from mixtera.utils.utils import defaultdict_to_dict, merge_property_dicts, seed_everything_from_list
 
 _NUM_CPU = os.cpu_count() or 1
 INVERSION_POOL_SIZE = max(_NUM_CPU // 2, 1)  # TODO(#91): Make this configurable.
@@ -295,19 +296,16 @@ class QueryResult:
                 for intervals, interval_properties in file_entries.items():
                     # Intervals can be a simplified interval (e.g. '[-7,-2) | [11,15)') so we need a for loop
                     for interval in intervals:
-                        # Create a key that identifies the properties and values covered in this interval
-                        property_names = list(interval_properties.keys())
-                        property_values = [interval_properties[property_name] for property_name in property_names]
-                        hashable_key = generate_hashable_search_key(property_names, property_values)
+                        mixture_key = MixtureKey(interval_properties)
 
                         # Add the interval to the chunk index based on the generated key
-                        chunker_index[hashable_key][document_id][file_id].append([interval.lower, interval.upper])
+                        chunker_index[mixture_key][document_id][file_id].append([interval.lower, interval.upper])
 
         return chunker_index
 
     @staticmethod
     def _generate_per_mixture_component_chunks(
-        chunker_index: ChunkerIndex, component_key: str
+        chunker_index: ChunkerIndex, component_key: MixtureKey
     ) -> Generator[ChunkerIndexDatasetEntries, int, None]:
         """
         This method computes the partial chunks for each component of a mixture. A component here is considered one
@@ -408,6 +406,9 @@ class QueryResult:
         current_chunk_index = 0
         chunker_index_keys_idx = 0
         chunker_index_keys = list(self._chunker_index.keys())
+        empty_key_idx: set[int] = set()
+        seed_everything_from_list(chunker_index_keys)
+        random.shuffle(chunker_index_keys)
 
         # Create coroutines for component iterators and advance them to the first yield
         component_iterators = {
@@ -421,7 +422,7 @@ class QueryResult:
                 return
 
         base_mixture, target_chunk_index = yield
-        while True:
+        while True:  # pylint: disable=too-many-nested-blocks
             # Get the mixture from the caller as it might have changed
             mixture = base_mixture.mixture_in_rows()
 
@@ -430,23 +431,45 @@ class QueryResult:
                 #   1. All the chunk's components can yield --> we will be able to build a chunk, or
                 #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
                 #      and the coroutine will pass the exception upstream to __next__
-                try:
-                    chunk = {key: component_iterators[key].send(mixture[key]) for key in mixture.keys()}
-                except StopIteration:
+                # TODO(#97): Improve that chunks are built from different component iterators,
+                # otherwise we might skip over samples when they are not exactly divisible by the
+                # mixture specific chunk size
+                chunk = {}
+                number_of_keys_yielded = 0
+                for mixture_key in mixture.keys():
+                    for key in sorted(self._chunker_index.keys()):
+                        try:
+                            #  The == operator is not commutative, hence the following logic
+                            #  works as expected, this should be improved in
+                            if mixture_key == key:
+                                chunk[key] = component_iterators[key].send(mixture[mixture_key])
+                                number_of_keys_yielded += 1
+                                break
+                        except StopIteration:
+                            continue
+
+                if number_of_keys_yielded != len(mixture):
+                    # One of the components could not yield; we will not be able to build a chunk
                     return
+
                 if current_chunk_index == target_chunk_index:
                     base_mixture, target_chunk_index = yield ResultChunk(
                         chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
                     )
             else:
                 chunk = None
-                while chunker_index_keys_idx < len(chunker_index_keys) and chunk is None:
+                while len(empty_key_idx) < len(chunker_index_keys) and chunk is None:
+                    chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
+                    if chunker_index_keys_idx in empty_key_idx:
+                        chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
+                        continue
+
                     key = chunker_index_keys[chunker_index_keys_idx]
                     try:
                         chunk = component_iterators[key].send(base_mixture.chunk_size)
                     except StopIteration:
                         # The current key is exhausted; will need to produce chunks from the next available key
-                        chunker_index_keys_idx += 1
+                        empty_key_idx.add(chunker_index_keys_idx)
 
                 if chunk is None:
                     # There were no more available chunks; we mark the end of this query result with StopIteration
