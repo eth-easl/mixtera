@@ -1,4 +1,5 @@
 import hashlib
+import multiprocessing as mp
 import os
 import shutil
 from pathlib import Path
@@ -84,6 +85,8 @@ class QueryCache:
                             shutil.rmtree(hash_dir)
                         return None
                     logger.debug("Returning results from cache!")
+                    cached_query["query"].results._lock = mp.Lock()
+                    cached_query["query"].results._index = mp.Value("i", 0)
                     return cached_query["query"].results
                 logger.debug(f"'{cached_query['query']}' does not match '{str(query)}'.")
 
