@@ -67,7 +67,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mdc._init_database()
 
         mock_connect.assert_called_with(mdc._database_path)
-        self.assertEqual(mock_cursor_instance.execute.call_count, 3)
+        self.assertEqual(mock_cursor_instance.execute.call_count, 5)
         mock_connection.commit.assert_called_once()
 
     def test_init_database_without_mocked_sqlite(self):

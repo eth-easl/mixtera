@@ -72,10 +72,27 @@ class MixteraDataCollection:
             " line_start INTEGER NOT NULL,"
             " line_end INTEGER NOT NULL);"
         )
+        cur.execute("CREATE TABLE IF NOT EXISTS version (id INTEGER PRIMARY KEY, version_number INTEGER)")
+        cur.execute("INSERT INTO version (id, version_number) VALUES (1, 1)")
         conn.commit()
         logger.info("Database initialized.")
-
         return conn
+
+    def get_db_version(self) -> int:
+        assert self._connection, "Not connected to db!"
+        cur = self._connection.cursor()
+        cur.execute("SELECT version_number FROM version WHERE id = 1")
+        version = cur.fetchone()
+        assert version, "Could not fetch version from DB!"
+        return version[0]
+
+    def _db_incr_version(self) -> None:
+        assert self._connection, "Not connected to db!"
+        current_version = self.get_db_version()
+        cur = self._connection.cursor()
+        new_version = current_version + 1
+        cur.execute("UPDATE version SET version_number = ? WHERE id = 1", (new_version,))
+        self._connection.commit()
 
     def register_dataset(
         self,
@@ -97,6 +114,9 @@ class MixteraDataCollection:
             dtype.build_file_index(file, metadata_parser)
             metadata_parser.finalize()
             self._insert_index_into_table(metadata_parser.get_index())
+
+        self._db_incr_version()
+
         return True
 
     def _insert_dataset_into_table(
@@ -127,6 +147,7 @@ class MixteraDataCollection:
             cur.execute(query, (identifier, loc, type_id, serialized_parsing_func))
             self._connection.commit()
             inserted_id = cur.lastrowid
+            self._db_incr_version()
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during insertion: {err}")
             return -1
@@ -151,6 +172,7 @@ class MixteraDataCollection:
             ),
         )
         self._connection.commit()
+        self._db_incr_version()
 
         if cur.rowcount == 1:
             assert cur.lastrowid is not None and cur.lastrowid >= 0
@@ -199,6 +221,7 @@ class MixteraDataCollection:
         try:
             cur.executemany(query, query_payload)
             self._connection.commit()
+            self._db_incr_version()
         except sqlite3.Error as err:
             logger.error(f"An sqlite error occurred when bulk inserting index: {err}")
             return -1
@@ -235,6 +258,7 @@ class MixteraDataCollection:
                                 ),
                             )
             self._connection.commit()
+            self._db_incr_version()
 
         except sqlite3.Error as err:
             logger.error(f"A sqlite error occured during insertion: {err}")
@@ -317,6 +341,7 @@ class MixteraDataCollection:
             cur.execute(delete_dataset_query, (identifier,))
 
             self._connection.commit()
+            self._db_incr_version()
 
             #  Reset the index to reflect the changes
             self._index = self._read_index_from_database()
@@ -443,6 +468,7 @@ class MixteraDataCollection:
         executor.load_data(files, data_only_on_primary)
         new_index = executor.run()
         self._insert_partial_index_into_table(property_name, new_index)
+        self._db_incr_version()
         return True
 
     def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:

@@ -76,6 +76,7 @@ class TestLocalStub(unittest.TestCase):
         mixture = StaticMixture(chunk_size, {MixtureKey({"any": ["some"]}): 1.0})
         query.job_id = "test_job_id"
         self.local_stub._mdc = mock_mdc
+        self.local_stub._query_cache.enabled = False
         self.local_stub._register_query = MagicMock(return_value=True)
         args = QueryExecutionArgs(mixture=mixture)
         result = self.local_stub.execute_query(query, args)
@@ -91,6 +92,8 @@ class TestLocalStub(unittest.TestCase):
         query.job_id = "test_job_id"
         self.local_stub._register_query = MagicMock(return_value=False)
         self.local_stub._mdc = mock_mdc
+        self.local_stub._query_cache.enabled = False
+
         args = QueryExecutionArgs(mixture=mixture)
         result = self.local_stub.execute_query(query, args)
 

@@ -385,13 +385,18 @@ class QueryResult:
 
     def update_mixture(self, mixture: Mixture) -> None:
         """
-        Updates the mixture to be used for future chunks
+        Updates the mixture to be used.
+        There are two use cases:
+         1) Update mixture for future chunks, i.e., dynamic mixing
+         2) Be able to re-use QueryResult objects that have been cached
+            for different mixtures
 
         Args:
             mixture: the new mixture object
         """
         with self._lock:
             self._mixture = mixture
+            self._mixture.inform(self._chunker_index)
 
     def _chunk_generator(self) -> Generator[ResultChunk, tuple[Mixture, int], None]:
         """
