@@ -21,6 +21,7 @@ from mixtera.core.datacollection.index.index_collection import create_chunker_in
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import defaultdict_to_dict, merge_property_dicts, seed_everything_from_list
+from tqdm import tqdm
 
 _NUM_CPU = os.cpu_count() or 1
 INVERSION_POOL_SIZE = max(_NUM_CPU // 2, 1)  # TODO(#91): Make this configurable.
@@ -208,7 +209,8 @@ class QueryResult:
 
         # Execute tasks
         with mp.Pool(INVERSION_POOL_SIZE) as pool:
-            results = pool.map(handle_inversion_task, task_list)
+            results_iter = pool.imap(handle_inversion_task, task_list)
+            results = list(tqdm(results_iter, total=len(task_list), desc="Creating inverted index."))
 
         # Collect results
         for inversion_result in results:
