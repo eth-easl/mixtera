@@ -41,7 +41,8 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
 
     @property
     def n_shards(self) -> int:
-        return max(self._query_execution_args.num_workers * 8, 1)  # HF requires us to set some number.
+        # HF requires us to set some number.
+        return max(self._query_execution_args.num_workers, 1) * max(self._query_execution_args.dp_groups, 1) * 8
 
     @property
     def worker_id(self) -> int:
@@ -67,7 +68,12 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         return _MixteraHFIterable(self._client, self._query, self._query_execution_args, res_args, _shard_called=True)
 
     def validate_state(self) -> None:
-        assert self._shard_called, "shard_data_sources should have been called - something went wrong."
+        assert self._shard_called, (
+            f"[{self._dp_group_id}-{self._node_id}-{self.worker_id}]"
+            + "shard_data_sources should have been called - something went wrong."
+            + f"torch worker id = {MixteraTorchDataset.worker_id.fget(self)}, "
+            + f"self.worker_id = {self.worker_id}"
+        )
         assert (
             MixteraTorchDataset.worker_id.fget(self) == self.worker_id
         ), f"torch worker id = {MixteraTorchDataset.worker_id.fget(self)} != self.worker_id = {self.worker_id}"
