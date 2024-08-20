@@ -46,7 +46,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
 
     @property
     def worker_id(self) -> int:
-        assert self._shard_called, "shard_data_sources should have been called - something went wrong."
+        assert self._shard_call_count > 0, "shard_data_sources should have been called - something went wrong."
         return self._res_str_args.worker_id
 
     def shard_data_sources(self, worker_id: int, num_workers: int) -> "_MixteraHFIterable":
@@ -89,7 +89,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
                 assert (
                     self.worker_id == self._dp_group_id
                 ), f"self.worker_id = {self.worker_id} should be self._dp_group_id = {self._dp_group_id}"
-                self.worker_id = 0
+                self._res_str_args.worker_id = 0
 
             assert (
                 MixteraTorchDataset.worker_id.fget(self) == self.worker_id
