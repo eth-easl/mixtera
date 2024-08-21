@@ -267,7 +267,13 @@ def test_reader_reproducibility(
                                 query,
                                 query_exec_args,
                                 ResultStreamingArgs(
-                                    job_id=job_id, dp_group_id=dp_group_id, node_id=node_id, tunnel_via_server=tunnel
+                                    job_id=job_id,
+                                    dp_group_id=dp_group_id,
+                                    node_id=node_id,
+                                    tunnel_via_server=tunnel,
+                                    chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
+                                    chunk_reading_per_window_mixture=per_window_mixture,
+                                    chunk_reading_window_size=window_sizes,
                                 ),
                             )
                             dl = torch.utils.data.DataLoader(
