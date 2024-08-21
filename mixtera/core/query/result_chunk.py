@@ -1,5 +1,10 @@
+import ast
+import inspect
 import multiprocessing as mp
+import os
 import random
+import textwrap
+import typing
 from queue import Empty
 from typing import TYPE_CHECKING, Callable, Iterator, Optional, Type
 
@@ -21,6 +26,54 @@ MULTIPROCESSING_TIMEOUT = 90
 END_OF_STREAM_OBJECT = "END_OF_STREAM"
 
 
+@typing.no_type_check
+def allow_daemon_spawn() -> None:
+    # PyTorch's data loader spawns data loading workers as daemon processes
+    # Each data loader worker then uses this class here, meaning that it spawns processes
+    # By default, this is not allowed, since daemon processes may not have children
+    # In our case, we need to allow this, since we don't want to change torch's dataloader
+    # To this end, we allow starting a daemon process from a daemon process
+    # Note: We need to define this function within this module to properly monkey-patch this instance of multiprocessing
+    original_start = mp.Process.start
+
+    def patched_start(self, *args, **kwargs) -> None:
+        if self.daemon:  # if the child is a daemon
+            # Goal: Remove assertion that our parent is not a daemon
+
+            # Load source code of original start method
+            source = textwrap.dedent(inspect.getsource(original_start))
+
+            # Create AST
+            tree = ast.parse(source)
+
+            # Remove assertion from AST
+            for i, node in enumerate(tree.body[0].body):
+                if isinstance(node, ast.Assert) and "daemon" in ast.unparse(node):
+                    tree.body[0].body[i] = ast.Pass()
+                    break
+
+            # Generate a new function with correct context that we can use without the assertion
+            new_func = ast.FunctionDef(
+                name="modified_start", args=tree.body[0].args, body=tree.body[0].body, decorator_list=[]
+            )
+            module = ast.Module(body=[new_func], type_ignores=[])
+            compiled = compile(ast.fix_missing_locations(module), "<string>", "exec")
+
+            namespace = original_start.__globals__.copy()
+            namespace.update(self.__dict__)
+            namespace.update(self.__class__.__dict__)
+
+            # Execute the compiled code in this namespace and call it
+            exec(compiled, namespace)  # pylint: disable=exec-used
+            namespace["modified_start"](self, *args, **kwargs)
+        else:
+            # For non-daemon processes, use the original start method
+            original_start(self, *args, **kwargs)
+
+    # Do the monkey-patch
+    mp.Process.start = patched_start
+
+
 class ResultChunk:
     def __init__(
         self,
@@ -31,6 +84,8 @@ class ResultChunk:
         chunk_size: int,
         mixture: Optional[dict[MixtureKey, int]] = None,
     ) -> None:
+        allow_daemon_spawn()
+
         self._result_index = result_index
         self._dataset_type_dict = dataset_type_dict
         self._file_path_dict = file_path_dict
@@ -330,6 +385,7 @@ class ResultChunk:
                         queue,
                         mp.Process(
                             target=self._reader_process,
+                            daemon=True if mp.current_process().daemon else None,
                             args=(
                                 queue,
                                 self._dataset_type_dict,
@@ -367,8 +423,24 @@ class ResultChunk:
             server_connection: the server connection to use
             workloads: the workloads to process
         """
+        # We might have been started as a daemon,
+        # in which case we need to clean up ourselves in case for whatever reason our parent exits.
+        start_ppid = os.getppid() if mp.current_process().daemon else None
         parsing_func_dict: dict[int, Callable[[str], str]] = dill.loads(pickled_parsing_func_dict)
         for dataset_id, file_id, ranges in workloads:
+            if start_ppid is not None and start_ppid != os.getppid():
+                logger.error(
+                    "In daemonic ResultChunk reader the parent pid changed "
+                    + f"from {start_ppid} to {os.getppid()}. Assuming parent crashed and exiting."
+                )
+                try:
+                    queue.put(END_OF_STREAM_OBJECT)
+                    queue.close()
+                except Exception as ex:  # pylint: disable=broad-exception-caught
+                    logger.error(f"Error while putting EOS object into queue:\n{ex}\n\nExiting anyways.")
+
+                return
+
             filename_dict = {file_path_dict[file_id]: ranges}
             instance_iterator = dataset_type_dict[dataset_id].read_ranges_from_files(
                 filename_dict, parsing_func_dict[dataset_id], server_connection
