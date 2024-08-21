@@ -14,7 +14,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
 from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
-from mixtera.utils import seed_everything_from_list
+from mixtera.utils import is_on_github_actions, seed_everything_from_list
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
@@ -124,23 +124,26 @@ class ResultChunk:
                 )
 
         if self._degree_of_parallelism < 1:
-            logger.warning(
-                f"Degree of parallelism is set to {self._degree_of_parallelism} which is invalid. "
-                "Setting degree of parallelism to 1."
-            )
+            if not is_on_github_actions:
+                logger.warning(
+                    f"Degree of parallelism is set to {self._degree_of_parallelism} which is invalid. "
+                    "Setting degree of parallelism to 1."
+                )
             self._degree_of_parallelism = 1
 
         if self._per_window_mixture and self._window_size > self._chunk_size:
-            logger.warning(
-                f"Window size is set to {self._window_size} which is > the chunk size of {self._chunk_size}. "
-                "Setting window size to the chunk size."
-            )
+            if not is_on_github_actions:
+                logger.warning(
+                    f"Window size is set to {self._window_size} which is > the chunk size of {self._chunk_size}. "
+                    "Setting window size to the chunk size."
+                )
             self._window_size = self._chunk_size
 
         if self._per_window_mixture and self._window_size < 1:
-            logger.warning(
-                f"Window size is set to {self._window_size} which is invalid. " "Setting window size to 128."
-            )
+            if not is_on_github_actions:
+                logger.warning(
+                    f"Window size is set to {self._window_size} which is invalid. " "Setting window size to 128."
+                )
             self._window_size = 128
 
         # To determine the number of processes per property combination, we need the mixture
@@ -148,7 +151,8 @@ class ResultChunk:
         if (self._per_window_mixture or self._degree_of_parallelism > 1) and (
             self._mixture is None or len(self._mixture) == 0
         ):
-            logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
+            if not is_on_github_actions:
+                logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
     def _infer_mixture(self) -> dict[str, int]:
