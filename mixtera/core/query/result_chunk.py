@@ -84,7 +84,7 @@ class ResultChunk:
         chunk_size: int,
         mixture: Optional[dict[MixtureKey, int]] = None,
     ) -> None:
-        allow_daemon_spawn()
+        # allow_daemon_spawn()
 
         self._result_index = result_index
         self._dataset_type_dict = dataset_type_dict
