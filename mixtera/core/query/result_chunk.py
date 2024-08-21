@@ -25,6 +25,8 @@ Workloads = list[Workload]
 MULTIPROCESSING_TIMEOUT = 90
 END_OF_STREAM_OBJECT = "END_OF_STREAM"
 
+original_start = mp.Process.start
+
 
 @typing.no_type_check
 def allow_daemon_spawn() -> None:
@@ -34,8 +36,6 @@ def allow_daemon_spawn() -> None:
     # In our case, we need to allow this, since we don't want to change torch's dataloader
     # To this end, we allow starting a daemon process from a daemon process
     # Note: We need to define this function within this module to properly monkey-patch this instance of multiprocessing
-    original_start = mp.Process.start
-
     def patched_start(self, *args, **kwargs) -> None:
         if self.daemon:  # if the child is a daemon
             # Goal: Remove assertion that our parent is not a daemon
