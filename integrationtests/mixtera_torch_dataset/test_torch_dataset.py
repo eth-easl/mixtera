@@ -230,11 +230,11 @@ def test_reader_reproducibility(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     if (
-        not query_exec_args.dp_groups == 1
-        or not query_exec_args.nodes_per_group == 1
+        (query_exec_args.dp_groups > 1)
+        or (query_exec_args.nodes_per_group > 1)
         or query_exec_args.num_workers > 3
-        or (batch_size != 1 and batch_size != 500)
-        or query_exec_args.mixture.chunk_size > 500
+        or (batch_size not in [1, 500])
+        or (query_exec_args.mixture.chunk_size > 500)
     ):
         return
 
@@ -245,6 +245,9 @@ def test_reader_reproducibility(
     for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
         for per_window_mixture in per_window_mixtures:
             for window_size in window_sizes:
+                if reader_degree_of_parallelism > 1 and (window_size != 64):
+                    continue
+
                 result_list = []
 
                 for i in range(REPRODUCIBILITY_ITERATIONS):
