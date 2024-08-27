@@ -1,5 +1,10 @@
+import ast
+import inspect
 import multiprocessing as mp
+import os
 import random
+import textwrap
+import typing
 from queue import Empty
 from typing import TYPE_CHECKING, Callable, Iterator, Optional, Type
 
@@ -9,7 +14,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
 from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
-from mixtera.utils import seed_everything_from_list
+from mixtera.utils import is_on_github_actions, seed_everything_from_list
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
@@ -19,6 +24,54 @@ Workloads = list[Workload]
 
 MULTIPROCESSING_TIMEOUT = 90
 END_OF_STREAM_OBJECT = "END_OF_STREAM"
+
+original_start = mp.Process.start
+
+
+@typing.no_type_check
+def allow_daemon_spawn() -> None:
+    # PyTorch's data loader spawns data loading workers as daemon processes
+    # Each data loader worker then uses this class here, meaning that it spawns processes
+    # By default, this is not allowed, since daemon processes may not have children
+    # In our case, we need to allow this, since we don't want to change torch's dataloader
+    # To this end, we allow starting a daemon process from a daemon process
+    # Note: We need to define this function within this module to properly monkey-patch this instance of multiprocessing
+    def patched_start(self, *args, **kwargs) -> None:
+        if self.daemon:  # if the child is a daemon
+            # Goal: Remove assertion that our parent is not a daemon
+
+            # Load source code of original start method
+            source = textwrap.dedent(inspect.getsource(original_start))
+
+            # Create AST
+            tree = ast.parse(source)
+
+            # Remove assertion from AST
+            for i, node in enumerate(tree.body[0].body):
+                if isinstance(node, ast.Assert) and "daemon" in ast.unparse(node):
+                    tree.body[0].body[i] = ast.Pass()
+                    break
+
+            # Generate a new function with correct context that we can use without the assertion
+            new_func = ast.FunctionDef(
+                name="modified_start", args=tree.body[0].args, body=tree.body[0].body, decorator_list=[]
+            )
+            module = ast.Module(body=[new_func], type_ignores=[])
+            compiled = compile(ast.fix_missing_locations(module), "<string>", "exec")
+
+            namespace = original_start.__globals__.copy()
+            namespace.update(self.__dict__)
+            namespace.update(self.__class__.__dict__)
+
+            # Execute the compiled code in this namespace and call it
+            exec(compiled, namespace)  # pylint: disable=exec-used
+            namespace["modified_start"](self, *args, **kwargs)
+        else:
+            # For non-daemon processes, use the original start method
+            original_start(self, *args, **kwargs)
+
+    # Do the monkey-patch
+    mp.Process.start = patched_start
 
 
 class ResultChunk:
@@ -31,6 +84,8 @@ class ResultChunk:
         chunk_size: int,
         mixture: Optional[dict[MixtureKey, int]] = None,
     ) -> None:
+        allow_daemon_spawn()
+
         self._result_index = result_index
         self._dataset_type_dict = dataset_type_dict
         self._file_path_dict = file_path_dict
@@ -69,23 +124,26 @@ class ResultChunk:
                 )
 
         if self._degree_of_parallelism < 1:
-            logger.warning(
-                f"Degree of parallelism is set to {self._degree_of_parallelism} which is invalid. "
-                "Setting degree of parallelism to 1."
-            )
+            if not is_on_github_actions:
+                logger.warning(
+                    f"Degree of parallelism is set to {self._degree_of_parallelism} which is invalid. "
+                    "Setting degree of parallelism to 1."
+                )
             self._degree_of_parallelism = 1
 
         if self._per_window_mixture and self._window_size > self._chunk_size:
-            logger.warning(
-                f"Window size is set to {self._window_size} which is > the chunk size of {self._chunk_size}. "
-                "Setting window size to the chunk size."
-            )
+            if not is_on_github_actions:
+                logger.warning(
+                    f"Window size is set to {self._window_size} which is > the chunk size of {self._chunk_size}. "
+                    "Setting window size to the chunk size."
+                )
             self._window_size = self._chunk_size
 
         if self._per_window_mixture and self._window_size < 1:
-            logger.warning(
-                f"Window size is set to {self._window_size} which is invalid. " "Setting window size to 128."
-            )
+            if not is_on_github_actions:
+                logger.warning(
+                    f"Window size is set to {self._window_size} which is invalid. " "Setting window size to 128."
+                )
             self._window_size = 128
 
         # To determine the number of processes per property combination, we need the mixture
@@ -93,7 +151,8 @@ class ResultChunk:
         if (self._per_window_mixture or self._degree_of_parallelism > 1) and (
             self._mixture is None or len(self._mixture) == 0
         ):
-            logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
+            if not is_on_github_actions:
+                logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
 
         # TODO(MaxiBoether): with duckdb we always have all properties, and the mixtures specified by the user
         # might not work because they dont cover all properties. right now the implementation assumes the mixture
@@ -324,6 +383,9 @@ class ResultChunk:
             process_counts: a dictionary with the number of processes per property combination
         """
         processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = {}
+        total_processes = 0
+        pickled_func_dict = dill.dumps(self._parsing_func_dict)
+        start_as_daemon = True if mp.current_process().daemon else None
         for key, process_count in process_counts.items():
             processes[key] = []
 
@@ -342,17 +404,19 @@ class ResultChunk:
 
             # Create and start the processes
             for i in range(1, len(partition_ranges)):
+                total_processes += 1
                 queue: mp.Queue = mp.Queue()
                 processes[key].append(
                     (
                         queue,
                         mp.Process(
                             target=self._reader_process,
+                            daemon=start_as_daemon,
                             args=(
                                 queue,
                                 self._dataset_type_dict,
                                 self._file_path_dict,
-                                dill.dumps(self._parsing_func_dict),
+                                pickled_func_dict,
                                 self._server_connection,
                                 workloads[key][partition_ranges[i - 1] : partition_ranges[i]],
                             ),
@@ -363,6 +427,7 @@ class ResultChunk:
                 # Start the process
                 processes[key][-1][1].start()
 
+        logger.debug(f"Started {total_processes} processes for chunk processing (dop = {self._degree_of_parallelism})")
         return processes
 
     @staticmethod
@@ -385,8 +450,24 @@ class ResultChunk:
             server_connection: the server connection to use
             workloads: the workloads to process
         """
+        # We might have been started as a daemon,
+        # in which case we need to clean up ourselves in case for whatever reason our parent exits.
+        start_ppid = os.getppid() if mp.current_process().daemon else None
         parsing_func_dict: dict[int, Callable[[str], str]] = dill.loads(pickled_parsing_func_dict)
         for dataset_id, file_id, ranges in workloads:
+            if start_ppid is not None and start_ppid != os.getppid():
+                logger.error(
+                    "In daemonic ResultChunk reader the parent pid changed "
+                    + f"from {start_ppid} to {os.getppid()}. Assuming parent crashed and exiting."
+                )
+                try:
+                    queue.put(END_OF_STREAM_OBJECT)
+                    queue.close()
+                except Exception as ex:  # pylint: disable=broad-exception-caught
+                    logger.error(f"Error while putting EOS object into queue:\n{ex}\n\nExiting anyways.")
+
+                return
+
             filename_dict = {file_path_dict[file_id]: ranges}
             instance_iterator = dataset_type_dict[dataset_id].read_ranges_from_files(
                 filename_dict, parsing_func_dict[dataset_id], server_connection
