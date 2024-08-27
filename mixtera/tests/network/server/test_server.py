@@ -44,6 +44,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
         mock_read_pickeled_object.side_effect = [MagicMock(), query_mock]  # mixture, query
         mock_read_int.side_effect = [1, 2, 3]  # dp_groups, nodes_per_group, num_workers
         mock_writer = create_mock_writer()
+        self.server._local_stub._query_cache.enabled = False  # mocks break pickle
 
         await self.server._register_query(create_mock_reader(b""), mock_writer)
 

@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import portion as P
@@ -127,8 +129,13 @@ class TestQueryPlan(unittest.TestCase):
 
 class TestQuery(unittest.TestCase):
     def setUp(self):
-        self.client = MixteraClient.from_directory(".")
+        self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.directory = Path(self.temp_dir.name)
+        self.client = MixteraClient.from_directory(self.directory)
         self.query = Query("job_id")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
 
     def test_init(self):
         self.assertIsInstance(self.query.query_plan, QueryPlan)
