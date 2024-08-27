@@ -366,6 +366,8 @@ class ResultChunk:
         """
         processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = {}
         total_processes = 0
+        pickled_func_dict = dill.dumps(self._parsing_func_dict)
+        start_as_daemon = True if mp.current_process().daemon else None
         for key, process_count in process_counts.items():
             processes[key] = []
 
@@ -391,12 +393,12 @@ class ResultChunk:
                         queue,
                         mp.Process(
                             target=self._reader_process,
-                            daemon=True if mp.current_process().daemon else None,
+                            daemon=start_as_daemon,
                             args=(
                                 queue,
                                 self._dataset_type_dict,
                                 self._file_path_dict,
-                                dill.dumps(self._parsing_func_dict),
+                                pickled_func_dict,
                                 self._server_connection,
                                 workloads[key][partition_ranges[i - 1] : partition_ranges[i]],
                             ),

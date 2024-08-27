@@ -235,7 +235,7 @@ def test_reader_reproducibility(
         or (query_exec_args.nodes_per_group > 1)
         or query_exec_args.num_workers > 3
         or (batch_size not in [1, 500])
-        or (query_exec_args.mixture.chunk_size > 500)
+        or (query_exec_args.mixture.chunk_size > 750)
     ):
         return
 
@@ -246,7 +246,7 @@ def test_reader_reproducibility(
     for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
         for per_window_mixture in per_window_mixtures:
             for window_size in window_sizes:
-                if reader_degree_of_parallelism > 1 and (window_size != 64):
+                if reader_degree_of_parallelism > 1 and (query_exec_args.mixture.chunk_size < 500):
                     continue
 
                 result_list = []
