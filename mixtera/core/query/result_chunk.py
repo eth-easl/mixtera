@@ -409,7 +409,7 @@ class ResultChunk:
                 # Start the process
                 processes[key][-1][1].start()
 
-        logger.debug(f"Started {total_processes} processes; dop = {self._degree_of_parallelism}, pc = {process_counts}")
+        logger.debug(f"Started {total_processes} processes for chunk processing (dop = {self._degree_of_parallelism})")
         return processes
 
     @staticmethod
