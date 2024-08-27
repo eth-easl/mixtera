@@ -70,6 +70,7 @@ class Select(Operator):
             sql = f"SELECT * FROM samples WHERE {where_clause}"
         else:
             sql = "SELECT * FROM samples"
+        return sql, all_params
 
         # Generate the ORDER BY clause dynamically
         order_by_columns = ["dataset_id", "file_id"]

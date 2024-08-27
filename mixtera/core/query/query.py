@@ -85,7 +85,9 @@ class Query:
         columns = conn.execute(columns_query, parameters).fetch_arrow_table().column_names
 
         # Determine group columns (all columns except 'sample_id')
-        group_cols = [col for col in columns if col != "sample_id"]
+        group_cols = ["dataset_id", "file_id"] + sorted(
+            [col for col in columns if col not in ["sample_id", "dataset_id", "file_id"]]
+        )
 
         # Create the partition by clause for the window functions
         partition_clause = ", ".join(group_cols)
