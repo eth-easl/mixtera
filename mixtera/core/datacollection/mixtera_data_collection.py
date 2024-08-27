@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Callable, List, Type
 
@@ -29,6 +30,23 @@ class MixteraDataCollection:
             self._connection = self._init_database()
         else:
             self._connection = self._load_db_from_disk()
+
+        self._configure_duckdb()
+
+    def _configure_duckdb(self):
+        # Set the number of threads DuckDB can use
+        num_threads = os.cpu_count()  # Use all available cores
+        self._connection.execute(f"SET threads TO {max(num_threads - 4,1)}")
+
+        # Increase the memory limit (adjust based on your system's available memory)
+        self._connection.execute("SET memory_limit = '200GB'")  # TODO(MaxiBoether): make this configurable
+
+        # Optimize for bulk inserts
+        self._connection.execute("PRAGMA journal_mode = OFF")
+        self._connection.execute("PRAGMA synchronous = OFF")
+        self._connection.execute(f"PRAGMA temp_directory = '{self._directory}'")
+        # self._connection.execute("PRAGMA force_compression = 'uncompressed'")
+        # self._connection.execute("PRAGMA enable_fsst_vectors = false")
 
     def _load_db_from_disk(self) -> duckdb.DuckDBPyConnection:
         assert self._database_path.exists()
@@ -181,6 +199,8 @@ class MixteraDataCollection:
 
     def _insert_samples_with_metadata(self, dataset_id: int, file_id: int, metadata: list[dict]):
         logger.debug("Inserting samples prep.")
+        import polars as pl
+
         if not metadata:
             logger.warning(f"No metadata extracted from file {file_id} in dataset {dataset_id}")
             return
@@ -193,29 +213,29 @@ class MixteraDataCollection:
         # Add new columns to the samples table if needed
         self._add_columns_to_samples_table(metadata_keys)
 
-        logger.debug("Prepping query.")
-
-        # Prepare the INSERT query
-        columns = ["dataset_id", "file_id", "sample_id"] + metadata_keys
-        placeholders = ", ".join(["?"] * len(columns))
-        query = f"INSERT INTO samples ({', '.join(columns)}) VALUES ({placeholders})"
-
-        # Prepare the values for batch insert
-        values = [
-            [dataset_id, file_id, sample["sample_id"]] + [
-                sample.get(key) if isinstance(sample.get(key), list) else [sample.get(key)] for key in metadata_keys
-            ]
+        logger.debug("Prepping dataframe.")
+        # Prepare the data as a list of dictionaries
+        data = [
+            {
+                "dataset_id": dataset_id,
+                "file_id": file_id,
+                "sample_id": sample["sample_id"],
+                **{key: sample.get(key) for key in metadata_keys},
+            }
             for sample in metadata
         ]
 
-        logger.debug("Executing.")
-        # Execute the batch insert
-        cur = self._connection.cursor()
-        cur.executemany(query, values)
-        logger.debug("Commiting.")
-        self._connection.commit()
-        logger.debug("Commited.")
+        # Create a Polars DataFrame
+        df = pl.DataFrame(data)
 
+        logger.debug("Configuring duckdb")
+
+        # Perform the bulk insert
+        duckdb.sql("INSERT INTO samples SELECT * FROM df", connection=self._connection)
+
+        logger.debug("Bulk insert done.")
+        self._connection.commit()
+        logger.debug("Commited")
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
