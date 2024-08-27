@@ -197,15 +197,19 @@ class MixteraDataCollection:
         placeholders = ", ".join(["?"] * len(columns))
         query = f"INSERT INTO samples ({', '.join(columns)}) VALUES ({placeholders})"
 
-        cur = self._connection.cursor()
-
-        for sample in metadata:
-            values = [dataset_id, file_id, sample["sample_id"]] + [
+        # Prepare the values for batch insert
+        values = [
+            [dataset_id, file_id, sample["sample_id"]] + [
                 sample.get(key) if isinstance(sample.get(key), list) else [sample.get(key)] for key in metadata_keys
             ]
-            cur.execute(query, values)
+            for sample in metadata
+        ]
 
+        # Execute the batch insert
+        cur = self._connection.cursor()
+        cur.executemany(query, values)
         self._connection.commit()
+
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
