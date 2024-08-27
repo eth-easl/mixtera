@@ -80,16 +80,15 @@ class QueryResult:
         """
         # Prepare structures for iterable chunking
         self._mixture = mixture
-        self.results = results
         logger.debug(results)
         logger.debug("Instantiating QueryResult..")
         logger.debug("Creating chunker index.")
-        self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(self.results)
+        self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
         self._mixture.inform(self._chunker_index)
 
         # Set up the auxiliary data structures
-        self._meta = self._parse_meta(mdc)
+        self._meta = self._parse_meta(mdc, results)
 
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
@@ -103,11 +102,11 @@ class QueryResult:
         self._num_returns_gen = 0
         logger.debug("QueryResult instantiated.")
 
-    def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
-        dataset_ids = set(self.results["dataset_id"].unique())
-        file_ids = set(self.results["file_id"].unique())
+    def _parse_meta(self, mdc: MixteraDataCollection, results: pl.DataFrame) -> dict:
+        dataset_ids = set(results["dataset_id"].unique())
+        file_ids = set(results["file_id"].unique())
 
-        total_length = len(self.results)
+        total_length = len(results)
 
         return {
             "dataset_type": {did: mdc._get_dataset_type_by_id(did) for did in dataset_ids},
@@ -261,7 +260,7 @@ class QueryResult:
         logger.info("Converting to chunker index structure...")
         chunker_index = create_chunker_index()
 
-        for row in tqdm(df.iter_rows(named=True), desc="Building chunker index."):
+        for row in tqdm(df.iter_rows(named=True), desc="Building chunker index.", total=len(df)):
             dataset_id = row["dataset_id"]
             file_id = row["file_id"]
             properties = {
