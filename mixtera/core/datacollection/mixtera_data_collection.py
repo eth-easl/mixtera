@@ -167,7 +167,6 @@ class MixteraDataCollection:
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-
     def _add_columns_to_samples_table(self, columns: list[str]):
         cur = self._connection.cursor()
         for column in columns:
@@ -202,8 +201,7 @@ class MixteraDataCollection:
 
         for sample in metadata:
             values = [dataset_id, file_id, sample["sample_id"]] + [
-                sample.get(key) if isinstance(sample.get(key), list) else [sample.get(key)]
-                for key in metadata_keys
+                sample.get(key) if isinstance(sample.get(key), list) else [sample.get(key)] for key in metadata_keys
             ]
             cur.execute(query, values)
 

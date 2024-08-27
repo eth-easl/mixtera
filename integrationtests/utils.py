@@ -49,7 +49,7 @@ def setup_func(some_class: Any):
 def calc_func(executor: Any, batch: dict[str, np.ndarray]) -> List[Any]:
     return ["test_category"]
 
-        
+
 class TestMetadataParser(MetadataParser):
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         metadata = payload["meta"]
@@ -57,6 +57,5 @@ class TestMetadataParser(MetadataParser):
             sample_id=line_number,
             language=metadata["language"],
             license=metadata["license"],
-            doublelanguage=[metadata["language"],metadata["language"]]
+            doublelanguage=[metadata["language"], metadata["language"]],
         )
-

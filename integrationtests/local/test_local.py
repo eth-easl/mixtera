@@ -144,9 +144,7 @@ def test_filter_license_and_html(
         + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
     )
     query = (
-        Query.for_job(result_streaming_args.job_id)
-        .select(("language", "==", "HTML"))
-        .select(("license", "==", "CC"))
+        Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML")).select(("license", "==", "CC"))
     )
     client.execute_query(query, query_exec_args)
     result_samples = []

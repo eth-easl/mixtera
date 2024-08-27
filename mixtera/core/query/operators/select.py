@@ -1,9 +1,10 @@
 from typing import Any, Tuple, Union
 
+from loguru import logger
 from mixtera.core.query.query import QueryPlan
 
 from ._base import Operator
-from loguru import logger
+
 
 class Select(Operator):
     def __init__(self, conditions: Union[Tuple[str, str, Any], list[Tuple[str, str, Any]], None]) -> None:
@@ -22,11 +23,11 @@ class Select(Operator):
             for field, op, value in conditions:
                 if isinstance(value, list):
                     if op == "==":
-                        placeholders = ', '.join(['?' for _ in value])
+                        placeholders = ", ".join(["?" for _ in value])
                         clauses.append(f"array_contains_any({field}, [{placeholders}])")
                         params.extend(value)
                     elif op == "!=":
-                        placeholders = ', '.join(['?' for _ in value])
+                        placeholders = ", ".join(["?" for _ in value])
                         clauses.append(f"NOT array_contains_any({field}, [{placeholders}])")
                         params.extend(value)
                     elif op in [">", "<", ">=", "<="]:
@@ -65,16 +66,13 @@ class Select(Operator):
                 logger.warning(f"Unexpected child type: {type(child)}")
 
         if or_clauses:
-            where_clause = f" OR ".join(or_clauses)
+            where_clause = " OR ".join(or_clauses)
             sql = f"SELECT * FROM samples WHERE {where_clause}"
         else:
             sql = "SELECT * FROM samples"
 
         # Generate the ORDER BY clause dynamically
-        order_by_columns = [
-            "dataset_id",
-            "file_id"
-        ]
+        order_by_columns = ["dataset_id", "file_id"]
 
         # Get all other column names
         column_query = """
@@ -84,14 +82,14 @@ class Select(Operator):
         AND column_name NOT IN ('dataset_id', 'file_id', 'sample_id')
         ORDER BY column_name
         """
-        
+
         # Execute the column query to get the list of columns
         columns = connection.execute(column_query).fetchall()
         other_columns = sorted([col[0] for col in columns])
-        
+
         # Add other columns to the ORDER BY list
         order_by_columns.extend(other_columns)
-        
+
         # Add sample_id as the last sorting criterion
         order_by_columns.append("sample_id")
 

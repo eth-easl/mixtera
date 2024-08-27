@@ -94,7 +94,15 @@ class ResultChunk:
             self._mixture is None or len(self._mixture) == 0
         ):
             logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
-            self._mixture = self._infer_mixture()
+
+        # TODO(MaxiBoether): with duckdb we always have all properties, and the mixtures specified by the user
+        # might not work because they dont cover all properties. right now the implementation assumes the mixture
+        # here as exactly the same keys as self._result_index.
+        # However, this is not true for the reason previously mentioned.
+        # need to think about whether we just always infer the mixture or
+        # search for all matching keys and use the minimal one if
+        # mixture is provided (probably the better but more involved solution)
+        self._mixture = self._infer_mixture()
 
     def _infer_mixture(self) -> dict[str, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
@@ -231,9 +239,16 @@ class ResultChunk:
                         continue
                     try:
                         # Yield the next instance from the iterator
-                        #if property_name not in active_iterators:
-                        logger.error(active_iterators)
-                        logger.error(element_counts)
+                        if property_name not in active_iterators:
+                            logger.error(active_iterators)
+                            logger.error(element_counts)
+                            logger.error(type(property_name))
+                            logger.error(str(property_name))
+                            for key in active_iterators.keys():
+                                logger.error(key)
+                                logger.error(type(key))
+                                logger.error(property_name == key)
+
                         yield next(active_iterators[property_name])
                         nothing_yielded_window = False
                         processed_items[property_name] += 1

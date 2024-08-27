@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Generator, Type
 
 import dill
-import portion
 import polars as pl
+import portion
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
@@ -104,8 +104,8 @@ class QueryResult:
         logger.debug("QueryResult instantiated.")
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
-        dataset_ids = set(self.results['dataset_id'].unique())
-        file_ids = set(self.results['file_id'].unique())
+        dataset_ids = set(self.results["dataset_id"].unique())
+        file_ids = set(self.results["file_id"].unique())
 
         total_length = len(self.results)
 
@@ -261,39 +261,54 @@ class QueryResult:
         # This function NEEDS sorted input
 
         # Identify groups and create intervals
-        group_cols = [col for col in df.columns if col not in ['sample_id']]
-        
-        # Step 1: Create a group_id for consecutive intervals
-        df_with_group = df.with_columns([
-            (
-                (pl.col('sample_id').diff().fill_null(0) != 1) |  # if there is a non consecutive sample id
-                (pl.struct(group_cols).ne(pl.struct(group_cols).shift()).fill_null(True)) # OR if a group column changes
-            ).cum_sum().alias('group_id')
-        ])
+        group_cols = [col for col in df.columns if col not in ["sample_id"]]
 
-        #logger.debug(df_with_group)
+        # Step 1: Create a group_id for consecutive intervals
+        df_with_group = df.with_columns(
+            [
+                (
+                    (pl.col("sample_id").diff().fill_null(0) != 1)  # if there is a non consecutive sample id
+                    | (
+                        pl.struct(group_cols).ne(pl.struct(group_cols).shift()).fill_null(True)
+                    )  # OR if a group column changes
+                )
+                .cum_sum()
+                .alias("group_id")
+            ]
+        )
+
+        # logger.debug(df_with_group)
 
         # Step 2: Group by all columns including the new group_id and calculate intervals
-        df_with_intervals = df_with_group.group_by(group_cols + ['group_id']).agg([
-            pl.col('sample_id').min().alias('interval_start'),
-            (pl.col('sample_id').max() + 1).alias('interval_end')
-        ]).sort(['dataset_id', 'file_id', 'interval_start'])
+        df_with_intervals = (
+            df_with_group.group_by(group_cols + ["group_id"])
+            .agg(
+                [
+                    pl.col("sample_id").min().alias("interval_start"),
+                    (pl.col("sample_id").max() + 1).alias("interval_end"),
+                ]
+            )
+            .sort(["dataset_id", "file_id", "interval_start"])
+        )
 
-        #logger.debug(df_with_intervals)
+        # logger.debug(df_with_intervals)
 
         # Convert to chunker index structure
         chunker_index = create_chunker_index()
         for row in df_with_intervals.iter_rows(named=True):
-            dataset_id = row['dataset_id']
-            file_id = row['file_id']
-            properties = {k: v if isinstance(v, list) else [v] for k, v in row.items() if k not in ['dataset_id', 'file_id', 'group_id', 'interval_start', 'interval_end']}
+            dataset_id = row["dataset_id"]
+            file_id = row["file_id"]
+            properties = {
+                k: v if isinstance(v, list) else [v]
+                for k, v in row.items()
+                if k not in ["dataset_id", "file_id", "group_id", "interval_start", "interval_end"]
+            }
             mixture_key = MixtureKey(properties)
-            interval = [row['interval_start'], row['interval_end']]
+            interval = [row["interval_start"], row["interval_end"]]
             chunker_index[mixture_key][dataset_id][file_id].append(interval)
 
-        #logger.debug(chunker_index)
+        # logger.debug(chunker_index)
         return chunker_index
-
 
     @staticmethod
     def _create_chunker_index_old(inverted_index: InvertedIndex) -> ChunkerIndex:
