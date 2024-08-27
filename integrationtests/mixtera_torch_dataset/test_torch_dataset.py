@@ -5,6 +5,7 @@ from pathlib import Path
 
 import torch
 from integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
+from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
@@ -249,7 +250,7 @@ def test_reader_reproducibility(
                     continue
 
                 result_list = []
-
+                logger.info("Running iterations.")
                 for i in range(REPRODUCIBILITY_ITERATIONS):
                     group_batches = {}
                     for dp_group_id in range(query_exec_args.dp_groups):
@@ -287,6 +288,7 @@ def test_reader_reproducibility(
                         group_batches[dp_group_id] = node_batches
                     result_list.append(group_batches)
 
+                logger.info("Iterations done, running comparisons.")
                 reference_batches = result_list[0][0][0]  # Use the first node's batches as the reference
 
                 for i in range(1, REPRODUCIBILITY_ITERATIONS):
@@ -299,6 +301,8 @@ def test_reader_reproducibility(
                             assert (
                                 batches == reference_batches
                             ), f"Mismatch in batch order for group {dp_group_id}, node {node_id}"
+
+                logger.info("Comparisons done.")
 
 
 def test_torchds(
