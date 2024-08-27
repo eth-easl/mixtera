@@ -37,16 +37,8 @@ class MixteraDataCollection:
         # Set the number of threads DuckDB can use
         num_threads = os.cpu_count()  # Use all available cores
         self._connection.execute(f"SET threads TO {max(num_threads - 4,1)}")
-
-        # Increase the memory limit (adjust based on your system's available memory)
         self._connection.execute("SET memory_limit = '200GB'")  # TODO(MaxiBoether): make this configurable
-
-        # Optimize for bulk inserts
-        self._connection.execute("PRAGMA journal_mode = OFF")
-        self._connection.execute("PRAGMA synchronous = OFF")
         self._connection.execute(f"PRAGMA temp_directory = '{self._directory}'")
-        # self._connection.execute("PRAGMA force_compression = 'uncompressed'")
-        # self._connection.execute("PRAGMA enable_fsst_vectors = false")
 
     def _load_db_from_disk(self) -> duckdb.DuckDBPyConnection:
         assert self._database_path.exists()
@@ -224,18 +216,11 @@ class MixteraDataCollection:
             }
             for sample in metadata
         ]
-
-        # Create a Polars DataFrame
+        # Inserting via a dataframe seems to be the fastest
         df = pl.DataFrame(data)
-
-        logger.debug("Configuring duckdb")
-
-        # Perform the bulk insert
         duckdb.sql("INSERT INTO samples SELECT * FROM df", connection=self._connection)
 
-        logger.debug("Bulk insert done.")
         self._connection.commit()
-        logger.debug("Commited")
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:

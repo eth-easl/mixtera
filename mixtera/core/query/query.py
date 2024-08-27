@@ -76,9 +76,51 @@ class Query:
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
         logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
-        sql_query, parameters = self.root.generate_sql(mdc._connection)
-        logger.debug(f"SQL:\n{sql_query}\nParameters:\n{parameters}")
-        self.results = QueryResult(mdc, mdc._connection.execute(sql_query, parameters).pl(), mixture)
+        conn = mdc._connection
+        base_query, parameters = self.root.generate_sql(conn)
+        logger.debug(f"SQL:\n{base_query}\nParameters:\n{parameters}")
+
+        # First, we need to get the column names from the base query
+        columns_query = f"SELECT * FROM ({base_query}) LIMIT 0"
+        columns = conn.execute(columns_query, parameters).fetch_arrow_table().column_names
+
+        # Determine group columns (all columns except 'sample_id')
+        group_cols = [col for col in columns if col != "sample_id"]
+
+        # Create the partition by clause for the window functions
+        partition_clause = ", ".join(group_cols)
+
+        # Wrap the base query in a CTE and add the chunking logic
+        full_query = f"""
+        WITH base_data AS (
+            {base_query}
+        ),
+        grouped_samples AS (
+            SELECT 
+                *,
+                sample_id - LAG(sample_id, 1, sample_id) OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS diff
+            FROM base_data
+        ),
+        intervals AS (
+            SELECT 
+                {', '.join(group_cols)},
+                SUM(CASE WHEN diff != 1 THEN 1 ELSE 0 END) OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS group_id,
+                MIN(sample_id) as interval_start,
+                MAX(sample_id) + 1 as interval_end
+            FROM grouped_samples
+            GROUP BY {partition_clause}, diff, sample_id
+        )
+        SELECT 
+            {', '.join(group_cols)},
+            group_id,
+            MIN(interval_start) as interval_start,
+            MAX(interval_end) as interval_end
+        FROM intervals
+        GROUP BY {partition_clause}, group_id
+        ORDER BY {', '.join(group_cols)}, interval_start
+        """
+
+        self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).pl(), mixture)
 
         logger.debug(f"Results:\n{self.results}")
         logger.debug("Query executed.")

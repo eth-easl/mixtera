@@ -258,6 +258,27 @@ class QueryResult:
 
     @staticmethod
     def _create_chunker_index(df: pl.DataFrame) -> ChunkerIndex:
+        logger.info("Converting to chunker index structure...")
+        chunker_index = create_chunker_index()
+
+        for row in tqdm(df.iter_rows(named=True), desc="Building chunker index."):
+            dataset_id = row["dataset_id"]
+            file_id = row["file_id"]
+            properties = {
+                k: v if isinstance(v, list) else [v]
+                for k, v in row.items()
+                if k not in ["dataset_id", "file_id", "group_id", "interval_start", "interval_end"]
+            }
+            mixture_key = MixtureKey(properties)
+            interval = [row["interval_start"], row["interval_end"]]
+            chunker_index[mixture_key][dataset_id][file_id].append(interval)
+
+        logger.info(f"Chunker index creation completed")
+
+        return chunker_index
+
+    @staticmethod
+    def _create_chunker_index_2(df: pl.DataFrame) -> ChunkerIndex:
         # This function NEEDS sorted input
 
         # Identify groups and create intervals
@@ -295,7 +316,7 @@ class QueryResult:
 
         # Convert to chunker index structure
         chunker_index = create_chunker_index()
-        for row in df_with_intervals.iter_rows(named=True):
+        for row in tqdm(df_with_intervals.iter_rows(named=True), desc="Creating chunker index out of intervals df."):
             dataset_id = row["dataset_id"]
             file_id = row["file_id"]
             properties = {
