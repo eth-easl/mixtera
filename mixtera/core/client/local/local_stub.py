@@ -11,6 +11,7 @@ from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Mixture, Query, QueryResult, ResultChunk
 from mixtera.core.query.chunk_distributor import ChunkDistributor
+from mixtera.core.query.query_cache import QueryCache
 from mixtera.utils import wait_for_key_in_dict
 
 
@@ -27,6 +28,7 @@ class LocalStub(MixteraClient):
         self._mdc = MixteraDataCollection(self.directory)
         self._training_query_map_lock = mp.Lock()
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
+        self._query_cache = QueryCache(self.directory / "querycache", self._mdc)
 
     def register_dataset(
         self,
@@ -59,7 +61,16 @@ class LocalStub(MixteraClient):
 
     def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
         assert args.dp_groups > 0 and args.nodes_per_group > 0 and args.num_workers >= 0
-        query.execute(self._mdc, args.mixture)
+
+        if (cached_results := self._query_cache.get_queryresults_if_cached(query)) is not None:
+            query.results = cached_results
+            assert (
+                query.results._num_returns_gen == 0
+            ), "We cached a query that already has returned items, this should not happen!"
+            query.results.update_mixture(args.mixture)
+        else:
+            query.execute(self._mdc, args.mixture)
+            self._query_cache.cache_query(query)
         return self._register_query(query, args.mixture, args.dp_groups, args.nodes_per_group, args.num_workers)
 
     def is_remote(self) -> bool:
