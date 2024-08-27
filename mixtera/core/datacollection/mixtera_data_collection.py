@@ -180,6 +180,7 @@ class MixteraDataCollection:
         self._connection.commit()
 
     def _insert_samples_with_metadata(self, dataset_id: int, file_id: int, metadata: list[dict]):
+        logger.debug("Inserting samples prep.")
         if not metadata:
             logger.warning(f"No metadata extracted from file {file_id} in dataset {dataset_id}")
             return
@@ -191,6 +192,8 @@ class MixteraDataCollection:
 
         # Add new columns to the samples table if needed
         self._add_columns_to_samples_table(metadata_keys)
+
+        logger.debug("Prepping query.")
 
         # Prepare the INSERT query
         columns = ["dataset_id", "file_id", "sample_id"] + metadata_keys
@@ -205,10 +208,13 @@ class MixteraDataCollection:
             for sample in metadata
         ]
 
+        logger.debug("Executing.")
         # Execute the batch insert
         cur = self._connection.cursor()
         cur.executemany(query, values)
+        logger.debug("Commiting.")
         self._connection.commit()
+        logger.debug("Commited.")
 
 
     def check_dataset_exists(self, identifier: str) -> bool:
