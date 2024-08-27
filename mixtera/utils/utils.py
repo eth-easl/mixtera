@@ -269,3 +269,11 @@ def seed_everything(seed: int) -> None:
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
+
+
+def is_on_github_actions() -> bool:
+    # https://docs.github.com/en/actions/learn-github-actions/variables
+    if "CI" in os.environ or os.environ["CI"] or "GITHUB_RUN_ID" in os.environ:
+        return True
+
+    return False

@@ -8,6 +8,7 @@ from .utils import (  # noqa: F401
     hash_dict,
     intersect_dicts,
     intervals_to_ranges,
+    is_on_github_actions,
     merge_dicts,
     numpy_to_native_type,
     ranges,
@@ -30,4 +31,5 @@ __all__ = [
     "wait_for_key_in_dict",
     "hash_dict",
     "seed_everything_from_list",
+    "is_on_github_actions",
 ]

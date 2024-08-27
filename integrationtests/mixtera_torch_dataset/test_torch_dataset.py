@@ -5,6 +5,7 @@ from pathlib import Path
 
 import torch
 from integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
+from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
@@ -230,11 +231,11 @@ def test_reader_reproducibility(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, batch_size: int, tunnel: bool, mixture_str: str
 ):
     if (
-        not query_exec_args.dp_groups == 1
-        or not query_exec_args.nodes_per_group == 1
+        (query_exec_args.dp_groups > 1)
+        or (query_exec_args.nodes_per_group > 1)
         or query_exec_args.num_workers > 3
-        or (batch_size != 1 and batch_size != 500)
-        or query_exec_args.mixture.chunk_size > 500
+        or (batch_size not in [1, 500])
+        or (query_exec_args.mixture.chunk_size > 750)
     ):
         return
 
@@ -245,8 +246,11 @@ def test_reader_reproducibility(
     for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
         for per_window_mixture in per_window_mixtures:
             for window_size in window_sizes:
-                result_list = []
+                if reader_degree_of_parallelism > 1 and (query_exec_args.mixture.chunk_size < 500):
+                    continue
 
+                result_list = []
+                logger.info("Running iterations.")
                 for i in range(REPRODUCIBILITY_ITERATIONS):
                     group_batches = {}
                     for dp_group_id in range(query_exec_args.dp_groups):
@@ -267,7 +271,13 @@ def test_reader_reproducibility(
                                 query,
                                 query_exec_args,
                                 ResultStreamingArgs(
-                                    job_id=job_id, dp_group_id=dp_group_id, node_id=node_id, tunnel_via_server=tunnel
+                                    job_id=job_id,
+                                    dp_group_id=dp_group_id,
+                                    node_id=node_id,
+                                    tunnel_via_server=tunnel,
+                                    chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
+                                    chunk_reading_per_window_mixture=per_window_mixture,
+                                    chunk_reading_window_size=window_size,
                                 ),
                             )
                             dl = torch.utils.data.DataLoader(
@@ -278,6 +288,7 @@ def test_reader_reproducibility(
                         group_batches[dp_group_id] = node_batches
                     result_list.append(group_batches)
 
+                logger.info("Iterations done, running comparisons.")
                 reference_batches = result_list[0][0][0]  # Use the first node's batches as the reference
 
                 for i in range(1, REPRODUCIBILITY_ITERATIONS):
@@ -290,6 +301,8 @@ def test_reader_reproducibility(
                             assert (
                                 batches == reference_batches
                             ), f"Mismatch in batch order for group {dp_group_id}, node {node_id}"
+
+                logger.info("Comparisons done.")
 
 
 def test_torchds(
