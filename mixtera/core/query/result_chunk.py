@@ -364,8 +364,8 @@ class ResultChunk:
             workloads: a dictionary with the workloads per property combination
             process_counts: a dictionary with the number of processes per property combination
         """
-        logger.debug("Spinning up reading processes.")
         processes: dict[str, list[tuple[mp.Queue, mp.Process]]] = {}
+        total_processes = 0
         for key, process_count in process_counts.items():
             processes[key] = []
 
@@ -384,6 +384,7 @@ class ResultChunk:
 
             # Create and start the processes
             for i in range(1, len(partition_ranges)):
+                total_processes += 1
                 queue: mp.Queue = mp.Queue()
                 processes[key].append(
                     (
@@ -405,7 +406,8 @@ class ResultChunk:
 
                 # Start the process
                 processes[key][-1][1].start()
-        logger.debug("Processes started.")
+
+        logger.debug(f"Started {total_processes} processes for reading.")
         return processes
 
     @staticmethod
