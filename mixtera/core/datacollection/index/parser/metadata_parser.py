@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryIndex
-
 
 class MetadataParser(ABC):
     """
@@ -11,11 +9,11 @@ class MetadataParser(ABC):
     each dataset and file, potentially allowing for parallel processing. When
     the object has completed its parsing job, the `mark_complete` method should
     be called. This compresses the index transparently.
+
+    TODO (MaxiBoether): adjust docstring
     """
 
-    def __init__(
-        self, dataset_id: int, file_id: int, index_type: Optional[IndexTypes] = IndexTypes.IN_MEMORY_DICT_LINES
-    ):
+    def __init__(self, dataset_id: int, file_id: int):
         """
         Initializes the metadata parser. This initializer also sets up its own
         index structure that gets manipulated. In the future, the index structure
@@ -27,8 +25,7 @@ class MetadataParser(ABC):
         """
         self.dataset_id: int = dataset_id
         self.file_id: int = file_id
-        self._finalized = False
-        self._index: InMemoryDictionaryIndex = IndexFactory.create_index(index_type)
+        self.metadata: list[dict] = []
 
     @abstractmethod
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
@@ -42,29 +39,8 @@ class MetadataParser(ABC):
         """
         raise NotImplementedError()
 
-    def get_index(self) -> InMemoryDictionaryIndex:
-        """
-        Returns the fully parsed metadata index. This method should only be called
-        once the index has been marked as complete.
-        """
-        assert (
-            self._finalized
-        ), "Retrieving index without first marking parsing as complete. Index will be transparently compressed!"
-        return self._index
-
-    def finalize(self) -> None:
-        """
-        Mark the completion of the metadata parsing process and convert the inner index
-        to a row range-based representation.
-        """
-        if not self._finalized:
-            self._finalized = True
-            self._index = self._index.compress()
-
-    @property
-    def is_finalized(self) -> bool:
-        """
-        True if the parsing has been finalized, and the underlying index has
-        been converted to ranges.
-        """
-        return self._finalized
+    def add_metadata(self, sample_id: int, **kwargs: dict[str, Any]) -> None:
+        metadata = {"sample_id": sample_id}
+        for key, value in kwargs.items():
+            metadata[key] = value if isinstance(value, list) else [value]
+        self.metadata.append(metadata)

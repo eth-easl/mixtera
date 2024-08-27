@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
@@ -12,7 +12,7 @@ from .mixture import Mixture
 class Query:
     def __init__(self, job_id: str) -> None:
         self.query_plan = QueryPlan()
-        self.results: Optional[QueryResult] = None
+        self.results: Any | None = None
         self.job_id = job_id
 
     def is_empty(self) -> bool:
@@ -76,6 +76,9 @@ class Query:
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
         logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
-        self.root.post_order_traverse(mdc)
-        self.results = QueryResult(mdc, self.root.results, mixture)
+        sql_query, parameters = self.root.generate_sql(mdc._connection)
+        logger.debug(f"SQL:\n{sql_query}\nParameters:\n{parameters}")
+        self.results = QueryResult(mdc, mdc._connection.execute(sql_query, parameters).pl(), mixture)
+
+        logger.debug(f"Results:\n{self.results}")
         logger.debug("Query executed.")

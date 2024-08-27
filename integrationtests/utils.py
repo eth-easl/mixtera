@@ -49,9 +49,14 @@ def setup_func(some_class: Any):
 def calc_func(executor: Any, batch: dict[str, np.ndarray]) -> List[Any]:
     return ["test_category"]
 
-
+        
 class TestMetadataParser(MetadataParser):
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         metadata = payload["meta"]
-        self._index.append_entry("language", metadata["language"], self.dataset_id, self.file_id, line_number)
-        self._index.append_entry("license", metadata["license"], self.dataset_id, self.file_id, line_number)
+        self.add_metadata(
+            sample_id=line_number,
+            language=metadata["language"],
+            license=metadata["license"],
+            doublelanguage=[metadata["language"],metadata["language"]]
+        )
+

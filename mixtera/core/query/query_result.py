@@ -7,6 +7,7 @@ from typing import Any, Callable, Generator, Type
 
 import dill
 import portion
+import polars as pl
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
@@ -70,7 +71,7 @@ class QueryResult:
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    def __init__(self, mdc: MixteraDataCollection, results: Index, mixture: Mixture) -> None:
+    def __init__(self, mdc: MixteraDataCollection, results: pl.DataFrame, mixture: Mixture) -> None:
         """
         Args:
             mdc (LocalDataCollection): The LocalDataCollection object.
@@ -80,12 +81,11 @@ class QueryResult:
         # Prepare structures for iterable chunking
         self._mixture = mixture
         self.results = results
-        logger.debug("Instantiating QueryResult. Inverting index.")
-        self._inverted_index: InvertedIndex = self._invert_result(self.results)
-        logger.debug("Index inverted, creating chunker index.")
-        self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(self._inverted_index)
+        logger.debug(results)
+        logger.debug("Instantiating QueryResult..")
+        logger.debug("Creating chunker index.")
+        self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(self.results)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
-
         self._mixture.inform(self._chunker_index)
 
         # Set up the auxiliary data structures
@@ -104,17 +104,10 @@ class QueryResult:
         logger.debug("QueryResult instantiated.")
 
     def _parse_meta(self, mdc: MixteraDataCollection) -> dict:
-        dataset_ids = set()
-        file_ids = set()
+        dataset_ids = set(self.results['dataset_id'].unique())
+        file_ids = set(self.results['file_id'].unique())
 
-        total_length = 0
-        for prop_name in self.results.get_all_features():
-            for prop_val in self.results.get_dict_index_by_feature(prop_name).values():
-                dataset_ids.update(prop_val.keys())
-                for files in prop_val.values():
-                    file_ids.update(files)
-                    for file_ranges in files.values():
-                        total_length += sum(end - start for start, end in file_ranges)
+        total_length = len(self.results)
 
         return {
             "dataset_type": {did: mdc._get_dataset_type_by_id(did) for did in dataset_ids},
@@ -264,7 +257,46 @@ class QueryResult:
         return inverted_dictionary
 
     @staticmethod
-    def _create_chunker_index(inverted_index: InvertedIndex) -> ChunkerIndex:
+    def _create_chunker_index(df: pl.DataFrame) -> ChunkerIndex:
+        # This function NEEDS sorted input
+
+        # Identify groups and create intervals
+        group_cols = [col for col in df.columns if col not in ['sample_id']]
+        
+        # Step 1: Create a group_id for consecutive intervals
+        df_with_group = df.with_columns([
+            (
+                (pl.col('sample_id').diff().fill_null(0) != 1) |  # if there is a non consecutive sample id
+                (pl.struct(group_cols).ne(pl.struct(group_cols).shift()).fill_null(True)) # OR if a group column changes
+            ).cum_sum().alias('group_id')
+        ])
+
+        #logger.debug(df_with_group)
+
+        # Step 2: Group by all columns including the new group_id and calculate intervals
+        df_with_intervals = df_with_group.group_by(group_cols + ['group_id']).agg([
+            pl.col('sample_id').min().alias('interval_start'),
+            (pl.col('sample_id').max() + 1).alias('interval_end')
+        ]).sort(['dataset_id', 'file_id', 'interval_start'])
+
+        #logger.debug(df_with_intervals)
+
+        # Convert to chunker index structure
+        chunker_index = create_chunker_index()
+        for row in df_with_intervals.iter_rows(named=True):
+            dataset_id = row['dataset_id']
+            file_id = row['file_id']
+            properties = {k: v if isinstance(v, list) else [v] for k, v in row.items() if k not in ['dataset_id', 'file_id', 'group_id', 'interval_start', 'interval_end']}
+            mixture_key = MixtureKey(properties)
+            interval = [row['interval_start'], row['interval_end']]
+            chunker_index[mixture_key][dataset_id][file_id].append(interval)
+
+        #logger.debug(chunker_index)
+        return chunker_index
+
+
+    @staticmethod
+    def _create_chunker_index_old(inverted_index: InvertedIndex) -> ChunkerIndex:
         """
         Create a ChunkerIndex object from an InvertedIndex object. A ChunkerIndex has the following structure:
         {
@@ -538,7 +570,7 @@ class QueryResult:
         #  The following attributes are pickled using dill since they are not pickable by
         # the default pickler (used by torch)
         dill_pickled_attributes = {}
-        for attrib in ["_meta", "_chunker_index", "_inverted_index"]:
+        for attrib in ["_meta", "_chunker_index"]:
             attrib_pickled = dill.dumps(state[attrib])
             del state[attrib]
             dill_pickled_attributes[attrib] = attrib_pickled

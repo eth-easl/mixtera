@@ -1,9 +1,6 @@
-from typing import TYPE_CHECKING, List, Optional
-
-from mixtera.core.datacollection.index import IndexType
+from typing import TYPE_CHECKING, Any, List
 
 if TYPE_CHECKING:
-    from mixtera.core.client.local import MixteraDataCollection
     from mixtera.core.query.query_plan import QueryPlan
 
 
@@ -20,7 +17,6 @@ class Operator:
 
     def __init__(self) -> None:
         self.children: List[Operator] = []
-        self.results: Optional[IndexType] = None
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}"
@@ -76,11 +72,5 @@ class Operator:
             node_string += child.string(level + 1)
         return node_string
 
-    def post_order_traverse(self, mdc: "MixteraDataCollection") -> None:
-        for child in self.children:
-            child.post_order_traverse(mdc)
-        self.execute(mdc)
-
-    def execute(self, mdc: "MixteraDataCollection") -> None:
-        del mdc
-        raise NotImplementedError("execute method must be implemented in the child class")
+    def generate_sql(self, connection) -> tuple[str, List[Any]]:
+        raise NotImplementedError("generate_sql method must be implemented in the child class")

@@ -53,6 +53,7 @@ def test_filter_javascript(
 def test_filter_html(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    print("HALLO")
     result_streaming_args.job_id = (
         f"1_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
@@ -75,6 +76,7 @@ def test_filter_html(
 def test_filter_both(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
+    print("HALLO2")
     result_streaming_args.job_id = (
         f"2_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
@@ -83,7 +85,7 @@ def test_filter_both(
     query = (
         Query.for_job(result_streaming_args.job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript")))
+        .select(("language", "==", "JavaScript"))
     )
     client.execute_query(query, query_exec_args)
     result_samples = []
@@ -144,7 +146,7 @@ def test_filter_license_and_html(
     query = (
         Query.for_job(result_streaming_args.job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_job(result_streaming_args.job_id).select(("license", "==", "CC")))
+        .select(("license", "==", "CC"))
     )
     client.execute_query(query, query_exec_args)
     result_samples = []
@@ -178,7 +180,7 @@ def test_reproducibility(
         query = (
             Query.for_job(result_streaming_args.job_id)
             .select(("language", "==", "HTML"))
-            .union(Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript")))
+            .select(("language", "==", "JavaScript"))
         )
         query_exec_args.mixture = mixture
         client.execute_query(query, query_exec_args)
@@ -246,6 +248,8 @@ def main() -> None:
     print(f"Running tests with {mp.get_start_method()} start method.")
     with tempfile.TemporaryDirectory() as directory:
         test_chunk_readers(Path(directory))
+
+    print("Local tests done.")
 
 
 if __name__ == "__main__":

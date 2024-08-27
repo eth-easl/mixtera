@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.query import ArbitraryMixture, Query
@@ -31,7 +32,7 @@ def write_jsonl(path: Path) -> None:
             + '{ "text": "'
             + str(i)
             + '", "meta": { "language": "'
-            + ("JavaScript" if i % 2 == 0 else "HTML")
+            + ("JavaScript" if i < 500 else "HTML")
             + '", "license": "CC"}}\n'
         )
 
@@ -42,8 +43,12 @@ def write_jsonl(path: Path) -> None:
 class TestMetadataParser(MetadataParser):
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         metadata = payload["meta"]
-        self._index.append_entry("language", metadata["language"], self.dataset_id, self.file_id, line_number)
-        self._index.append_entry("license", metadata["license"], self.dataset_id, self.file_id, line_number)
+        self.add_metadata(
+            sample_id=line_number,
+            language=metadata["language"],
+            license=metadata["license"],
+            doublelanguage=[metadata["language"],metadata["language"]]
+        )
 
 
 def parsing_func(sample):
@@ -69,10 +74,15 @@ def setup_local_client(directory: Path):
 
 def run_query(client: MixteraClient, chunk_size: int):
     job_id = str(round(time.time() * 1000)) # Get some job ID based on current timestamp
-    query = Query.for_job(job_id).select(("language", "==", "JavaScript")) # In our example, we want to query all samples tagged JavaScript
+    #query = Query.for_job(job_id).select(("language", "==", "JavaScript")) # In our example, we want to query all samples tagged JavaScript
+    query = Query.for_job(job_id).select(None)
+
     mixture = ArbitraryMixture(chunk_size=chunk_size)
-    client.execute_query(query, mixture)
-    result_samples = list(client.stream_results(job_id))
+    qea = QueryExecutionArgs(mixture=mixture)
+    client.execute_query(query, qea)
+
+    rsa = ResultStreamingArgs(job_id=job_id)
+    result_samples = list(client.stream_results(rsa))
     
     # Checking the number of results and their validity.
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"

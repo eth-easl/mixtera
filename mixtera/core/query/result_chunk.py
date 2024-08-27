@@ -231,6 +231,9 @@ class ResultChunk:
                         continue
                     try:
                         # Yield the next instance from the iterator
+                        #if property_name not in active_iterators:
+                        logger.error(active_iterators)
+                        logger.error(element_counts)
                         yield next(active_iterators[property_name])
                         nothing_yielded_window = False
                         processed_items[property_name] += 1
