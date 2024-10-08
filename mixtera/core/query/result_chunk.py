@@ -274,12 +274,16 @@ class ResultChunk:
         seed_everything_from_list(element_counts)
         random.shuffle(element_counts)
 
-        # TODO(#97): We have one (k,v) pair in active_iterators for each property combination in the result
-        # These can be more than in the mixture, i.e., we can have English/law and English/medicine, but only have a mixture for English
-        # element_counts on the other hand is mixture-specific, i.e., it has (English, 500) if the mixture is only for English
-        # element counts is per-window.
-        # Right now this works because due to the buggy way we generate chunks there only is a single key (e.g., English/law) fulfilling English
-        # For this logic here to be actually correct, we need to solve #97 by generating result chunks that 1:1 match the mixture.
+        # TODO(#97): We have one (k,v) pair in active_iterators for each property combination in the result.
+        # These can be more than in the mixture, i.e., we can have English/law and English/medicine,
+        # but only have English in the mixture.
+        # element_counts on the other hand is mixture-specific, i.e.,
+        # it has (English, 500) if the mixture is only for English.
+        # element counts is per_window.
+        # Right now this works because due to the buggy way we generate chunks
+        # there only is a single key (e.g., English/law) fulfilling English.
+        # For this logic here to be actually correct,
+        # we need to solve #97 by generating result chunks that 1:1 match the mixture.
         # We should assert this in the __init__ of ResultChunk when resolving #97.
         # Also after #97 we should assert here that element_counts.keys() == active_iterators.keys()
 
@@ -298,7 +302,7 @@ class ResultChunk:
                     if property_key in deleted_keys or processed_items[property_key] >= property_count:
                         # However, if we cannot produce any items for this key anymore, (key has been deleted)
                         # OR if we're done for this window, we move to the next property
-                        # We might also want to support stopping here if one property name 
+                        # We might also want to support stopping here if one property name
                         continue
                     try:
                         # Yield the next sample from the iterator
@@ -308,12 +312,14 @@ class ResultChunk:
                         items_yielded += 1
                         # If the window is full, break the inner for loop, will also break the outer (window) while loop
                         # since the items_yielded >= self._window_size, and then start the next window
-                        if items_yielded >= self._window_size: break
+                        if items_yielded >= self._window_size:
+                            break
                     except StopIteration:
                         # If no more workloads, this property is done
                         deleted_keys.add(property_key)
 
-                if nothing_yielded_window: break
+                if nothing_yielded_window:
+                    break
 
     def _iterate_overall_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[str]:
         """
