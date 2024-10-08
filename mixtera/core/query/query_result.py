@@ -409,65 +409,108 @@ class QueryResult:
         This latter parameter is useful when chunking in a multiprocessed environment and at most once visitation
         guarantees are required.
         """
-        # Variables for an arbitrary mixture
         current_chunk_index = 0
-        chunker_index_keys_idx = 0
         chunker_index_keys = list(self._chunker_index.keys())
+        chunker_index_keys_idx = 0
         empty_key_idx: set[int] = set()
         seed_everything_from_list(chunker_index_keys)
         random.shuffle(chunker_index_keys)
 
-        # Create coroutines for component iterators and advance them to the first yield
-        component_iterators = {
-            key: self._generate_per_mixture_component_chunks(self._chunker_index, key)
-            for key in self._chunker_index.keys()
+        # Initialize component iterators
+        component_iterators: dict[MixtureKey, Generator] = {
+            key: self._generate_per_mixture_component_chunks(self._chunker_index, key) for key in chunker_index_keys
         }
-        for _, component_iterator in component_iterators.items():
+        for iterator in component_iterators.values():
             try:
-                next(component_iterator)
+                next(iterator)
             except StopIteration:
                 return
 
         base_mixture, target_chunk_index = yield
-        while True:  # pylint: disable=too-many-nested-blocks
-            # Get the mixture from the caller as it might have changed
+        # TODO test case mit english data that is 50% german and 50% french, dann 10 items mit chunk size 10 testen
+        # das sollte dann gehen jetzt und vorher nicht
+
+        while True:
             mixture = base_mixture.mixture_in_rows()
-
+            logger.error(f"Obtained mixture: {mixture}")
             if mixture:
-                # Try to fetch a chunk part from each of the components. Here one of two things will happen:
-                #   1. All the chunk's components can yield --> we will be able to build a chunk, or
-                #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
-                #      and the coroutine will pass the exception upstream to __next__
-                # TODO(#97): Improve that chunks are built from different component iterators,
-                # otherwise we might skip over samples when they are not exactly divisible by the
-                # mixture specific chunk size
-                chunk = {}
-                number_of_keys_yielded = 0
-                for mixture_key in mixture.keys():
-                    for key in sorted(self._chunker_index.keys()):
-                        try:
-                            #  The == operator is not commutative, hence the following logic
-                            #  works as expected, this should be improved in
-                            if mixture_key == key:
-                                chunk[key] = component_iterators[key].send(mixture[mixture_key])
-                                number_of_keys_yielded += 1
-                                break
-                        except StopIteration:
-                            continue
+                chunk: ChunkerIndex = create_chunker_index()
+                remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
+                    key: size for key, size in mixture.items()
+                }
 
-                if number_of_keys_yielded != len(mixture):
-                    # One of the components could not yield; we will not be able to build a chunk
+                for mixture_key in remaining_sizes.keys():
+                    logger.error(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+
+                    while remaining_sizes[mixture_key] > 0:
+                        progress_made = False
+                        for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
+                            if mixture_key == component_key:
+                                try:
+                                    component_chunk: ChunkerIndexDatasetEntries = iterator.send(
+                                        remaining_sizes[mixture_key]
+                                    )
+
+                                    # Update remaining size
+                                    chunk_size = sum(
+                                        sum(end - start for start, end in ranges)
+                                        for files in component_chunk.values()
+                                        for ranges in files.values()
+                                    )
+
+                                    assert (
+                                        chunk_size <= remaining_sizes[mixture_key]
+                                    ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
+                                    remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
+
+                                    logger.error(f"Received chunk size: {chunk_size} for {mixture_key}")
+
+                                    # Merge the component chunk into the main chunk
+                                    for dataset_id, files in component_chunk.items():
+                                        for file_id, ranges in files.items():
+                                            chunk[mixture_key][dataset_id][file_id].extend(ranges)
+
+                                    progress_made = True
+
+                                    if remaining_sizes[mixture_key] == 0:
+                                        logger.error(f"Finished data for {mixture_key}: {remaining_sizes}")
+                                        break  # Do not consider another iterator if we're done
+
+                                except StopIteration:
+                                    logger.error("Continuing on stopiteration")
+                                    continue
+
+                        # No matching components found or all are exhausted, unable to complete the chunk
+                        if not progress_made:
+                            logger.error("no progress")
+                            return
+
+                # Check if we have enough data for all mixture keys
+                if all(size == 0 for size in remaining_sizes.values()):
+                    if current_chunk_index == target_chunk_index:
+                        logger.error("Yielding a chunk.")
+                        base_mixture, target_chunk_index = yield ResultChunk(
+                            defaultdict_to_dict(chunk),
+                            self.dataset_type,
+                            self.file_path,
+                            self.parsing_func,
+                            base_mixture.chunk_size,
+                            mixture,
+                        )
+                    else:
+                        logger.error(
+                            f"current_chunk_index = {current_chunk_index} != target_chunk_index = {target_chunk_index}"
+                        )
+                # Not enough data to complete the chunk, end generation
+                else:
+                    logger.error("Not enough data, ending chunk generation")
                     return
-
-                if current_chunk_index == target_chunk_index:
-                    base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
-                    )
             else:
                 chunk = None
                 while len(empty_key_idx) < len(chunker_index_keys) and chunk is None:
                     chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
                     if chunker_index_keys_idx in empty_key_idx:
+                        # Note that this can be removed but needs some adjustments in the tests (only impacts ordering)
                         chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
                         continue
 
@@ -514,6 +557,7 @@ class QueryResult:
         with self._index.get_lock():
             chunk_target_index = self._index.get_obj().value
             self._index.get_obj().value += 1
+            logger.error(f"__next__ is called, target index is {chunk_target_index}")
 
         with self._lock:
             #  The generator is created lazily since the QueryResult object might be pickled
@@ -527,6 +571,7 @@ class QueryResult:
                 ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
 
             self._num_returns_gen += 1
+            logger.error("next is returning something.")
             return self._generator.send((self._mixture, chunk_target_index))
 
     def __getstate__(self) -> dict:

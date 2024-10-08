@@ -671,35 +671,27 @@ class TestQuery(unittest.TestCase):
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(28, 36)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(148, 150)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(148, 150), (50, 56)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(36, 44)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(50, 58)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(56, 64)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(44, 52)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(58, 66)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(64, 72)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(52, 60)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(66, 74)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(72, 80)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(60, 68)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(74, 82)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(80, 88)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(68, 76)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(82, 90)]}},
-            },
-            {
-                MixtureKey({"language": ["french"]}): {0: {1: [(76, 84)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(90, 98)]}},
-            },
-            {
-                MixtureKey({"language": ["french"]}): {0: {1: [(84, 92)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(98, 100)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(88, 96)]}},
             },
         ]
 
@@ -709,8 +701,8 @@ class TestQuery(unittest.TestCase):
         }
 
         mixture_concentration_2 = {
-            MixtureKey({"language": ["french"]}): 0.5,  # 8 and 10 instances per batch
-            MixtureKey({"language": ["english"]}): 0.5,  # 8 and 10 instances per batch
+            MixtureKey({"language": ["french"]}): 0.5,  # 8 and 8 instances per batch
+            MixtureKey({"language": ["english"]}): 0.5,  # 8 and 8 instances per batch
         }
 
         query = Query.for_job("job_id").simplemockoperator("test")
@@ -721,9 +713,10 @@ class TestQuery(unittest.TestCase):
 
         assert self.client.execute_query(query, args)
         result_iterator = iter(query.results)
+
         chunks = [next(result_iterator) for _ in range(10)]
         query.results.update_mixture(mixture_2)
-        chunks.extend([next(result_iterator) for _ in range(9)])
+        chunks.extend([next(result_iterator) for _ in range(7)])
         self.assertRaises(StopIteration, next, result_iterator)
 
         # Check the equality of the chunks
