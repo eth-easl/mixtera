@@ -270,37 +270,53 @@ class ResultChunk:
         """
         element_counts = self._get_element_counts()
 
-        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
+        # Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
         seed_everything_from_list(element_counts)
         random.shuffle(element_counts)
 
-        deleted_iterators: set[str] = set()
+        # TODO(#97): We have one (k,v) pair in active_iterators for each property combination in the result.
+        # These can be more than in the mixture, i.e., we can have English/law and English/medicine,
+        # but only have English in the mixture.
+        # element_counts on the other hand is mixture-specific, i.e.,
+        # it has (English, 500) if the mixture is only for English.
+        # element counts is per_window.
+        # Right now this works because due to the buggy way we generate chunks
+        # there only is a single key (e.g., English/law) fulfilling English.
+        # For this logic here to be actually correct,
+        # we need to solve #97 by generating result chunks that 1:1 match the mixture.
+        # We should assert this in the __init__ of ResultChunk when resolving #97.
+        # Also after #97 we should assert here that element_counts.keys() == active_iterators.keys()
 
-        # Continue until all workloads are processed
-        while len(active_iterators) > len(deleted_iterators):
+        deleted_keys: set[MixtureKey] = set()
+
+        # Continue until all iterators are deleted
+        while len(active_iterators) > len(deleted_keys):
             items_yielded = 0
-            processed_items = {property_tuple[0]: 0 for property_tuple in element_counts}
-            #  This inner while loop represents one window with the correct mixture
-            #  We continue until the window is full or there are no more workloads to yield
-            while len(active_iterators) > len(deleted_iterators) and items_yielded < self._window_size:
+            processed_items = {property_key: 0 for property_key, _ in element_counts}
+            # This inner while loop represents one window with the correct mixture
+            # We continue until the window is full or we don't have enough active iterators (outer condition)
+            while len(active_iterators) > len(deleted_keys) and items_yielded < self._window_size:
                 nothing_yielded_window = True
-                for property_name, property_count in element_counts:
-                    if property_name in deleted_iterators or processed_items[property_name] >= property_count:
-                        #  If no more workloads for this property this window, skip
+                for property_key, property_count in element_counts:
+                    # We iterate through all mixture keys and yield one item for the key per iteration
+                    if property_key in deleted_keys or processed_items[property_key] >= property_count:
+                        # However, if we cannot produce any items for this key anymore, (key has been deleted)
+                        # OR if we're done for this window, we move to the next property
+                        # We might also want to support stopping here if one property name
                         continue
                     try:
-                        # Yield the next instance from the iterator
-                        yield next(active_iterators[property_name])
+                        # Yield the next sample from the iterator
+                        yield next(active_iterators[property_key])
                         nothing_yielded_window = False
-                        processed_items[property_name] += 1
+                        processed_items[property_key] += 1
                         items_yielded += 1
+                        # If the window is full, break the inner for loop, will also break the outer (window) while loop
+                        # since the items_yielded >= self._window_size, and then start the next window
                         if items_yielded >= self._window_size:
-                            #  If the window is full, break the inner loop, will also break the outer loop
-                            #  since the items_yielded >= self._window_size, start the next window
                             break
                     except StopIteration:
                         # If no more workloads, this property is done
-                        deleted_iterators.add(property_name)
+                        deleted_keys.add(property_key)
 
                 if nothing_yielded_window:
                     break
@@ -310,22 +326,22 @@ class ResultChunk:
         Iterate over the samples in the result index with an overall mixture. This function yields the samples
         in the overall correct mixture.
         """
-        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
+        # Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
         property_names = list(active_iterators.keys())
         seed_everything_from_list(property_names)
         random.shuffle(property_names)
 
-        deleted_iterators: set[str] = set()
+        deleted_keys: set[MixtureKey] = set()
 
-        while len(active_iterators) > len(deleted_iterators):
+        while len(active_iterators) > len(deleted_keys):
             for property_name in property_names:
-                #  If the property is done, skip
-                if property_name in deleted_iterators:
+                # If the property is done, skip
+                if property_name in deleted_keys:
                     continue
                 try:
                     yield next(active_iterators[property_name])
                 except StopIteration:
-                    deleted_iterators.add(property_name)
+                    deleted_keys.add(property_name)
 
     def _get_element_counts(self) -> list[tuple[MixtureKey, int]]:
         """
