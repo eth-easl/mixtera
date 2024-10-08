@@ -14,53 +14,12 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import (
     ChunkerIndex,
     ChunkerIndexDatasetEntries,
-    Index,
-    IndexCommonType,
-    InvertedIndex,
 )
-from mixtera.core.datacollection.index.index_collection import create_chunker_index, create_inverted_index_interval_dict
+from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import defaultdict_to_dict, merge_property_dicts, seed_everything_from_list
+from mixtera.utils.utils import defaultdict_to_dict,  seed_everything_from_list
 from tqdm import tqdm
-
-_NUM_CPU = os.cpu_count() or 1
-INVERSION_POOL_SIZE = max(_NUM_CPU // 2, 1)  # TODO(#91): Make this configurable.
-
-
-@dataclass
-class InversionFileTask:
-    dataset_id: str
-    file_id: str
-    ranges_per_property: (
-        defaultdict[tuple[str, str], list[IndexCommonType]] | dict[tuple[str, str], list[IndexCommonType]]
-    ) = field(
-        default_factory=lambda: defaultdict(lambda: [])  # pylint: disable=unnecessary-lambda
-    )  # The lambdas are necessary to satisfy mypy and defaultdict
-
-
-@dataclass
-class InversionFileTaskResult:
-    dataset_id: str
-    file_id: str
-    interval_dict: portion.IntervalDict
-
-
-def handle_inversion_task(task: InversionFileTask) -> InversionFileTaskResult:
-    interval_dict = portion.IntervalDict()
-    for (property_name, property_value), ranges in task.ranges_per_property.items():
-        for row_range in ranges:
-            range_interval = portion.closedopen(row_range[0], row_range[1])
-            intersections = interval_dict[range_interval]
-            interval_dict[range_interval] = {property_name: [property_value]}
-
-            for intersection_range, intersection_properties in intersections.items():
-                interval_dict[intersection_range] = merge_property_dicts(
-                    interval_dict[intersection_range].values()[0], intersection_properties
-                )
-
-    return InversionFileTaskResult(dataset_id=task.dataset_id, file_id=task.file_id, interval_dict=interval_dict)
-
 
 class QueryResult:
     """QueryResult is a class that represents the results of a query.
@@ -74,14 +33,14 @@ class QueryResult:
     def __init__(self, mdc: MixteraDataCollection, results: pl.DataFrame, mixture: Mixture) -> None:
         """
         Args:
-            mdc (LocalDataCollection): The LocalDataCollection object.
-            results (IndexType): The results of the query.
+            mdc (MixteraDataCollection): The MixteraDataCollection object.
+            results (pl.DataFrame): The results of the query.
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
-        # Prepare structures for iterable chunking
+        # Prepare chunker index for iterable chunking
         self._mixture = mixture
-        logger.debug(results)
         logger.debug("Instantiating QueryResult..")
+        logger.debug(results)
         logger.debug("Creating chunker index.")
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
@@ -116,146 +75,6 @@ class QueryResult:
         }
 
     @staticmethod
-    def _invert_result(index: Index) -> InvertedIndex:
-        """
-        Returns an InvertedIndex that points from files to an ordered dictionary
-        of ranges (from portion) annotated with properties:
-            {
-                "dataset_id": {
-                    "file_id": {
-                        portion.Interval: {
-                            feature_1_name: [feature_1_value_0, ...],
-                            ...
-                            feature_n_name: [feature_n_value_0, ...],
-                        },
-                        ...
-                    },
-                    ...
-                },
-                ...
-            }
-
-        Args:
-            index: an IndexType object that will be inverted.
-
-        Returns:
-            An InvertedIndex
-        """
-        if INVERSION_POOL_SIZE == 1:
-            logger.debug("Using single-threaded inversion.")
-            return QueryResult._invert_result_st(index)
-
-        logger.debug("Using multi-threaded inversion.")
-        return QueryResult._invert_result_mt(index)
-
-    @staticmethod
-    def _invert_result_mt(index: Index) -> InvertedIndex:
-        """
-        Returns an InvertedIndex that points from files to an ordered dictionary
-        of ranges (from portion) annotated with properties:
-            {
-                "dataset_id": {
-                    "file_id": {
-                        portion.Interval: {
-                            feature_1_name: [feature_1_value_0, ...],
-                            ...
-                            feature_n_name: [feature_n_value_0, ...],
-                        },
-                        ...
-                    },
-                    ...
-                },
-                ...
-            }
-
-        Args:
-            index: an IndexType object that will be inverted.
-
-        Returns:
-            An InvertedIndex
-        """
-        raw_index = index.get_full_dict_index(copy=False)
-        inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
-
-        # Build tasks
-        tasks: defaultdict[str, dict[str, InversionFileTask]] = defaultdict(
-            lambda: {}  # pylint: disable=unnecessary-lambda
-        )
-        for property_name, property_values in raw_index.items():
-            for property_value, datasets in property_values.items():
-                for dataset_id, files in datasets.items():
-                    for file_id, ranges in files.items():
-                        if file_id not in tasks[dataset_id]:
-                            tasks[dataset_id][file_id] = InversionFileTask(dataset_id=dataset_id, file_id=file_id)
-                        tasks[dataset_id][file_id].ranges_per_property[(property_name, property_value)].extend(ranges)
-
-        # Flattening the tasks dictionary into a list of task objects and converting defaultdict to dict
-        # We ignore the type here since mypy complains that setattr does not return, which we fix using "or task"
-        task_list = [
-            setattr(task, "ranges_per_property", defaultdict_to_dict(task.ranges_per_property)) or task  # type: ignore
-            for dataset_tasks in tasks.values()
-            for task in dataset_tasks.values()
-        ]
-
-        logger.debug(f"Prepared {len(task_list)} parsing tasks. Execution with pool of size {INVERSION_POOL_SIZE}.")
-
-        # Execute tasks
-        with mp.Pool(INVERSION_POOL_SIZE) as pool:
-            results_iter = pool.imap(handle_inversion_task, task_list)
-            results = list(tqdm(results_iter, total=len(task_list), desc="Creating inverted index."))
-
-        # Collect results
-        for inversion_result in results:
-            inverted_dictionary[inversion_result.dataset_id][inversion_result.file_id] = inversion_result.interval_dict
-
-        return inverted_dictionary
-
-    @staticmethod
-    def _invert_result_st(index: Index) -> InvertedIndex:
-        """
-        Returns an InvertedIndex that points from files to an ordered dictionary
-        of ranges (from portion) annotated with properties:
-            {
-                "dataset_id": {
-                    "file_id": {
-                        portion.Interval: {
-                            feature_1_name: [feature_1_value_0, ...],
-                            ...
-                            feature_n_name: [feature_n_value_0, ...],
-                        },
-                        ...
-                    },
-                    ...
-                },
-                ...
-            }
-
-        Args:
-            index: an IndexType object that will be inverted.
-
-        Returns:
-            An InvertedIndex
-        """
-        raw_index = index.get_full_dict_index(copy=False)
-        inverted_dictionary: InvertedIndex = create_inverted_index_interval_dict()
-
-        for property_name, property_values in raw_index.items():  # pylint: disable=too-many-nested-blocks
-            for property_value, datasets in property_values.items():
-                for dataset_id, files in datasets.items():
-                    for file_id, ranges in files.items():
-                        interval_dict = inverted_dictionary[dataset_id][file_id]
-                        for row_range in ranges:
-                            range_interval = portion.closedopen(row_range[0], row_range[1])
-                            intersections = interval_dict[range_interval]
-                            interval_dict[range_interval] = {property_name: [property_value]}
-                            for intersection_range, intersection_properties in intersections.items():
-                                interval_dict[intersection_range] = merge_property_dicts(
-                                    interval_dict[intersection_range].values()[0], intersection_properties
-                                )
-
-        return inverted_dictionary
-
-    @staticmethod
     def _create_chunker_index(df: pl.DataFrame) -> ChunkerIndex:
         logger.info("Converting to chunker index structure...")
         chunker_index = create_chunker_index()
@@ -272,103 +91,8 @@ class QueryResult:
             interval = [row["interval_start"], row["interval_end"]]
             chunker_index[mixture_key][dataset_id][file_id].append(interval)
 
-        logger.info(f"Chunker index creation completed")
-
-        return chunker_index
-
-    @staticmethod
-    def _create_chunker_index_2(df: pl.DataFrame) -> ChunkerIndex:
-        # This function NEEDS sorted input
-
-        # Identify groups and create intervals
-        group_cols = [col for col in df.columns if col not in ["sample_id"]]
-
-        # Step 1: Create a group_id for consecutive intervals
-        df_with_group = df.with_columns(
-            [
-                (
-                    (pl.col("sample_id").diff().fill_null(0) != 1)  # if there is a non consecutive sample id
-                    | (
-                        pl.struct(group_cols).ne(pl.struct(group_cols).shift()).fill_null(True)
-                    )  # OR if a group column changes
-                )
-                .cum_sum()
-                .alias("group_id")
-            ]
-        )
-
-        # logger.debug(df_with_group)
-
-        # Step 2: Group by all columns including the new group_id and calculate intervals
-        df_with_intervals = (
-            df_with_group.group_by(group_cols + ["group_id"])
-            .agg(
-                [
-                    pl.col("sample_id").min().alias("interval_start"),
-                    (pl.col("sample_id").max() + 1).alias("interval_end"),
-                ]
-            )
-            .sort(["dataset_id", "file_id", "interval_start"])
-        )
-
-        # logger.debug(df_with_intervals)
-
-        # Convert to chunker index structure
-        chunker_index = create_chunker_index()
-        for row in tqdm(df_with_intervals.iter_rows(named=True), desc="Creating chunker index out of intervals df."):
-            dataset_id = row["dataset_id"]
-            file_id = row["file_id"]
-            properties = {
-                k: v if isinstance(v, list) else [v]
-                for k, v in row.items()
-                if k not in ["dataset_id", "file_id", "group_id", "interval_start", "interval_end"]
-            }
-            mixture_key = MixtureKey(properties)
-            interval = [row["interval_start"], row["interval_end"]]
-            chunker_index[mixture_key][dataset_id][file_id].append(interval)
-
-        # logger.debug(chunker_index)
-        return chunker_index
-
-    @staticmethod
-    def _create_chunker_index_old(inverted_index: InvertedIndex) -> ChunkerIndex:
-        """
-        Create a ChunkerIndex object from an InvertedIndex object. A ChunkerIndex has the following structure:
-        {
-            "prop_0_name:prop_0_value;prop_1_name:prop_1_value...": {
-                dataset_0_id: {
-                    file_0_id: [
-                        [lo_bound_0, hi_bound_0],
-                        ...
-                        [lo_bound_n, hi_bound_n],
-                    ],
-                    ...
-                },
-                ...
-            },
-            ...
-        }
-
-        The ChunkerIndex object is useful for creating mixture chunks. It is guaranteed that all generated intervals
-        are disjoint, and only represent one possible combination of properties and their values.
-
-        Args:
-            inverted_index: an InvertedIndex object.
-
-        Returns: a ChunkerIndex object.
-
-        """
-        chunker_index: ChunkerIndex = create_chunker_index()
-
-        for document_id, document_entries in inverted_index.items():
-            for file_id, file_entries in document_entries.items():
-                for intervals, interval_properties in file_entries.items():
-                    # Intervals can be a simplified interval (e.g. '[-7,-2) | [11,15)') so we need a for loop
-                    for interval in intervals:
-                        mixture_key = MixtureKey(interval_properties)
-
-                        # Add the interval to the chunk index based on the generated key
-                        chunker_index[mixture_key][document_id][file_id].append([interval.lower, interval.upper])
+        logger.info("Chunker index creation completed")
+        logger.info(chunker_index)
 
         return chunker_index
 
@@ -511,6 +235,9 @@ class QueryResult:
                 chunk = {}
                 number_of_keys_yielded = 0
                 for mixture_key in mixture.keys():
+                    # If we only would support static mixture, then we could build the chunkerindex grouped only by the relevant attributes
+                    # But as they might change, we have to support using multiple keys in the chunker index per mixture key
+
                     for key in sorted(self._chunker_index.keys()):
                         try:
                             #  The == operator is not commutative, hence the following logic
@@ -525,7 +252,7 @@ class QueryResult:
                 if number_of_keys_yielded != len(mixture):
                     # One of the components could not yield; we will not be able to build a chunk
                     return
-
+                
                 if current_chunk_index == target_chunk_index:
                     base_mixture, target_chunk_index = yield ResultChunk(
                         chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture

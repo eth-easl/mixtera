@@ -4,6 +4,8 @@ from typing import Callable, List, Type
 
 import dill
 import duckdb
+import polars as pl
+import psutil
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
@@ -32,13 +34,26 @@ class MixteraDataCollection:
             self._connection = self._load_db_from_disk()
 
         self._configure_duckdb()
+        self._vacuum()
 
     def _configure_duckdb(self):
-        # Set the number of threads DuckDB can use
-        num_threads = os.cpu_count()  # Use all available cores
-        self._connection.execute(f"SET threads TO {max(num_threads - 4,1)}")
-        self._connection.execute("SET memory_limit = '200GB'")  # TODO(MaxiBoether): make this configurable
-        self._connection.execute(f"PRAGMA temp_directory = '{self._directory}'")
+        # TODO(create issue): Make number of cores and memory configurable
+
+        # Set cores
+        num_cores = os.cpu_count() or 1
+        num_duckdb_threads = max(num_cores - 4, 1)
+        self._connection.execute(f"SET threads TO {num_duckdb_threads}")
+
+        # Set DRAM
+        total_memory_bytes = psutil.virtual_memory().total
+        # We allow duckdb to use 2/3 of the available DRAM
+        duckdb_mem_gb = round((total_memory_bytes * 0.66) / (1024**3))
+        self._connection.execute(f"SET memory_limit = '{duckdb_mem_gb}GB'")
+
+        # Set tmpdir (to use fast SSD, potentially)
+        duckdb_tmp_dir = self._directory / "duckdbtmp"
+        duckdb_tmp_dir.mkdir(exist_ok=True)
+        self._connection.execute(f"PRAGMA temp_directory = '{duckdb_tmp_dir}'")
 
     def _load_db_from_disk(self) -> duckdb.DuckDBPyConnection:
         assert self._database_path.exists()
@@ -53,6 +68,8 @@ class MixteraDataCollection:
         logger.info("Initializing database.")
         conn = duckdb.connect(str(self._database_path))
         cur = conn.cursor()
+
+        # Dataset table
         cur.execute("CREATE SEQUENCE seq_dataset_id START 1;")
         cur.execute(
             "CREATE TABLE IF NOT EXISTS datasets"
@@ -60,6 +77,8 @@ class MixteraDataCollection:
             " location TEXT NOT NULL, type INTEGER NOT NULL,"
             " parsing_func BLOB NOT NULL);"
         )
+
+        # File table
         cur.execute("CREATE SEQUENCE seq_file_id START 1;")
         cur.execute(
             "CREATE TABLE IF NOT EXISTS files"
@@ -69,6 +88,7 @@ class MixteraDataCollection:
             " FOREIGN KEY(dataset_id) REFERENCES datasets(id));"
         )
 
+        # Sample table
         cur.execute("CREATE SEQUENCE seq_sample_id START 1;")
         # We don't use foreign key constraints here for insert performance reasons if we have a lot of samples
         cur.execute(
@@ -77,12 +97,16 @@ class MixteraDataCollection:
             " sample_id INTEGER NOT NULL DEFAULT nextval('seq_sample_id'),"
             " PRIMARY KEY (dataset_id, file_id, sample_id));"
         )
-
         cur.execute("CREATE TABLE IF NOT EXISTS version (id INTEGER PRIMARY KEY, version_number INTEGER)")
         cur.execute("INSERT INTO version (id, version_number) VALUES (1, 1)")
         conn.commit()
         logger.info("Database initialized.")
         return conn
+
+    def _vacuum(self):
+        logger.info("Vacuuming the DuckDB.")
+        self._connection.execute("VACUUM")
+        logger.info("Vacuumd.")
 
     def get_db_version(self) -> int:
         assert self._connection, "Not connected to db!"
@@ -121,6 +145,7 @@ class MixteraDataCollection:
             self._insert_samples_with_metadata(dataset_id, file_id, metadata_parser.metadata)
 
         self._db_incr_version()
+        self._vacuum()
         return True
 
     def _insert_dataset_into_table(
@@ -177,36 +202,29 @@ class MixteraDataCollection:
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _add_columns_to_samples_table(self, columns: list[str]):
+    def _add_columns_to_samples_table(self, columns: set[str]):
         cur = self._connection.cursor()
         for column in columns:
-            # Check if the column already exists
             cur.execute(f"SELECT 1 FROM pragma_table_info('samples') WHERE name='{column}';")
-            if not cur.fetchone():
-                # If the column doesn't exist, add it
-                # We're using VARCHAR as a default type, but we might want to adjust this
-                # [] indicates a duckdb list
-                cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")
+            if not cur.fetchone():  # Column does not exist already
+                # TODO(#11): Support something else than string values
+                # TODO(create issue): Allow marking properties as single properties (no lists)
+                # TODO(create issue): Allow providing list of pre-specified values to use enums instead of strings
+                cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a duckdb list
         self._connection.commit()
 
     def _insert_samples_with_metadata(self, dataset_id: int, file_id: int, metadata: list[dict]):
-        logger.debug("Inserting samples prep.")
-        import polars as pl
-
         if not metadata:
             logger.warning(f"No metadata extracted from file {file_id} in dataset {dataset_id}")
             return
 
-        assert "sample_id" in metadata[0].keys(), "Your metadata parser needs to provide the sample_id"
+        assert "sample_id" in metadata[0].keys(), "The metadata parser should have collected the sample_id"
 
-        # Get the metadata keys (excluding 'sample_id' which is already in the table)
-        metadata_keys = [key for key in metadata[0].keys() if key != "sample_id"]
-
-        # Add new columns to the samples table if needed
+        # Obtain all collected metadata, extend table if necessary
+        metadata_keys = set(key for sample in metadata for key in sample.keys())
         self._add_columns_to_samples_table(metadata_keys)
 
-        logger.debug("Prepping dataframe.")
-        # Prepare the data as a list of dictionaries
+        # Now, we insert the actual samples via a polars.Dataframe, that seems to be the fastest in microbenchmarks
         data = [
             {
                 "dataset_id": dataset_id,
@@ -216,11 +234,10 @@ class MixteraDataCollection:
             }
             for sample in metadata
         ]
-        # Inserting via a dataframe seems to be the fastest
         df = pl.DataFrame(data)
-        duckdb.sql("INSERT INTO samples SELECT * FROM df", connection=self._connection)
-
+        self._connection.execute("INSERT INTO samples SELECT * FROM df")
         self._connection.commit()
+        del df  # to tell linters we use this variable
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
@@ -262,7 +279,6 @@ class MixteraDataCollection:
 
             delete_dataset_query = "DELETE FROM datasets WHERE name = ?;"
             cur.execute(delete_dataset_query, (identifier,))
-
             self._connection.commit()
             self._db_incr_version()
         except duckdb.Error as err:
@@ -381,18 +397,10 @@ class MixteraDataCollection:
         executor.load_data(files, data_only_on_primary)
         new_properties = executor.run()
 
-        # TODO(MaxiBoether): clean this up with register dataset codepath
-        self._add_property_column(property_name, property_type)
+        self._add_columns_to_samples_table([property_name])
         self._insert_property_values(property_name, new_properties)
         self._db_incr_version()
         return True
-
-    def _add_property_column(self, property_name: str, property_type: PropertyType):
-        data_type = "VARCHAR" if property_type == PropertyType.CATEGORICAL else "DOUBLE"
-        query = f"ALTER TABLE samples ADD COLUMN {property_name} {data_type};"
-        cur = self._connection.cursor()
-        cur.execute(query)
-        self._connection.commit()
 
     def _insert_property_values(self, property_name: str, new_properties: dict):
         query = f"UPDATE samples SET {property_name} = ? WHERE dataset_id = ? AND file_id = ? AND sample_id = ?;"

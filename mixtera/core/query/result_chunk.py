@@ -153,15 +153,7 @@ class ResultChunk:
         ):
             if not is_on_github_actions:
                 logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
-
-        # TODO(MaxiBoether): with duckdb we always have all properties, and the mixtures specified by the user
-        # might not work because they dont cover all properties. right now the implementation assumes the mixture
-        # here as exactly the same keys as self._result_index.
-        # However, this is not true for the reason previously mentioned.
-        # need to think about whether we just always infer the mixture or
-        # search for all matching keys and use the minimal one if
-        # mixture is provided (probably the better but more involved solution)
-        self._mixture = self._infer_mixture()
+            self._mixture = self._infer_mixture()
 
     def _infer_mixture(self) -> dict[str, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
@@ -271,6 +263,22 @@ class ResultChunk:
             for queue, proc in processes_to_remove:
                 processes.remove((queue, proc))
 
+    @staticmethod
+    def enough_iterators_available(required_keys: list[MixtureKey], available_keys: list[MixtureKey], deleted_keys: set[MixtureKey]) -> bool:
+        # If for all required keys, there is some candidate key we can use, then we still have enough iterators
+        for key in required_keys:
+            found_usable_key = False
+            for candidate_key in available_keys:
+                if candidate_key in deleted_keys:
+                    continue
+                if candidate_key == key:
+                    found_usable_key = True
+                    break
+            if not found_usable_key:
+                return False
+            
+        return True
+
     def _iterate_window_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[str]:
         """
         Iterate over the samples in the result index with a windowed mixture. This function yields the samples
@@ -282,35 +290,50 @@ class ResultChunk:
         seed_everything_from_list(element_counts)
         random.shuffle(element_counts)
 
-        deleted_iterators: set[str] = set()
+        deleted_keys: set[MixtureKey] = set()
 
-        # Continue until all workloads are processed
-        while len(active_iterators) > len(deleted_iterators):
+        # We have one (k,v) pair in active iterators for each property combination in the result
+        # These can be more than in the mixture, i.e., we can have English/law and English/medicine, but only have a mixture for English
+        # element_counts on the other hand is mixture-specific, i.e., it has (English, 500) if the mixture is only for English
+        # element counts is per-window
+
+        # Continue while we theoretically have enough active iterators to handle the element count
+
+        
+        window_keys = [property_key for property_key, _ in element_counts]
+        # MOST CHANGES CAN BE REVERSED AFTER FIXING CHUNK GENERATION
+
+        while ResultChunk.enough_iterators_available(window_keys, active_iterators.keys(), deleted_keys):  # pylint: disable=too-many-nested-blocks
             items_yielded = 0
-            processed_items = {property_tuple[0]: 0 for property_tuple in element_counts}
+            processed_items = {property_key: 0 for property_key, _ in element_counts}
             #  This inner while loop represents one window with the correct mixture
-            #  We continue until the window is full or there are no more workloads to yield
-            while len(active_iterators) > len(deleted_iterators) and items_yielded < self._window_size:
+            #  We continue until the window is full or we don't have enough active iterators (outer condition)
+            while ResultChunk.enough_iterators_available(window_keys, active_iterators.keys(), deleted_keys) and items_yielded < self._window_size:
                 nothing_yielded_window = True
-                for property_name, property_count in element_counts:
-                    if property_name in deleted_iterators or processed_items[property_name] >= property_count:
+                for property_key, property_count in element_counts:
+                    if processed_items[property_key] >= property_count:
                         #  If no more workloads for this property this window, skip
                         continue
-                    try:
-                        # Yield the next instance from the iterator
-                        if property_name not in active_iterators:
-                            logger.error(active_iterators)
-                            logger.error(element_counts)
-                            logger.error(type(property_name))
-                            logger.error(str(property_name))
-                            for key in active_iterators.keys():
-                                logger.error(key)
-                                logger.error(type(key))
-                                logger.error(property_name == key)
+                    chosen_key: MixtureKey | None = None
+                    for candidate_key in sorted(active_iterators.keys()):
+                        if candidate_key in deleted_keys:
+                            continue
+                        if candidate_key == property_key: # TODO(Maxi): DOES THIS MAKE SENSE? isnt candidate key more specific?
+                            chosen_key = candidate_key
+                            break
+                    
+                    if str(chosen_key) != str(property_key):
+                        # for debugging
+                        # does currently not 
+                        raise ValueError(f"chose {chosen_key} for {property_key}")
 
-                        yield next(active_iterators[property_name])
+                    # This should not happen because we check that enough iterators are available as the loop condition
+                    assert chosen_key is not None, f"Did not find key for {property_key}." + f"\nactive_iterators = {active_iterators}" + f"\ndeleted_keys = {deleted_keys}"
+
+                    try:
+                        yield next(active_iterators[chosen_key])
                         nothing_yielded_window = False
-                        processed_items[property_name] += 1
+                        processed_items[property_key] += 1
                         items_yielded += 1
                         if items_yielded >= self._window_size:
                             #  If the window is full, break the inner loop, will also break the outer loop
@@ -318,7 +341,7 @@ class ResultChunk:
                             break
                     except StopIteration:
                         # If no more workloads, this property is done
-                        deleted_iterators.add(property_name)
+                        deleted_keys.add(chosen_key)
 
                 if nothing_yielded_window:
                     break
@@ -328,22 +351,23 @@ class ResultChunk:
         Iterate over the samples in the result index with an overall mixture. This function yields the samples
         in the overall correct mixture.
         """
-        #  Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
+        # Shuffle the results to ensure that the order of the property combinations is (reproducibly) random
         property_names = list(active_iterators.keys())
         seed_everything_from_list(property_names)
         random.shuffle(property_names)
 
-        deleted_iterators: set[str] = set()
-
-        while len(active_iterators) > len(deleted_iterators):
+        deleted_keys: set[MixtureKey] = set()
+        # We don't need the logic of checking whether the keys match here, because we iterate over all keys anyways
+        # The whole idea here is to guarantee the mixture via the chunk, hence no need to guarantee it in a smaller window
+        while len(active_iterators) > len(deleted_keys):
             for property_name in property_names:
-                #  If the property is done, skip
-                if property_name in deleted_iterators:
+                # If the property is done, skip
+                if property_name in deleted_keys:
                     continue
                 try:
                     yield next(active_iterators[property_name])
                 except StopIteration:
-                    deleted_iterators.add(property_name)
+                    deleted_keys.add(property_name)
 
     def _get_element_counts(self) -> list[tuple[MixtureKey, int]]:
         """
@@ -386,27 +410,49 @@ class ResultChunk:
         total_processes = 0
         pickled_func_dict = dill.dumps(self._parsing_func_dict)
         start_as_daemon = True if mp.current_process().daemon else None
-        for key, process_count in process_counts.items():
-            processes[key] = []
 
+        # TODO(MaxiBoether): i dont think this grouping is necesasrily correct yet. esp the ordering of == check.
+        # THIS CAN BE REVERSED AFTER FIXING THE CHUNK GENERATION.
+        # Overall, we might have more or different workload keys than process_counts
+        # (e.g., HTML/Javascript as process counts, and HTML/CC, HTML/MIT, Javascript/CC, Javascirpt/MIT as workloads)
+
+        def find_matching_mixture_keys(workload_key: MixtureKey) -> list[MixtureKey]:
+            return [mk for mk in process_counts.keys() if mk == workload_key]
+
+        # Group workloads by matching mixture keys
+        grouped_workloads: dict[MixtureKey, list[tuple[int, int, list]]] = {}
+        for workload_key, workload in workloads.items():
+            matching_keys = find_matching_mixture_keys(workload_key)
+            if not matching_keys:
+                # If no matching keys, use the workload key itself
+                matching_keys = [workload_key]
+            
+            # Distribute the workload among all matching keys
+            for i, mk in enumerate(matching_keys):
+                if mk not in grouped_workloads:
+                    grouped_workloads[mk] = []
+                # Distribute workload items evenly among matching keys
+                grouped_workloads[mk].extend(workload[i::len(matching_keys)])
+
+        for mixture_key, matching_workloads in grouped_workloads.items():
+            process_count = process_counts.get(mixture_key, 1)  # Default to 1 if not specified
             if process_count < 1:
-                # TODO(#85): This will currently lead to more processes than
-                # intended if degree_of_parallelism < properties
                 logger.warning(
-                    f"Number of processes for property combination {key} is set to {process_count} which is invalid. "
+                    f"Number of processes for property combination {mixture_key} is set to {process_count} which is invalid. "
                     "Setting number of processes to 1."
                 )
                 process_count = 1
 
             # Calculate per-process partition sizes
-            partition_size = max(1, len(workloads[key]) // process_count)
-            partition_ranges = list(range(0, len(workloads[key]), partition_size)) + [len(workloads[key])]
+            partition_size = max(1, len(matching_workloads) // process_count)
+            partition_ranges = list(range(0, len(matching_workloads), partition_size)) + [len(matching_workloads)]
 
+            processes[mixture_key] = []
             # Create and start the processes
             for i in range(1, len(partition_ranges)):
                 total_processes += 1
                 queue: mp.Queue = mp.Queue()
-                processes[key].append(
+                processes[mixture_key].append(
                     (
                         queue,
                         mp.Process(
@@ -418,14 +464,14 @@ class ResultChunk:
                                 self._file_path_dict,
                                 pickled_func_dict,
                                 self._server_connection,
-                                workloads[key][partition_ranges[i - 1] : partition_ranges[i]],
+                                matching_workloads[partition_ranges[i - 1] : partition_ranges[i]],
                             ),
                         ),
                     )
                 )
 
                 # Start the process
-                processes[key][-1][1].start()
+                processes[mixture_key][-1][1].start()
 
         logger.debug(f"Started {total_processes} processes for chunk processing (dop = {self._degree_of_parallelism})")
         return processes

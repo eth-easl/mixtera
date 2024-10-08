@@ -6,7 +6,6 @@ import numpy as np
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset, JSONLDataset
 from mixtera.core.processing.property_calculation import PropertyCalculationExecutor
-from mixtera.utils import ranges
 from tqdm import tqdm
 
 
@@ -84,6 +83,8 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
 
                 inference_result_per_file[prediction][dataset_id][file_id].append(line_id)
 
+        # TODO_ adjust
+        return inference_result_per_file
         rangified: defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int, int]]]]] = defaultdict(
             lambda: defaultdict(lambda: defaultdict(list))
         )

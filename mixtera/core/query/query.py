@@ -98,21 +98,23 @@ class Query:
             {base_query}
         ),
         grouped_samples AS (
-            SELECT 
+            SELECT
                 *,
-                sample_id - LAG(sample_id, 1, sample_id) OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS diff
+                sample_id - LAG(sample_id, 1, sample_id)
+                    OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS diff
             FROM base_data
         ),
         intervals AS (
-            SELECT 
+            SELECT
                 {', '.join(group_cols)},
-                SUM(CASE WHEN diff != 1 THEN 1 ELSE 0 END) OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS group_id,
+                SUM(CASE WHEN diff != 1 THEN 1 ELSE 0 END)
+                    OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS group_id,
                 MIN(sample_id) as interval_start,
                 MAX(sample_id) + 1 as interval_end
             FROM grouped_samples
             GROUP BY {partition_clause}, diff, sample_id
         )
-        SELECT 
+        SELECT
             {', '.join(group_cols)},
             group_id,
             MIN(interval_start) as interval_start,
@@ -121,7 +123,6 @@ class Query:
         GROUP BY {partition_clause}, group_id
         ORDER BY {', '.join(group_cols)}, interval_start
         """
-
         self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).pl(), mixture)
 
         logger.debug(f"Results:\n{self.results}")

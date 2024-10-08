@@ -9,21 +9,25 @@ REPRODUCIBILITY_ITERATIONS = 4
 
 
 def write_jsonl(path: Path, file_count: int, instance_count_per_file: int, fraction_multiplier: int) -> None:
+    # We alternate within each language between the two licenses.
+    counters = {"JavaScript": 0, "HTML": 0}
+
     for file_number in range(file_count):
         data = ""
         for i in range(instance_count_per_file):
-            data = (
-                data
-                + '{ "text": "'
-                + str(i)
-                + '", "meta": { "language": "'
-                + ("JavaScript" if i % fraction_multiplier == 0 else "HTML")
-                + '", "license": "CC"}}\n'
-            )
+            # Determine the language and increment the counter
+            language = "JavaScript" if i % fraction_multiplier == 0 else "HTML"
+            counters[language] += 1
 
+            # Determine the license based on the counter for the current language
+            license = "MIT" if counters[language] % 2 == 0 else "CC"
+
+            # Append the data string with the new entry
+            data += f'{{ "text": "{i}", "meta": {{ "language": "{language}", "license": "{license}"}}}}\n'
+
+        # Write the data to a file
         with open(path / f"data_{file_number}.jsonl", "w") as text_file:
             text_file.write(data)
-
 
 def get_expected_js_and_html_samples(
     total_instance_count: int, fraction_multiplier: int

@@ -15,17 +15,34 @@ class RedPajamaMetadataParser(MetadataParser):
         if "meta" not in payload:
             return
 
-        metadata = payload["meta"]
+        raw_metadata = payload["meta"]
+        metadata = {}
         for index_field in RedPajamaMetadataParser.target_index_fields:
-            if index_field not in metadata:
+            if index_field not in raw_metadata:
                 continue
-            value = metadata[index_field]
+            value = raw_metadata[index_field]
             if index_field == "language":
+                metadata["language"] = []
                 for language in value:
-                    self._index.append_entry(index_field, language["name"], self.dataset_id, self.file_id, line_number)
+                    metadata["language"].append(language["name"])
             else:
                 # TODO(#11): Support numerical buckets, not just categorical
-                self._index.append_entry(index_field, value, self.dataset_id, self.file_id, line_number)
+                metadata[index_field] = value
+
+        self.add_metadata(sample_id=line_number, **metadata)
+
+
+class SlimPajamaMetadataParser(MetadataParser):
+    """
+    Metadata parser class for the SlimPajama dataset.
+    """
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        if "meta" not in payload:
+            return
+
+        raw_metadata = payload["meta"]
+        self.add_metadata(sample_id=line_number, redpajama_set_name=raw_metadata["redpajama_set_name"])
 
 
 class MetadataParserFactory:
@@ -33,7 +50,7 @@ class MetadataParserFactory:
 
     def __init__(self) -> None:
         # Stores the name of the parser, and its associated class
-        self._registry = {"RED_PAJAMA": RedPajamaMetadataParser}
+        self._registry = {"RED_PAJAMA": RedPajamaMetadataParser, "SLIM_PAJAMA": SlimPajamaMetadataParser}
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
         """

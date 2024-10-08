@@ -3,33 +3,14 @@ import threading
 import time
 
 import numpy as np
-import portion as P
 import pytest
-from mixtera.utils import (
-    flatten,
-    intersect_dicts,
-    intervals_to_ranges,
-    merge_dicts,
-    numpy_to_native_type,
-    ranges,
-    ranges_to_intervals,
-    run_async_until_complete,
-    wait_for_key_in_dict,
-)
-from mixtera.utils.utils import merge_property_dicts
+from mixtera.utils import flatten, numpy_to_native_type, run_async_until_complete, wait_for_key_in_dict
 
 
 def test_flatten():
     assert flatten([[1, 2, 3, 4]]) == [1, 2, 3, 4]
     assert flatten([[1, 2], [3, 4]]) == [1, 2, 3, 4]
     assert flatten([[1, 2], [3, 4], [5, 6]]) == [1, 2, 3, 4, 5, 6]
-
-
-def test_ranges():
-    assert ranges([2, 3, 4, 7, 8, 9, 15]) == [(2, 5), (7, 10), (15, 16)]
-    assert ranges(list(range(100))) == [(0, 100)]
-    assert ranges([0]) == [(0, 1)]
-    assert ranges([]) == []
 
 
 def test_numpy_to_native_types():
@@ -119,123 +100,3 @@ def test_timeout():
     end_time = time.time()
     assert not result
     assert end_time - start_time >= 0.5, "Timeout did not work correctly"
-
-
-def test_merge_property_dicts():
-    dict_one = {
-        "a": [1, 2],
-        "b": [2, 3],
-    }
-
-    dict_two = {"b": [1, 2], "c": [1], "d": []}
-
-    merged_with_unique = merge_property_dicts(dict_one, dict_two, unique_lists=True)
-    merged_with_duplicates = merge_property_dicts(dict_one, dict_two, unique_lists=False)
-
-    assert merged_with_unique == {
-        "a": [1, 2],
-        "b": [1, 2, 3],
-        "c": [1],
-        "d": [],
-    }, "Merged w/ unique values is incorrect"
-    assert merged_with_duplicates == {
-        "a": [1, 2],
-        "b": [1, 2, 2, 3],
-        "c": [1],
-        "d": [],
-    }, "Merged w/ duplicates is incorrect"
-
-
-def test_basic_merge():
-    assert merge_dicts({"a": 1}, {"b": 2}) == {"a": 1, "b": 2}, "Basic merge failed."
-
-
-def test_overlapping_keys():
-    assert merge_dicts({"a": 1}, {"a": 2}) == {"a": 2}, "Overlapping keys test failed."
-    assert merge_dicts({"a": [1, 2]}, {"a": [3, 4]}) == {"a": [3, 4, 1, 2]}, "Overlapping keys with lists test failed."
-
-
-def test_nested_dictionaries():
-    assert merge_dicts({"a": {"b": 1}}, {"a": {"c": 2}}) == {"a": {"b": 1, "c": 2}}, "Nested dictionaries test failed."
-
-
-def test_deeply_nested_structures():
-    assert merge_dicts({"a": {"b": {"c": 1}}}, {"a": {"b": {"d": 2}}}) == {
-        "a": {"b": {"c": 1, "d": 2}}
-    }, "Deeply nested structures test failed."
-
-
-def test_empty_dictionaries_merge():
-    assert not merge_dicts({}, {}), "Empty dictionaries (both) test failed."
-    assert merge_dicts({"a": 1}, {}) == {"a": 1}, "Empty dictionary (second) test failed."
-    assert merge_dicts({}, {"b": 2}) == {"b": 2}, "Empty dictionary (first) test failed."
-
-
-def test_non_dict_values():
-    assert merge_dicts({"a": [1, 2]}, {"a": [3, 4]}) == {"a": [3, 4, 1, 2]}, "Non-dict values test failed."
-
-
-def test_mixed_keys():
-    assert merge_dicts({1: "a"}, {"2": "b"}) == {1: "a", "2": "b"}, "Mixed keys test failed."
-
-
-def test_basic_intersection():
-    assert not intersect_dicts({}, {"a": [1]}), "Basic intersection failed."
-
-
-def test_overlapping_keys_with_simple_values():
-    assert intersect_dicts({"a": [1], "b": [2]}, {"b": [2], "c": [3]}) == {
-        "b": [2]
-    }, "Overlapping keys with simple values failed."
-
-
-def test_list_of_values_intersection():
-    assert intersect_dicts({"a": [1, 2, 3]}, {"a": [2, 3, 4]}) == {"a": [2, 3]}, "List of values intersection failed."
-
-
-def test_list_of_ranges_intersection():
-    # Assuming ranges_to_intervals and intervals_to_ranges are defined and work as expected
-    assert intersect_dicts({"a": [(1, 3), (4, 6)]}, {"a": [(2, 5)]}) == {
-        "a": [(2, 3), (4, 5)]
-    }, "List of ranges intersection failed."
-
-
-def test_nested_dictionaries_with_values():
-    assert intersect_dicts({"a": {"b": [1]}}, {"a": {"b": [1], "c": [2]}}) == {
-        "a": {"b": [1]}
-    }, "Nested dictionaries with values failed."
-
-
-def test_nested_dictionaries_with_lists():
-    assert intersect_dicts({"a": {"b": [1, 2, 3]}}, {"a": {"b": [2, 3, 4]}}) == {
-        "a": {"b": [2, 3]}
-    }, "Nested dictionaries with lists failed."
-
-
-def test_nested_dictionaries_with_ranges():
-    # Assuming ranges_to_intervals and intervals_to_ranges are defined and work as expected
-    assert intersect_dicts({"a": {"b": [(1, 3), (4, 6)]}}, {"a": {"b": [(2, 5)]}}) == {
-        "a": {"b": [(2, 3), (4, 5)]}
-    }, "Nested dictionaries with ranges failed."
-
-
-def test_empty_dictionaries_intersect():
-    assert not intersect_dicts({}, {}), "Empty dictionaries test failed."
-    assert not intersect_dicts({"a": [1]}, {}), "Empty dictionary (second) test failed."
-    assert not intersect_dicts({}, {"b": [2]}), "Empty dictionary (first) test failed."
-
-
-def test_ranges_to_intervals():
-    list_of_ranges = [(1, 3), (5, 7)]
-    expected_intervals = P.Interval(P.closed(1, 3), P.closed(5, 7))
-    result_intervals = ranges_to_intervals(list_of_ranges)
-
-    assert result_intervals == expected_intervals, "The intervals do not match the expected result."
-
-
-def test_intervals_to_ranges():
-    intervals = P.Interval(P.closed(1, 3), P.closed(5, 7))
-    expected_ranges = [(1, 3), (5, 7)]
-    result_ranges = intervals_to_ranges(intervals)
-
-    assert result_ranges == expected_ranges, "The ranges do not match the expected result."

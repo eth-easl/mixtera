@@ -17,6 +17,8 @@ class Select(Operator):
             self.conditions = []
 
     def generate_sql(self, connection) -> tuple[str, list[Any]]:
+        # TODO(create issue): This is really janky SQL generation.
+        # We should clean this up with a proper query tree again.
         def process_conditions(conditions):
             clauses = []
             params = []
@@ -49,13 +51,13 @@ class Select(Operator):
         or_clauses = []
         all_params = []
 
-        # Process conditions from this Select object
+        # Multiple conditions are interpreted as "AND"
         clauses, params = process_conditions(self.conditions)
         if clauses:
             or_clauses.append(f"({' AND '.join(clauses)})")
             all_params.extend(params)
 
-        # Process conditions from child Select objects
+        # Nested selects are interpreted as "OR"
         for child in self.children:
             if isinstance(child, Select):
                 child_clauses, child_params = process_conditions(child.conditions)
@@ -70,33 +72,6 @@ class Select(Operator):
             sql = f"SELECT * FROM samples WHERE {where_clause}"
         else:
             sql = "SELECT * FROM samples"
-        return sql, all_params
-
-        # Generate the ORDER BY clause dynamically
-        order_by_columns = ["dataset_id", "file_id"]
-
-        # Get all other column names
-        column_query = """
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_name = 'samples'
-        AND column_name NOT IN ('dataset_id', 'file_id', 'sample_id')
-        ORDER BY column_name
-        """
-
-        # Execute the column query to get the list of columns
-        columns = connection.execute(column_query).fetchall()
-        other_columns = sorted([col[0] for col in columns])
-
-        # Add other columns to the ORDER BY list
-        order_by_columns.extend(other_columns)
-
-        # Add sample_id as the last sorting criterion
-        order_by_columns.append("sample_id")
-
-        # Construct the final SQL query
-        sql += f"\nORDER BY {', '.join(order_by_columns)}"
-
         return sql, all_params
 
     def __str__(self) -> str:
