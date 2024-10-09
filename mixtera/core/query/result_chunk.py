@@ -155,7 +155,15 @@ class ResultChunk:
                 logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
-    def _infer_mixture(self) -> dict[str, int]:
+        # If we have a mixture, ensure that the mixture supports the chunk
+        if self._mixture is not None and (not self._mixture.keys() == self._result_index.keys()):
+            raise RuntimeError(
+                "The received chunk has keys that do not match the mixture. That should not happen.\n"
+                + f"{self._result_index.keys()}"
+                + f"\n{self._mixture.keys()}"
+            )
+
+    def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
 
     def _iterate_samples(self) -> Iterator[str]:
@@ -274,18 +282,11 @@ class ResultChunk:
         seed_everything_from_list(element_counts)
         random.shuffle(element_counts)
 
-        # TODO(#97): We have one (k,v) pair in active_iterators for each property combination in the result.
-        # These can be more than in the mixture, i.e., we can have English/law and English/medicine,
-        # but only have English in the mixture.
-        # element_counts on the other hand is mixture-specific, i.e.,
-        # it has (English, 500) if the mixture is only for English.
-        # element counts is per_window.
-        # Right now this works because due to the buggy way we generate chunks
-        # there only is a single key (e.g., English/law) fulfilling English.
-        # For this logic here to be actually correct,
-        # we need to solve #97 by generating result chunks that 1:1 match the mixture.
-        # We should assert this in the __init__ of ResultChunk when resolving #97.
-        # Also after #97 we should assert here that element_counts.keys() == active_iterators.keys()
+        # This assertion here makes sure our chunk matches the mixture, which is the underlying assumption
+        # of the implementation below. There cannot be more than one key in the chunk we use per mixture key
+        assert set(key for (key, _) in element_counts) == active_iterators.keys(), (
+            f"element_counts.keys = {element_counts} != " + f"active_iterators.keys() = {active_iterators.keys()}"
+        )
 
         deleted_keys: set[MixtureKey] = set()
 

@@ -426,10 +426,12 @@ class QueryResult:
             except StopIteration:
                 return
 
+        logger.debug("ChunkGenerator has been initialized")
+
         base_mixture, target_chunk_index = yield
         while True:
             mixture = base_mixture.mixture_in_rows()
-            logger.error(f"Obtained mixture: {mixture}")
+            logger.debug(f"Obtained mixture: {mixture}")
             if mixture:
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
@@ -437,7 +439,7 @@ class QueryResult:
                 }
 
                 for mixture_key in remaining_sizes.keys():
-                    logger.error(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+                    logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
 
                     while remaining_sizes[mixture_key] > 0:
                         progress_made = False
@@ -460,7 +462,7 @@ class QueryResult:
                                     ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
                                     remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
 
-                                    logger.error(f"Received chunk size: {chunk_size} for {mixture_key}")
+                                    logger.debug(f"Received chunk size: {chunk_size} for {mixture_key}")
 
                                     # Merge the component chunk into the main chunk
                                     for dataset_id, files in component_chunk.items():
@@ -470,24 +472,24 @@ class QueryResult:
                                     progress_made = True
 
                                     if remaining_sizes[mixture_key] == 0:
-                                        logger.error(f"Finished data for {mixture_key}: {remaining_sizes}")
+                                        logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
                                         break  # Do not consider another iterator if we're done
 
                                 except StopIteration:
-                                    logger.error("Continuing on stopiteration")
+                                    logger.debug("Continuing on StopIteration")
                                     continue
 
                         # No matching components found or all are exhausted, unable to complete the chunk
                         if not progress_made:
-                            logger.error("no progress")
+                            logger.debug("Did not make progress, unable to complete chunk.")
                             return
 
                 # Check if we have enough data for all mixture keys
-                # TODO(create issue): Make it possible to support best effort here.
+                # TODO(#111): Make it possible to support best effort here.
                 # Right now, if we cannot fulfill the mixture for that chunk, we stop.
                 if all(size == 0 for size in remaining_sizes.values()):
                     if current_chunk_index == target_chunk_index:
-                        logger.error("Yielding a chunk.")
+                        logger.debug("Yielding a chunk.")
                         base_mixture, target_chunk_index = yield ResultChunk(
                             defaultdict_to_dict(chunk),
                             self.dataset_type,
@@ -497,12 +499,12 @@ class QueryResult:
                             mixture,
                         )
                     else:
-                        logger.error(
+                        logger.debug(
                             f"current_chunk_index = {current_chunk_index} != target_chunk_index = {target_chunk_index}"
                         )
                 # Not enough data to complete the chunk, end generation
                 else:
-                    logger.error("Not enough data, ending chunk generation")
+                    logger.debug("Not enough data, ending chunk generation")
                     return
             else:
                 chunk = None
