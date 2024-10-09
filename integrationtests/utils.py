@@ -29,6 +29,7 @@ def write_jsonl(path: Path, file_count: int, instance_count_per_file: int, fract
         with open(path / f"data_{file_number}.jsonl", "w") as text_file:
             text_file.write(data)
 
+
 def get_expected_js_and_html_samples(
     total_instance_count: int, fraction_multiplier: int
 ) -> tuple[List[int], List[int]]:

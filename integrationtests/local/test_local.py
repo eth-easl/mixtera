@@ -195,12 +195,12 @@ def test_reproducibility(
 def test_client_chunksize(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
-    #test_filter_javascript(client, query_exec_args, result_streaming_args)
-    #test_filter_html(client, query_exec_args, result_streaming_args)
-    #test_filter_both(client, query_exec_args, result_streaming_args)
-    #test_filter_license(client, query_exec_args, result_streaming_args)
-    #test_filter_unknown_license(client, query_exec_args, result_streaming_args)
-    #test_filter_license_and_html(client, query_exec_args, result_streaming_args)
+    test_filter_javascript(client, query_exec_args, result_streaming_args)
+    test_filter_html(client, query_exec_args, result_streaming_args)
+    test_filter_both(client, query_exec_args, result_streaming_args)
+    test_filter_license(client, query_exec_args, result_streaming_args)
+    test_filter_unknown_license(client, query_exec_args, result_streaming_args)
+    test_filter_license_and_html(client, query_exec_args, result_streaming_args)
     test_reproducibility(client, query_exec_args, result_streaming_args)
 
 
