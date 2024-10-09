@@ -10,11 +10,14 @@ from mixtera.core.query.result_chunk import END_OF_STREAM_OBJECT, ResultChunk
 
 class TestResultChunk(unittest.TestCase):
     def setUp(self):
+        shared_keys = ["key1", "key2", "key3"]
         self.chunker_index = MagicMock()
+        self.chunker_index.keys = MagicMock(return_value=shared_keys)
         self.dataset_type_dict = {1: MagicMock()}
         self.file_path_dict = {1: "path/to/file"}
         self.parsing_func_dict = {1: MagicMock()}
         self.mixture = MagicMock()
+        self.mixture.keys = MagicMock(return_value=shared_keys)
         self.chunk_size = 10
 
         self.result_streaming_args = MagicMock()

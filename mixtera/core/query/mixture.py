@@ -21,7 +21,7 @@ class MixtureKey:
         self.properties = properties
 
     def __eq__(self, other: object) -> bool:
-        #  TODO(#97): This is currently not commutative, i.e., a == b does not imply b == a
+        #  TODO(#112): This is currently not commutative, i.e., a == b does not imply b == a
         if not isinstance(other, MixtureKey):
             return False
 
