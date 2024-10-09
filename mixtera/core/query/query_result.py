@@ -11,15 +11,13 @@ import portion
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import (
-    ChunkerIndex,
-    ChunkerIndexDatasetEntries,
-)
+from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import defaultdict_to_dict,  seed_everything_from_list
+from mixtera.utils.utils import defaultdict_to_dict, seed_everything_from_list
 from tqdm import tqdm
+
 
 class QueryResult:
     """QueryResult is a class that represents the results of a query.
@@ -56,7 +54,7 @@ class QueryResult:
         self._lock = mp.Lock()
         self._index = mp.Value("i", 0)
 
-        #  The generator will be created lazily when calling __next__
+        #  The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
         logger.debug("QueryResult instantiated.")
@@ -200,68 +198,111 @@ class QueryResult:
         This latter parameter is useful when chunking in a multiprocessed environment and at most once visitation
         guarantees are required.
         """
-        # Variables for an arbitrary mixture
         current_chunk_index = 0
-        chunker_index_keys_idx = 0
         chunker_index_keys = list(self._chunker_index.keys())
+        chunker_index_keys_idx = 0
         empty_key_idx: set[int] = set()
         seed_everything_from_list(chunker_index_keys)
         random.shuffle(chunker_index_keys)
 
-        # Create coroutines for component iterators and advance them to the first yield
+        # Initialize component iterators
         component_iterators = {
-            key: self._generate_per_mixture_component_chunks(self._chunker_index, key)
-            for key in self._chunker_index.keys()
+            key: self._generate_per_mixture_component_chunks(self._chunker_index, key) for key in chunker_index_keys
         }
-        for _, component_iterator in component_iterators.items():
+        for iterator in component_iterators.values():
             try:
-                next(component_iterator)
+                next(iterator)
             except StopIteration:
                 return
 
+        previous_mixture = None
         base_mixture, target_chunk_index = yield
-        while True:  # pylint: disable=too-many-nested-blocks
-            # Get the mixture from the caller as it might have changed
+        while True:
             mixture = base_mixture.mixture_in_rows()
-
             if mixture:
-                # Try to fetch a chunk part from each of the components. Here one of two things will happen:
-                #   1. All the chunk's components can yield --> we will be able to build a chunk, or
-                #   2. At least one of the chunk's components cannot yield --> StopIteration will be implicitly raised
-                #      and the coroutine will pass the exception upstream to __next__
-                # TODO(#97): Improve that chunks are built from different component iterators,
-                # otherwise we might skip over samples when they are not exactly divisible by the
-                # mixture specific chunk size
-                chunk = {}
-                number_of_keys_yielded = 0
-                for mixture_key in mixture.keys():
-                    # If we only would support static mixture, then we could build the chunkerindex grouped only by the relevant attributes
-                    # But as they might change, we have to support using multiple keys in the chunker index per mixture key
+                if previous_mixture != mixture:
+                    logger.debug(f"Obtained new mixture: {mixture}")
+                    previous_mixture = mixture
 
-                    for key in sorted(self._chunker_index.keys()):
-                        try:
-                            #  The == operator is not commutative, hence the following logic
-                            #  works as expected, this should be improved in
-                            if mixture_key == key:
-                                chunk[key] = component_iterators[key].send(mixture[mixture_key])
-                                number_of_keys_yielded += 1
-                                break
-                        except StopIteration:
-                            continue
+                chunk: ChunkerIndex = create_chunker_index()
+                remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
+                    key: size for key, size in mixture.items()
+                }
 
-                if number_of_keys_yielded != len(mixture):
-                    # One of the components could not yield; we will not be able to build a chunk
+                for mixture_key in remaining_sizes.keys():
+                    logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+
+                    while remaining_sizes[mixture_key] > 0:
+                        progress_made = False
+                        for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
+                            if mixture_key == component_key:
+                                try:
+                                    component_chunk: ChunkerIndexDatasetEntries = iterator.send(
+                                        remaining_sizes[mixture_key]
+                                    )
+
+                                    # Update remaining size
+                                    chunk_size = sum(
+                                        sum(end - start for start, end in ranges)
+                                        for files in component_chunk.values()
+                                        for ranges in files.values()
+                                    )
+
+                                    assert (
+                                        chunk_size <= remaining_sizes[mixture_key]
+                                    ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
+                                    remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
+
+                                    logger.debug(f"Received chunk size: {chunk_size} for {mixture_key}")
+
+                                    # Merge the component chunk into the main chunk
+                                    for dataset_id, files in component_chunk.items():
+                                        for file_id, ranges in files.items():
+                                            chunk[mixture_key][dataset_id][file_id].extend(ranges)
+
+                                    progress_made = True
+
+                                    if remaining_sizes[mixture_key] == 0:
+                                        logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
+                                        break  # Do not consider another iterator if we're done
+
+                                except StopIteration:
+                                    logger.debug("Continuing on StopIteration")
+                                    continue
+
+                        # No matching components found or all are exhausted, unable to complete the chunk
+                        if not progress_made:
+                            logger.debug("Did not make progress, unable to complete chunk.")
+                            return
+
+                # Check if we have enough data for all mixture keys
+                # TODO(#111): Make it possible to support best effort here.
+                # Right now, if we cannot fulfill the mixture for that chunk, we stop.
+                if all(size == 0 for size in remaining_sizes.values()):
+                    if current_chunk_index == target_chunk_index:
+                        logger.debug("Yielding a chunk.")
+                        base_mixture, target_chunk_index = yield ResultChunk(
+                            defaultdict_to_dict(chunk),
+                            self.dataset_type,
+                            self.file_path,
+                            self.parsing_func,
+                            base_mixture.chunk_size,
+                            mixture,
+                        )
+                    else:
+                        logger.debug(
+                            f"current_chunk_index = {current_chunk_index} != target_chunk_index = {target_chunk_index}"
+                        )
+                # Not enough data to complete the chunk, end generation
+                else:
+                    logger.debug("Not enough data, ending chunk generation")
                     return
-                
-                if current_chunk_index == target_chunk_index:
-                    base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
-                    )
             else:
                 chunk = None
                 while len(empty_key_idx) < len(chunker_index_keys) and chunk is None:
                     chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
                     if chunker_index_keys_idx in empty_key_idx:
+                        # Note that this can be removed but needs some adjustments in the tests (only impacts ordering)
                         chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
                         continue
 
@@ -280,7 +321,7 @@ class QueryResult:
                 if current_chunk_index == target_chunk_index:
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
                     base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, None
                     )
             current_chunk_index += 1
 
@@ -310,7 +351,7 @@ class QueryResult:
             self._index.get_obj().value += 1
 
         with self._lock:
-            #  The generator is created lazily since the QueryResult object might be pickled
+            #  The generator is created lazily since the QueryResult object might be pickled
             # (and the generator was deleted from the state)
             if self._generator is None:
                 self._generator = self._chunk_generator()
@@ -329,7 +370,7 @@ class QueryResult:
         # Remove the generator since it is not pickable (and will be recreated on __next__)
         del state["_generator"]
 
-        #  The following attributes are pickled using dill since they are not pickable by
+        #  The following attributes are pickled using dill since they are not pickable by
         # the default pickler (used by torch)
         dill_pickled_attributes = {}
         for attrib in ["_meta", "_chunker_index"]:

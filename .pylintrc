@@ -172,8 +172,9 @@ disable=raw-checker-failed,
         too-many-instance-attributes,   # We always ignore this anyways
         too-many-branches,              # We always ignore this anyways
         too-many-locals,                # We always ignore this anyways
-        too-many-positional-arguments   # We always ignore this anyways
-
+        too-many-positional-arguments,  # We always ignore this anyways
+        too-many-nested-blocks,         # We always ignore this anyways
+        too-many-statements             # We always ignore this anyways
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
 # multiple time (only on the command line, not in the configuration file where
