@@ -428,11 +428,15 @@ class QueryResult:
 
         logger.debug("ChunkGenerator has been initialized")
 
+        previous_mixture = None
         base_mixture, target_chunk_index = yield
         while True:
             mixture = base_mixture.mixture_in_rows()
-            logger.debug(f"Obtained mixture: {mixture}")
             if mixture:
+                if previous_mixture != mixture:
+                    logger.debug(f"Obtained new mixture: {mixture}")
+                    previous_mixture = mixture
+
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
                     key: size for key, size in mixture.items()
@@ -558,7 +562,6 @@ class QueryResult:
         with self._index.get_lock():
             chunk_target_index = self._index.get_obj().value
             self._index.get_obj().value += 1
-            logger.debug(f"__next__ is called, target index is {chunk_target_index}")
 
         with self._lock:
             #  The generator is created lazily since the QueryResult object might be pickled
