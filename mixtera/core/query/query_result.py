@@ -530,7 +530,7 @@ class QueryResult:
                 if current_chunk_index == target_chunk_index:
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
                     base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, mixture
+                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, None
                     )
             current_chunk_index += 1
 
@@ -558,7 +558,7 @@ class QueryResult:
         with self._index.get_lock():
             chunk_target_index = self._index.get_obj().value
             self._index.get_obj().value += 1
-            logger.error(f"__next__ is called, target index is {chunk_target_index}")
+            logger.debug(f"__next__ is called, target index is {chunk_target_index}")
 
         with self._lock:
             #  The generator is created lazily since the QueryResult object might be pickled
@@ -572,7 +572,6 @@ class QueryResult:
                 ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
 
             self._num_returns_gen += 1
-            logger.error("next is returning something.")
             return self._generator.send((self._mixture, chunk_target_index))
 
     def __getstate__(self) -> dict:

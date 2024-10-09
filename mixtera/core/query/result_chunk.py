@@ -161,6 +161,7 @@ class ResultChunk:
                 "The received chunk has keys that do not match the mixture. That should not happen.\n"
                 + f"{self._result_index.keys()}"
                 + f"\n{self._mixture.keys()}"
+                + f"\n{self._mixture}"
             )
 
     def _infer_mixture(self) -> dict[MixtureKey, int]:
