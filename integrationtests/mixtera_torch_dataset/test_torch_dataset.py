@@ -337,7 +337,7 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
         "ldc_torch_integrationtest_dataset", local_dir, JSONLDataset, sample_parsing_func, "TEST_PARSER"
     )
 
-    for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]] + [InferringMixture(x) for x in [2, 2000]]:
+    for mixture in [ArbitraryMixture(x) for x in [1, 3, 500, 750, 2000]] + [InferringMixture(x) for x in [2, 1000]]:
         for num_workers in [0, 3, 8]:
             for batch_size in [1, 2, 500]:
                 try:

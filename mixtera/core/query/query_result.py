@@ -426,8 +426,6 @@ class QueryResult:
             except StopIteration:
                 return
 
-        logger.debug("ChunkGenerator has been initialized")
-
         previous_mixture = None
         base_mixture, target_chunk_index = yield
         while True:
