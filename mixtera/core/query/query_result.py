@@ -417,7 +417,7 @@ class QueryResult:
         random.shuffle(chunker_index_keys)
 
         # Initialize component iterators
-        component_iterators: dict[MixtureKey, Generator] = {
+        component_iterators = {
             key: self._generate_per_mixture_component_chunks(self._chunker_index, key) for key in chunker_index_keys
         }
         for iterator in component_iterators.values():
@@ -427,9 +427,6 @@ class QueryResult:
                 return
 
         base_mixture, target_chunk_index = yield
-        # TODO test case mit english data that is 50% german and 50% french, dann 10 items mit chunk size 10 testen
-        # das sollte dann gehen jetzt und vorher nicht
-
         while True:
             mixture = base_mixture.mixture_in_rows()
             logger.error(f"Obtained mixture: {mixture}")
