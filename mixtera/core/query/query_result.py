@@ -486,6 +486,8 @@ class QueryResult:
                             return
 
                 # Check if we have enough data for all mixture keys
+                # TODO(create issue): Make it possible to support best effort here.
+                # Right now, if we cannot fulfill the mixture for that chunk, we stop.
                 if all(size == 0 for size in remaining_sizes.values()):
                     if current_chunk_index == target_chunk_index:
                         logger.error("Yielding a chunk.")

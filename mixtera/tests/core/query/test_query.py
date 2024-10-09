@@ -478,27 +478,30 @@ class TestQuery(unittest.TestCase):
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(44, 56)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(148, 150)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(148, 150), (50, 52)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(56, 68)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(50, 54)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(52, 56)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(68, 80)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(54, 58)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(56, 60)]}},
             },
             {
                 MixtureKey({"language": ["french"]}): {0: {1: [(80, 92)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(58, 62)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(60, 64)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(92, 100)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(62, 66)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(92, 100)], 0: [(64, 68)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(68, 72)]}},
             },
-            {MixtureKey({"language": ["english", "french"]}): {0: {0: [(78, 82)]}}},
-            {MixtureKey({"language": ["english", "french"]}): {0: {0: [(94, 98)]}}},
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(72, 84)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(84, 88)]}},
+            },
         ]
+
         reference_chunker_index = {
             MixtureKey({"language": ["french"]}): {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
             MixtureKey({"language": ["english", "french"]}): {0: {0: [[50, 100]]}},
@@ -541,42 +544,55 @@ class TestQuery(unittest.TestCase):
 
         reference_chunks = [
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(20, 25)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(0, 20)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(20, 25)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(100, 105)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(45, 50)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(25, 45)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(45, 50)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(105, 110)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(170, 175)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(150, 170)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(170, 175)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(110, 115)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(195, 200)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(175, 195)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(195, 200)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(115, 120)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(20, 25)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(0, 20)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(20, 25)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(120, 125)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(45, 50)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(25, 45)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(45, 50)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(125, 130)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(70, 75)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(50, 70)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(70, 75)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(130, 135)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(95, 100)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(75, 95)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(95, 100)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(135, 140)]}},
             },
             {
-                MixtureKey({"language": ["french", "english"]}): {0: {0: [(50, 70)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(50, 70)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(140, 145)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(145, 150)]}},
             },
-            {MixtureKey({"language": ["french", "english"]}): {0: {0: [(95, 100)]}}},
+            {
+                MixtureKey({"language": ["french"]}): {0: {0: [(70, 90)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(90, 95)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(95, 100)]}},
+            },
         ]
 
         reference_chunker_index = {
