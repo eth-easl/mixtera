@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import portion as P
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes

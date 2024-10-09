@@ -83,18 +83,18 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
 
                 inference_result_per_file[prediction][dataset_id][file_id].append(line_id)
 
-        # TODO_ adjust
+        # TODO(MaxiBoether): adjust for duckdb
         return inference_result_per_file
-        rangified: defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int, int]]]]] = defaultdict(
-            lambda: defaultdict(lambda: defaultdict(list))
-        )
+        # rangified: defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int, int]]]]] = defaultdict(
+        #    lambda: defaultdict(lambda: defaultdict(list))
+        # )
 
-        for bucket_val, datasets in inference_result_per_file.items():
-            for dataset_id, files in datasets.items():
-                for file_id, list_of_lines in files.items():
-                    rangified[bucket_val][dataset_id][file_id] = ranges(list_of_lines)
+        # for bucket_val, datasets in inference_result_per_file.items():
+        #    for dataset_id, files in datasets.items():
+        #        for file_id, list_of_lines in files.items():
+        #            rangified[bucket_val][dataset_id][file_id] = ranges(list_of_lines)
 
-        return rangified
+        # return rangified
 
     @staticmethod
     def _read_samples_from_file(file: str, dtype: Type[Dataset]) -> Generator[tuple[int, str], None, None]:
