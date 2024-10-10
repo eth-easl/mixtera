@@ -1,9 +1,8 @@
 import unittest
 from unittest.mock import MagicMock
 
-from mixtera.core.datacollection.index import InMemoryDictionaryRangeIndex
-from mixtera.core.query import Intersection, QueryPlan
-from mixtera.core.query.operators.select import Condition, Select
+from mixtera.core.query import QueryPlan
+from mixtera.core.query.operators.select import Select
 
 
 class TestSelect(unittest.TestCase):

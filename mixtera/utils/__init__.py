@@ -7,6 +7,7 @@ from .utils import (  # noqa: F401
     flatten,
     hash_dict,
     is_on_github_actions,
+    merge_sorted_lists,
     numpy_to_native_type,
     run_async_until_complete,
     seed_everything_from_list,
@@ -22,4 +23,5 @@ __all__ = [
     "hash_dict",
     "seed_everything_from_list",
     "is_on_github_actions",
+    "merge_sorted_lists",
 ]

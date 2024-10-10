@@ -162,3 +162,37 @@ def is_on_github_actions() -> bool:
         return True
 
     return False
+
+
+def merge_sorted_lists(
+    sorted_list1: list[tuple[int, ...]], sorted_list2: list[tuple[int, ...]]
+) -> list[tuple[int, ...]]:
+    """
+    Merges two sorted lists of tuples into a single sorted list of tuples.
+    The lists are sorted based on the first element of each tuple.
+
+    Args:
+        sorted_list1: A list of tuples, each sorted by the first element.
+        sorted_list2: Another list of tuples, each sorted by the first element.
+
+    Returns:
+        A merged list of tuples, sorted by the first element of each tuple.
+    """
+    merged_list = []
+    i, j = 0, 0
+
+    while i < len(sorted_list1) and j < len(sorted_list2):
+        if sorted_list1[i][0] <= sorted_list2[j][0]:
+            merged_list.append(sorted_list1[i])
+            i += 1
+        else:
+            merged_list.append(sorted_list2[j])
+            j += 1
+
+    if i < len(sorted_list1):
+        merged_list.extend(sorted_list1[i:])
+
+    if j < len(sorted_list2):
+        merged_list.extend(sorted_list2[j:])
+
+    return merged_list

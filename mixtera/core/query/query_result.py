@@ -12,7 +12,7 @@ from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetE
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import defaultdict_to_dict, seed_everything_from_list
+from mixtera.utils.utils import defaultdict_to_dict, merge_sorted_lists, seed_everything_from_list
 from tqdm import tqdm
 
 
@@ -255,7 +255,13 @@ class QueryResult:
                                     # Merge the component chunk into the main chunk
                                     for dataset_id, files in component_chunk.items():
                                         for file_id, ranges in files.items():
-                                            chunk[mixture_key][dataset_id][file_id].extend(ranges)
+                                            chunk[mixture_key][dataset_id][file_id] = (
+                                                ranges
+                                                if file_id not in chunk[mixture_key][dataset_id]
+                                                else merge_sorted_lists(chunk[mixture_key][dataset_id][file_id], ranges)
+                                            )
+                                            # If we extended the ranges of that file, we need to sort them since, e.g., the JSONL file wrapper expects them in sorted order
+                                            # Since we now ranges are sorted and the existing ranges are sorted as well, we use a merge operation.
 
                                     progress_made = True
 

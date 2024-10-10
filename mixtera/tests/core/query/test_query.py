@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes
 from mixtera.core.query import ArbitraryMixture, MixtureKey, Operator, Query, QueryPlan, StaticMixture
 from mixtera.core.query.mixture import InferringMixture
 from mixtera.utils import defaultdict_to_dict
