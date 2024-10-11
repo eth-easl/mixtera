@@ -23,14 +23,14 @@ class Select(Operator):
             clauses = []
             params = []
             for field, op, value in conditions:
-                if isinstance(value, list):
+                if isinstance(value, list) and len(value) > 1:
                     if op == "==":
                         placeholders = ", ".join(["?" for _ in value])
-                        clauses.append(f"array_contains_any({field}, [{placeholders}])")
+                        clauses.append(f"array_has_any({field}, [{placeholders}])")
                         params.extend(value)
                     elif op == "!=":
                         placeholders = ", ".join(["?" for _ in value])
-                        clauses.append(f"NOT array_contains_any({field}, [{placeholders}])")
+                        clauses.append(f"NOT array_has_any({field}, [{placeholders}])")
                         params.extend(value)
                     elif op in [">", "<", ">=", "<="]:
                         sub_clauses = [f"any_value({field}) {op} ?" for _ in value]
@@ -39,6 +39,8 @@ class Select(Operator):
                     else:
                         logger.warning(f"Unsupported operator {op} for list values")
                 else:
+                    # To call array-contains on lists of length 1 - minor optimization in the generated sql.
+                    value = value[0] if isinstance(value, list) else value
                     if op == "==":
                         clauses.append(f"array_contains({field}, ?)")
                     elif op == "!=":

@@ -262,7 +262,8 @@ class QueryResult:
                                                 if file_id not in chunk[mixture_key][dataset_id]
                                                 else merge_sorted_lists(chunk[mixture_key][dataset_id][file_id], ranges)
                                             )
-                                            # If we extended the ranges of that file, we need to sort them since, e.g., the JSONL file wrapper expects them in sorted order
+                                            # If we extended the ranges of that file, we need to sort them since, e.g.,
+                                            # the JSONL file wrapper expects them in sorted order
                                             # Since we now ranges are sorted and the existing ranges are sorted as well, we use a merge operation.
 
                                     progress_made = True
