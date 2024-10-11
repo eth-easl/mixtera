@@ -837,7 +837,7 @@ class TestQueryResult(unittest.TestCase):
             },
             {
                 MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(121, 127)]}},
-                MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(149, 150), (90, 93)]}},
+                MixtureKey({"language": ["english"], "topic": ["medicine"]}): {1: {0: [(90, 93), (149, 150)]}},
             },
             {
                 MixtureKey({"language": ["french"], "topic": ["law"]}): {0: {1: [(127, 133)]}},

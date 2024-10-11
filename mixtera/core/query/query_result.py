@@ -81,6 +81,8 @@ class QueryResult:
                 k: v if isinstance(v, list) else [v]
                 for k, v in row.items()
                 if k not in ["dataset_id", "file_id", "group_id", "interval_start", "interval_end"]
+                and v is not None  # Exclude properties from mixture key that do not have an assigned value
+                and not (isinstance(v, list) and len(v) == 0)  # Sanity check to avoid empty lists as well
             }
             mixture_key = MixtureKey(properties)
             interval = [row["interval_start"], row["interval_end"]]
