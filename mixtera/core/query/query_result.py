@@ -264,7 +264,8 @@ class QueryResult:
                                             )
                                             # If we extended the ranges of that file, we need to sort them since, e.g.,
                                             # the JSONL file wrapper expects them in sorted order
-                                            # Since we now ranges are sorted and the existing ranges are sorted as well, we use a merge operation.
+                                            # Since we now ranges are sorted and the existing ranges 
+                                            # are sorted as well, we use a merge operation.
 
                                     progress_made = True
 

@@ -7,102 +7,82 @@ from mixtera.core.query.operators.select import Select
 
 class TestSelect(unittest.TestCase):
     def setUp(self):
-        self.condition = Condition(("field", "operator", "value"))
+        self.condition = ("field", "==", "value")
         self.select = Select(self.condition)
 
-    def test_init_with_condition(self):
-        self.assertEqual(self.select.condition, self.condition)
-
     def test_init_with_tuple(self):
-        condition_tuple = ("field", "==", "value")
-        select = Select(condition_tuple)
-        self.assertEqual(select.condition.field, "field")
-        self.assertEqual(select.condition.operator, "==")
-        self.assertEqual(select.condition.value, "value")
+        self.assertEqual(self.select.conditions, [self.condition])
 
-    def test_init_with_invalid_tuple(self):
-        condition_tuple = ("field", "invalid_operator", "value")
-        with self.assertRaises(AssertionError):
-            Select(condition_tuple)
+    def test_init_with_list(self):
+        conditions = [("field1", "==", "value1"), ("field2", ">", 5)]
+        select = Select(conditions)
+        self.assertEqual(select.conditions, conditions)
 
-    def test_init_with_invalid_condition(self):
-        with self.assertRaises(RuntimeError):
-            Select("invalid_condition")
-
-    def test_execute_with_no_children(self):
-        mdc = MagicMock()
-        returned_index = InMemoryDictionaryRangeIndex()
-        returned_index.append_entry("field", "value", "did", "fid", (0, 2))
-        mdc.get_index.return_value = returned_index
-        self.select.condition.meet = MagicMock(return_value=True)
-        self.select.execute(mdc)
-        self.assertEqual(self.select.results._index, returned_index._index)
-
-    def test_empty_select(self):
-        mdc = MagicMock()
-        self.select = Select(None)
-        returned_index = InMemoryDictionaryRangeIndex()
-        returned_index.append_entry("field", "value", "did", "fid", (0, 2))
-        returned_index.append_entry("field2", "value2", "did", "fid", (42, 43))
-        mdc.get_index.return_value = returned_index
-        self.select.execute(mdc)
-        self.assertEqual(self.select.results._index, returned_index._index)
-
-    def test_execute_with_one_child(self):
-        returned_index = InMemoryDictionaryRangeIndex()
-        returned_index.append_entry("field", "value", "did", "fid", (0, 2))
-
-        self.select.condition.meet = MagicMock(return_value=True)
-        self.select.children = [MagicMock()]
-        self.assertEqual(self.select.results, None)
-
-    def test_chaining_select(self):
-        query_plan = QueryPlan()
-        select_1 = Select(("field_1", "==", "value_1"))
-        select_2 = Select(("field_2", "==", "value_2"))
-        query_plan.add(select_1)
-        query_plan.add(select_2)
-        self.assertIsInstance(query_plan.root, Intersection)
-        self.assertEqual(len(query_plan.root.children), 2)
-        self.assertEqual(query_plan.root.children[0], select_1)
-        self.assertEqual(query_plan.root.children[1], select_2)
+    def test_init_with_none(self):
+        select = Select(None)
+        self.assertEqual(select.conditions, [])
 
     def test_str(self):
-        self.assertEqual(str(self.select), "select<>(field operator value)")
+        self.assertEqual(str(self.select), "select<>([('field', '==', 'value')])")
+
+    def test_insert_empty_query_plan(self):
+        query_plan = QueryPlan()
+        query_plan.is_empty = MagicMock(return_value=True)
+        result = self.select.insert(query_plan)
+        self.assertEqual(result, self.select)
+
+    def test_insert_non_empty_query_plan(self):
+        query_plan = QueryPlan()
+        existing_select = Select(("field2", "!=", "value2"))
+        query_plan.root = existing_select
+        query_plan.is_empty = MagicMock(return_value=False)
+        result = self.select.insert(query_plan)
+        self.assertEqual(result, existing_select)
+        self.assertIn(self.select, existing_select.children)
+
+    def test_generate_sql_single_condition(self):
+        mock_connection = MagicMock()
+        sql, params = self.select.generate_sql(mock_connection)
+        expected_sql = "SELECT * FROM samples WHERE (array_contains(field, ?))"
+        self.assertEqual(sql, expected_sql)
+        self.assertEqual(params, ["value"])
+
+    def test_generate_sql_multiple_conditions(self):
+        select = Select([("field1", "==", "value1"), ("field2", ">", 5)])
+        mock_connection = MagicMock()
+        sql, params = select.generate_sql(mock_connection)
+        expected_sql = "SELECT * FROM samples WHERE (array_contains(field1, ?) AND any_value(field2) > ?)"
+        self.assertEqual(sql, expected_sql)
+        self.assertEqual(params, ["value1", 5])
+
+    def test_generate_sql_no_conditions(self):
+        select = Select(None)
+        mock_connection = MagicMock()
+        sql, params = select.generate_sql(mock_connection)
+        expected_sql = "SELECT * FROM samples"
+        self.assertEqual(sql, expected_sql)
+        self.assertEqual(params, [])
+
+    def test_generate_sql_with_list_values(self):
+        select = Select([("field1", "==", ["value1", "value2"]), ("field2", ">", [5, 10])])
+        mock_connection = MagicMock()
+        sql, params = select.generate_sql(mock_connection)
+        expected_sql = (
+            "SELECT * FROM samples WHERE (array_has_any(field1, [?, ?])"
+            + " AND (any_value(field2) > ? OR any_value(field2) > ?))"
+        )
+        self.assertEqual(sql, expected_sql)
+        self.assertEqual(params, ["value1", "value2", 5, 10])
+
+    def test_generate_sql_with_nested_select(self):
+        child_select = Select(("field2", "!=", "value2"))
+        self.select.children.append(child_select)
+        mock_connection = MagicMock()
+        sql, params = self.select.generate_sql(mock_connection)
+        expected_sql = "SELECT * FROM samples WHERE (array_contains(field, ?)) OR (NOT array_contains(field2, ?))"
+        self.assertEqual(sql, expected_sql)
+        self.assertEqual(params, ["value", "value2"])
 
 
-class TestCondition(unittest.TestCase):
-    def setUp(self):
-        self.condition = Condition(("field", "operator", "value"))
-
-    def test_init(self):
-        self.assertEqual(self.condition.field, "field")
-        self.assertEqual(self.condition.operator, "operator")
-        self.assertEqual(self.condition.value, "value")
-
-    def test_meet_equal(self):
-        self.condition.operator = "=="
-        self.assertTrue(self.condition.meet("value"))
-        self.assertFalse(self.condition.meet("other_value"))
-
-    def test_meet_not_equal(self):
-        self.condition.operator = "!="
-        self.assertFalse(self.condition.meet("value"))
-        self.assertTrue(self.condition.meet("other_value"))
-
-    def test_meet_greater_than(self):
-        self.condition.operator = ">"
-        self.condition.value = 5
-        self.assertTrue(self.condition.meet(6))
-        self.assertFalse(self.condition.meet(4))
-
-    def test_meet_less_than(self):
-        self.condition.operator = "<"
-        self.condition.value = 5
-        self.assertTrue(self.condition.meet(4))
-        self.assertFalse(self.condition.meet(6))
-
-    def test_meet_invalid_operator(self):
-        self.condition.operator = "invalid_operator"
-        with self.assertRaises(RuntimeError):
-            self.condition.meet({"field": "value"})
+if __name__ == "__main__":
+    unittest.main()

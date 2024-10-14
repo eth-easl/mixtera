@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.query.operators._base import Operator
-from mixtera.core.query.query import QueryPlan
+from mixtera.core.query.query_plan import QueryPlan
 
 
 class TestOperator(unittest.TestCase):
@@ -11,33 +11,51 @@ class TestOperator(unittest.TestCase):
 
     def test_init(self):
         self.assertEqual(self.operator.children, [])
-        self.assertEqual(self.operator.results, None)
 
-    def test_repr(self):
+    def test_str(self):
         self.assertEqual(str(self.operator), "Operator")
 
     def test_insert_empty(self):
-        mock_operator = MagicMock(spec=Operator)
         query_plan = QueryPlan()
-        query_plan.add(mock_operator)
-        self.assertEqual(mock_operator, query_plan.root)
+        query_plan.is_empty = MagicMock(return_value=True)
+        result = self.operator.insert(query_plan)
+        self.assertEqual(result, self.operator)
+        self.assertEqual(self.operator.children, [])
+
+    def test_insert_non_empty(self):
+        mock_child = MagicMock(spec=Operator)
+        query_plan = QueryPlan()
+        query_plan.root = mock_child
+        query_plan.is_empty = MagicMock(return_value=False)
+
+        result = self.operator.insert(query_plan)
+        self.assertEqual(result, self.operator)
+        self.assertEqual(self.operator.children, [mock_child])
 
     def test_display(self):
-        mock_operator = MagicMock(spec=Operator)
-        query_plan = MagicMock(spec=QueryPlan)
-        query_plan.is_empty.return_value = False
-        query_plan.root = mock_operator
-        with patch("builtins.print") as mocked_print:
-            self.operator.display(1)
-            mocked_print.assert_called_with("-> Operator")
+        child1 = Operator()
+        child2 = Operator()
+        self.operator.children = [child1, child2]
 
-    def test_post_order_traverse(self):
-        mock_operator = Operator()
-        # execute should be called only once
-        with patch.object(Operator, "execute") as mocked_execute:
-            mock_operator.post_order_traverse(None)
-            mocked_execute.assert_called_once()
+        with patch("builtins.print") as mock_print:
+            self.operator.display(0)
+            mock_print.assert_any_call("Operator")
+            mock_print.assert_any_call("-> Operator")
+            mock_print.assert_any_call("-> Operator")
 
-    def test_execute_not_implemented(self):
+    def test_string(self):
+        child1 = Operator()
+        child2 = Operator()
+        self.operator.children = [child1, child2]
+
+        expected_string = "Operator\n-> Operator\n-> Operator\n"
+        self.assertEqual(self.operator.string(0), expected_string)
+
+    def test_generate_sql_not_implemented(self):
+        mock_connection = MagicMock()
         with self.assertRaises(NotImplementedError):
-            self.operator.execute(None)
+            self.operator.generate_sql(mock_connection)
+
+
+if __name__ == "__main__":
+    unittest.main()
