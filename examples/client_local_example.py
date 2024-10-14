@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from mixtera.core.client import MixteraClient
+from mixtera.core.client import MixteraClient, QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.query import ArbitraryMixture, Query
@@ -71,8 +71,12 @@ def run_query(client: MixteraClient, chunk_size: int):
     job_id = str(round(time.time() * 1000)) # Get some job ID based on current timestamp
     query = Query.for_job(job_id).select(("language", "==", "JavaScript")) # In our example, we want to query all samples tagged JavaScript
     mixture = ArbitraryMixture(chunk_size=chunk_size)
-    client.execute_query(query, mixture)
-    result_samples = list(client.stream_results(job_id))
+
+    query_args = QueryExecutionArgs(mixture=mixture)
+    client.execute_query(query, query_args)
+
+    result_args = ResultStreamingArgs(job_id)
+    result_samples = list(client.stream_results(result_args))
     
     # Checking the number of results and their validity.
     assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
