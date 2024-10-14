@@ -59,3 +59,5 @@ tmp/
 *.jsonl
 *.sqlite
 *.db
+.venv
+.idea/
