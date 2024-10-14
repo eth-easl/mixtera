@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import torch
-from mixtera.core.client import MixteraClient
+from mixtera.core.client import MixteraClient, QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
@@ -71,7 +71,9 @@ def setup_local_client(directory: Path):
 
 def setup_torch_dataset(client: MixteraClient, job_id: str, query: Query, mixture: Mixture, tunnel: bool):
     # Creating a torch dataset.
-    torch_ds = MixteraTorchDataset(client, query, job_id, mixture, tunnel_via_server=tunnel)
+    query_args = QueryExecutionArgs(mixture=mixture, num_workers=2)
+    result_args = ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)
+    torch_ds = MixteraTorchDataset(client, query, query_args, result_args)
     return torch_ds
 
 
