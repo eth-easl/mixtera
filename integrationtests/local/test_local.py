@@ -12,7 +12,7 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, MixtureKey, Query, StaticMixture
+from mixtera.core.query import ArbitraryMixture, MixtureKey, Query, StaticMixture, HierarchicalStaticMixture
 
 TEST_LOCAL_INSTANCE_COUNT = 1000
 TEST_LOCAL_FILE_COUNT = 5
@@ -168,6 +168,39 @@ def test_reproducibility(
     )
     result_list = []
 
+
+    mixture2 = HierarchicalStaticMixture(query_exec_args.mixture.chunk_size, [{
+                    "language": "JavaScript",
+                    "portion": 0.5,
+                    "submixture": [
+                        {
+                            "licence": "CC",
+                            "portion": 0.8,
+                            "submixture": []
+                        },
+                        {
+                            "licence": "All rights reserved.",
+                            "portion": 0.2,
+                            "submixture": []
+                        }
+                    ],
+                }, {
+                    "language": "German",
+                    "portion": 0.5,
+                    "submixture": [
+                        {
+                            "licence": "CC",
+                            "portion": 0.6,
+                            "submixture": []
+                        },
+                        {
+                            "licence": "All rights reserved.",
+                            "portion": 0.4,
+                            "submixture": []
+                        }
+                    ],
+                }])
+    
     for i in range(REPRODUCIBILITY_ITERATIONS):
         result_streaming_args.job_id = (
             f"6_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
