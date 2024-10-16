@@ -288,6 +288,14 @@ class MixteraDataCollection:
             cur = self._connection.cursor()
             cur.execute(delete_samples_query, (identifier,))
 
+            delete_files_query = """
+            DELETE FROM files
+            WHERE dataset_id IN (
+                SELECT id FROM datasets WHERE name = ?
+            );
+            """
+            cur.execute(delete_files_query, (identifier,))
+
             delete_dataset_query = "DELETE FROM datasets WHERE name = ?;"
             cur.execute(delete_dataset_query, (identifier,))
             self._connection.commit()

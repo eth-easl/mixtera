@@ -216,7 +216,7 @@ def test_chunk_readers(dir: Path) -> None:
     per_window_mixtures = [False, True]
     window_sizes = [64, 128]
 
-    for chunk_size in [10000, 500]:
+    for chunk_size in [100, 500]:
         for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
             for per_window_mixture in per_window_mixtures:
                 for window_size in window_sizes:

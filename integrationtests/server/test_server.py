@@ -122,9 +122,11 @@ def test_filter_license(
     for sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
 
+    num_cc_samples = TEST_SERVER_INSTANCE_COUNT // 2
+
     assert (
-        len(result_samples) == TEST_SERVER_INSTANCE_COUNT
-    ), f"Got {len(result_samples)} samples instead of the expected {TEST_SERVER_INSTANCE_COUNT}!"
+        len(result_samples) == num_cc_samples
+    ), f"Got {len(result_samples)} samples instead of the expected {num_cc_samples}!"
     for sample in result_samples:
         assert 0 <= int(sample) < TEST_SERVER_INSTANCE_COUNT, f"Sample {sample} should not appear"
 

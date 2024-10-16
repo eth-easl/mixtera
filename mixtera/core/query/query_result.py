@@ -35,7 +35,6 @@ class QueryResult:
         # Prepare chunker index for iterable chunking
         self._mixture = mixture
         logger.debug("Instantiating QueryResult..")
-        logger.debug(results)
         logger.debug("Creating chunker index.")
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
@@ -89,7 +88,6 @@ class QueryResult:
             chunker_index[mixture_key][dataset_id][file_id].append(interval)
 
         logger.info("Chunker index creation completed")
-        logger.info(chunker_index)
 
         return chunker_index
 
