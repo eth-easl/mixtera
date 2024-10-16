@@ -168,39 +168,6 @@ def test_reproducibility(
     )
     result_list = []
 
-
-    mixture2 = HierarchicalStaticMixture(query_exec_args.mixture.chunk_size, [{
-                    "language": "JavaScript",
-                    "portion": 0.5,
-                    "submixture": [
-                        {
-                            "licence": "CC",
-                            "portion": 0.8,
-                            "submixture": []
-                        },
-                        {
-                            "licence": "All rights reserved.",
-                            "portion": 0.2,
-                            "submixture": []
-                        }
-                    ],
-                }, {
-                    "language": "German",
-                    "portion": 0.5,
-                    "submixture": [
-                        {
-                            "licence": "CC",
-                            "portion": 0.6,
-                            "submixture": []
-                        },
-                        {
-                            "licence": "All rights reserved.",
-                            "portion": 0.4,
-                            "submixture": []
-                        }
-                    ],
-                }])
-    
     for i in range(REPRODUCIBILITY_ITERATIONS):
         result_streaming_args.job_id = (
             f"6_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
@@ -225,6 +192,54 @@ def test_reproducibility(
     for i in range(1, REPRODUCIBILITY_ITERATIONS):
         assert result_list[i] == result_list[i - 1], "Results are not reproducible"
 
+def test_hiearchical_mixture_correctness(
+    query_exec_args: QueryExecutionArgs
+):
+    # First trying the hiearchical mixture.
+    hiearchical_mixture = [
+               {
+                    "language": "JavaScript",
+                    "portion": 0.6,
+                    "submixture": [
+                        {
+                            "licence": "CC",
+                            "portion": 0.5,
+                            "submixture": [
+                                {
+                                    "topic": "law",
+                                    "portion": 0.8,
+                                    "submixture": []
+                                },
+                                {
+                                    "topic": "medicine",
+                                    "portion": 0.2,
+                                    "submixture": []
+                                }
+                            ]
+                        },
+                        {
+                            "licence": "All rights reserved",
+                            "portion": 0.5,
+                            "submixture": []
+                        }
+                    ]
+               },
+               {
+                    "language": "HTML",
+                    "portion": 0.4,
+                    "submixture": []
+               },
+          ]
+    
+    mixture = HierarchicalStaticMixture(
+        query_exec_args.mixture.chunk_size,
+        hiearchical_mixture,
+    )
+
+    assert mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ['CC'], "topic": ["law"]})] == query_exec_args.mixture.chunk_size * 0.24, "The portions are not correct."
+    assert mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ['CC'], "topic": ["medicine"]})] == query_exec_args.mixture.chunk_size * 0.06, "The portions are not correct."
+    assert mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ['All rights reserved']})] == query_exec_args.mixture.chunk_size * 0.3, "The portions are not correct."
+    assert mixture._mixture[MixtureKey({"language": ["HTML"]})] == query_exec_args.mixture.chunk_size * 0.4, "The portions are not correct."
 
 def test_client_chunksize(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
@@ -236,6 +251,7 @@ def test_client_chunksize(
     test_filter_unknown_license(client, query_exec_args, result_streaming_args)
     test_filter_license_and_html(client, query_exec_args, result_streaming_args)
     test_reproducibility(client, query_exec_args, result_streaming_args)
+    test_hiearchical_mixture_correctness(query_exec_args)
 
 
 def test_chunk_readers(dir: Path) -> None:
