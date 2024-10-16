@@ -8,6 +8,7 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.query import ArbitraryMixture, MixtureKey, Query
+from mixtera.core.query.mixture import StaticMixture
 
 
 class TestQueryE2E(unittest.TestCase):
@@ -67,7 +68,8 @@ class TestQueryE2E(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_query_select(self):
-        mixture = ArbitraryMixture(1)
+        # Use a static mixture such that we only have key Go in the results.
+        mixture = StaticMixture(chunk_size=1, mixture={MixtureKey({"language": ["Go"]}): 1})
         query = Query.for_job("job_id").select(("language", "==", "Go"))
         args = QueryExecutionArgs(mixture=mixture)
         assert self.client.execute_query(query, args)
@@ -78,24 +80,18 @@ class TestQueryE2E(unittest.TestCase):
 
     def test_union(self):
         mixture = ArbitraryMixture(1)
-        query_1 = Query.for_job("job_id").select(("language", "==", "Go"))
-        query_2 = Query.for_job("job_id")
-        query_2.select(("language", "==", "CSS"))
-        query_2 = query_2.union(query_1)
+        query = Query.for_job("job_id").select(("language", "==", "Go")).select(("language", "==", "CSS"))
         args = QueryExecutionArgs(mixture=mixture)
-        assert self.client.execute_query(query_2, args)
-        query_result = query_2.results
+        assert self.client.execute_query(query, args)
+        query_result = query.results
         res = list(iter(query_result))
-
-        # TODO(#41): We should update the test case once we have the
-        # deduplication operator and `deduplicate` parameter in Union
 
         self.assertEqual(
             [x._result_index for x in res],
             [
-                {MixtureKey({"language": ["Go"]}): {1: {self.file1_id: [(0, 1)]}}},
-                {MixtureKey({"language": ["CSS"]}): {1: {self.file2_id: [(0, 1)]}}},
-                {MixtureKey({"language": ["Go", "CSS"]}): {1: {self.file1_id: [(1, 2)]}}},
+                {MixtureKey({"language": ["CSS", "Go"]}): {1: {self.file1_id: [(1, 2)]}}},
+                {MixtureKey({"language": ["ApacheConf", "CSS"]}): {1: {self.file2_id: [(0, 1)]}}},
+                {MixtureKey({"language": ["Go", "Makefile"]}): {1: {self.file1_id: [(0, 1)]}}},
             ],
         )
         # check metadata
