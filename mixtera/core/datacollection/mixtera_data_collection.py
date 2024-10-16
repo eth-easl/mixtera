@@ -469,7 +469,7 @@ class MixteraDataCollection:
         self.__dict__.update(state)
         # self._connection = self._load_db_from_disk()
         logger.warning(
-            "Re-instantiating the MDC after pickling."
-            + "This should only happen within a dataloader worker running locally using spawn."
-            + "We will not hold a connection to the DuckDB anymore, since the DuckDB does not allow"
+            "Re-instantiating the MDC after pickling. "
+            + "This should only happen within a dataloader worker running locally using spawn. "
+            + "We will not hold a connection to the DuckDB anymore, since the DuckDB does not allow this. "
         )

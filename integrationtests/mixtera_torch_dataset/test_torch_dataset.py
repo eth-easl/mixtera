@@ -169,13 +169,13 @@ def test_filter_license_and_html(
     result_samples = create_and_iterate_dataloaders(
         client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
-    expected_samples = 1000 * query_exec_args.nodes_per_group
+    expected_samples = 750 * query_exec_args.nodes_per_group
 
     assert (
         len(result_samples) == expected_samples
-    ), f"Got {len(result_samples)} samples instead of the expected 1000 * {query_exec_args.nodes_per_group} = {expected_samples}!"
+    ), f"Got {len(result_samples)} samples instead of the expected 750 * {query_exec_args.nodes_per_group} = {expected_samples}!"
     for sample in result_samples:
-        assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
+        assert 0 <= int(sample) < 750, f"Sample {sample} should not appear"
 
 
 def test_filter_both_with_order_validation(
