@@ -1,6 +1,6 @@
+import copy
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
-import copy
 
 from loguru import logger
 from mixtera.core.datacollection.index import infer_mixture_from_chunkerindex
@@ -241,18 +241,19 @@ class StaticMixture(Mixture):
     def inform(self, chunker_index: "ChunkerIndex") -> None:
         del chunker_index
 
+
 class HierarchicalStaticMixture(Mixture):
-    """Mixture class that simply stores a predefined mixture. 
+    """Mixture class that simply stores a predefined mixture.
     Different from StaticMixture it receives the mixture combinations in a hierarchical manner."""
 
-    def __init__(self, chunk_size: int, mixture: list[dict[str, str | list ]]) -> None:
+    def __init__(self, chunk_size: int, mixture: list[dict[str, str | list | float]]) -> None:
         """
         Initializer for HierarchicalStaticMixture.
 
         Args:
             chunk_size: the size of a chunk in number of instances
             mixture: a dictionary that points from mixture components to concentration/mass in mixture of the form:
-                { 
+                {
                     property0: val0;
                     portion0: number0;
                     submixture:[
@@ -282,11 +283,13 @@ class HierarchicalStaticMixture(Mixture):
         """String representation of this mixture object."""
         return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
 
-    def parse_user_mixture(self, chunk_size: int, hierarchical_mixture: list[dict[str, str | list ]]) -> dict[MixtureKey, int]:
-        user_mixture: dict[MixtureKey, int] = {}
+    def parse_user_mixture(
+        self, chunk_size: int, hierarchical_mixture: list[dict[str, str | list | float]]
+    ) -> dict[MixtureKey, int]:
+        user_mixture: dict[MixtureKey, float] = {}
         for entry in hierarchical_mixture:
             self.convert_to_mixture_key_format(user_mixture, entry, 1, MixtureKey({}))
-        
+
         for key, val in user_mixture.items():
             assert val >= 0, "Mixture values must be non-negative."
             assert isinstance(key, MixtureKey), "Mixture keys must be of type MixtureKey."
@@ -299,13 +302,21 @@ class HierarchicalStaticMixture(Mixture):
 
         return mixture
 
-    def convert_to_mixture_key_format(self, user_mixture: dict[MixtureKey, float], component: dict[str, str | list | float ], portion: float, mixture_key: MixtureKey):        
+    def convert_to_mixture_key_format(
+        self,
+        user_mixture: dict[MixtureKey, float],
+        component: dict[str, str | list | float],
+        portion: float,
+        mixture_key: MixtureKey,
+    ) -> None:
         cur_portion = portion
         cur_key = copy.deepcopy(mixture_key)
         for key, val in component.items():
-            if key == 'portion':
-                cur_portion *= val
-            elif key == 'submixture':
+            if key == "portion":
+                assert isinstance(val, float), "Portion should be a float."
+                cur_portion *= float(val)
+            elif key == "submixture":
+                assert isinstance(val, list), "Submixture should be a list."
                 # Base Case: When we reach to the last level of the submixture.
                 if len(val) == 0:
                     user_mixture[cur_key] = cur_portion
@@ -313,9 +324,10 @@ class HierarchicalStaticMixture(Mixture):
                 for mix in val:
                     self.convert_to_mixture_key_format(user_mixture, mix, cur_portion, cur_key)
             else:
+                assert isinstance(val, str), "Property type should be a string."
                 cur_key.properties[key] = [val]
         return
-    
+
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._mixture
 

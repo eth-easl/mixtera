@@ -12,7 +12,7 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, MixtureKey, Query, StaticMixture, HierarchicalStaticMixture
+from mixtera.core.query import ArbitraryMixture, HierarchicalStaticMixture, MixtureKey, Query, StaticMixture
 
 TEST_LOCAL_INSTANCE_COUNT = 1000
 TEST_LOCAL_FILE_COUNT = 5
@@ -192,54 +192,49 @@ def test_reproducibility(
     for i in range(1, REPRODUCIBILITY_ITERATIONS):
         assert result_list[i] == result_list[i - 1], "Results are not reproducible"
 
-def test_hiearchical_mixture_correctness(
-    query_exec_args: QueryExecutionArgs
-):
+
+def test_hiearchical_mixture_correctness(query_exec_args: QueryExecutionArgs):
     # First trying the hiearchical mixture.
     hiearchical_mixture = [
-               {
-                    "language": "JavaScript",
-                    "portion": 0.6,
+        {
+            "language": "JavaScript",
+            "portion": 0.6,
+            "submixture": [
+                {
+                    "licence": "CC",
+                    "portion": 0.5,
                     "submixture": [
-                        {
-                            "licence": "CC",
-                            "portion": 0.5,
-                            "submixture": [
-                                {
-                                    "topic": "law",
-                                    "portion": 0.8,
-                                    "submixture": []
-                                },
-                                {
-                                    "topic": "medicine",
-                                    "portion": 0.2,
-                                    "submixture": []
-                                }
-                            ]
-                        },
-                        {
-                            "licence": "All rights reserved",
-                            "portion": 0.5,
-                            "submixture": []
-                        }
-                    ]
-               },
-               {
-                    "language": "HTML",
-                    "portion": 0.4,
-                    "submixture": []
-               },
-          ]
-    
+                        {"topic": "law", "portion": 0.8, "submixture": []},
+                        {"topic": "medicine", "portion": 0.2, "submixture": []},
+                    ],
+                },
+                {"licence": "All rights reserved", "portion": 0.5, "submixture": []},
+            ],
+        },
+        {"language": "HTML", "portion": 0.4, "submixture": []},
+    ]
+
     mixture = HierarchicalStaticMixture(
         query_exec_args.mixture.chunk_size,
         hiearchical_mixture,
     )
 
-    assert mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ['CC'], "topic": ["law"]})] == query_exec_args.mixture.chunk_size * 0.24, "The portions are not correct."
-    assert mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ['CC'], "topic": ["medicine"]})] == query_exec_args.mixture.chunk_size * 0.06, "The portions are not correct."
-    assert mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ['All rights reserved']})] == query_exec_args.mixture.chunk_size * 0.3, "The portions are not correct."
-    assert mixture._mixture[MixtureKey({"language": ["HTML"]})] == query_exec_args.mixture.chunk_size * 0.4, "The portions are not correct."
+    assert (
+        mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ["CC"], "topic": ["law"]})]
+        == query_exec_args.mixture.chunk_size * 0.24
+    ), "The portions are not correct."
+    assert (
+        mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ["CC"], "topic": ["medicine"]})]
+        == query_exec_args.mixture.chunk_size * 0.06
+    ), "The portions are not correct."
+    assert (
+        mixture._mixture[MixtureKey({"language": ["JavaScript"], "licence": ["All rights reserved"]})]
+        == query_exec_args.mixture.chunk_size * 0.3
+    ), "The portions are not correct."
+    assert (
+        mixture._mixture[MixtureKey({"language": ["HTML"]})] == query_exec_args.mixture.chunk_size * 0.4
+    ), "The portions are not correct."
+
 
 def test_client_chunksize(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs

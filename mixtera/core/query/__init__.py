@@ -3,7 +3,7 @@ from mixtera.core.query.operators.materialize import Materialize
 from mixtera.core.query.operators.select import Select
 from mixtera.core.query.operators.union import Union
 
-from .mixture import ArbitraryMixture, Mixture, MixtureKey, StaticMixture, HierarchicalStaticMixture
+from .mixture import ArbitraryMixture, HierarchicalStaticMixture, Mixture, MixtureKey, StaticMixture
 from .operators._base import Operator
 from .query import Query
 from .query_cache import QueryCache
