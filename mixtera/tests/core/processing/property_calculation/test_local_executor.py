@@ -70,7 +70,7 @@ class TestLocalPropertyCalculationExecutor(unittest.TestCase):
             list(LocalPropertyCalculationExecutor._read_samples_from_file("file.txt", CroissantDataset))
 
 
-# TODO(create issue): updating lists in duckdb is currently broken
+# TODO(#117): updating lists in duckdb is currently broken
 _ = """
     def test_run_aggregates_results(self):
         self.executor._batches = [

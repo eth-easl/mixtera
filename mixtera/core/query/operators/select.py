@@ -19,7 +19,7 @@ class Select(Operator):
             self.conditions = []
 
     def generate_sql(self) -> tuple[str, list[Any]]:
-        # TODO(create issue): This is really janky SQL generation.
+        # TODO(#119): This is really janky SQL generation.
         # We should clean this up with a proper query tree again.
         def process_conditions(conditions: list[Tuple[str, str, Any]]) -> tuple[list, list]:
             clauses = []

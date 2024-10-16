@@ -38,7 +38,7 @@ class MixteraDataCollection:
         self._vacuum()
 
     def _configure_duckdb(self) -> None:
-        # TODO(create issue): Make number of cores and memory configurable
+        # TODO(#118): Make number of cores and memory configurable
         assert self._connection is not None, "Cannot configure DuckDB as connection is None"
 
         # Set cores
@@ -215,8 +215,8 @@ class MixteraDataCollection:
             cur.execute(f"SELECT 1 FROM pragma_table_info('samples') WHERE name='{column}';")
             if not cur.fetchone():  # Column does not exist already
                 # TODO(#11): Support something else than string values
-                # TODO(create issue): Allow marking properties as single properties (no lists)
-                # TODO(create issue): Allow providing list of pre-specified values to use enums instead of strings
+                # TODO(#114): Allow marking properties as single properties (no lists)
+                # TODO(#116): Allow providing list of pre-specified values to use enums instead of strings
                 cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a duckdb list
         self._connection.commit()
 
@@ -447,7 +447,7 @@ class MixteraDataCollection:
             logger.error(property_name)
             logger.error((property_value_native, dataset_id, file_id, sample_id))
 
-            # TODO(create issue): See: https://github.com/duckdb/duckdb/issues/3265
+            # TODO(#117): See: https://github.com/duckdb/duckdb/issues/3265
             # We cannot update the property column here as it is a list column.
             # We need to either find a hack for this (remove samples & reinsert?) or wait for DuckDB to fix this.
             # This has been an issue in DuckDB for some years, so probably we want to hack this.

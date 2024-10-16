@@ -530,7 +530,7 @@ class TestLocalDataCollection(unittest.TestCase):
         mock_add_columns,
         mock_insert_property_values,
     ):
-        # TODO(create issue): Due to an issue in DuckDB, adding properties does currently not work.
+        # TODO(#117): Due to an issue in DuckDB, adding properties does currently not work.
         """
             directory = Path(self.temp_dir.name)
             mdc = MixteraDataCollection.__new__(MixteraDataCollection)

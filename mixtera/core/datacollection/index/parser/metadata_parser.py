@@ -43,6 +43,6 @@ class MetadataParser(ABC):
                 logger.warning(f"You're supplying a Mixtera-internal key: {key}. Skipping.")
                 continue
 
-            # TODO(create issue): Allow non-list columns and enums
+            # TODO(#114, #116): Allow non-list columns and enums
             metadata[key] = value if isinstance(value, list) else [value]
         self.metadata.append(metadata)
