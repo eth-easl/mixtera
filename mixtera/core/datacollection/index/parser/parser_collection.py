@@ -16,6 +16,10 @@ class RedPajamaMetadataParser(MetadataParser):
             return
 
         raw_metadata = payload["meta"]
+
+        if not raw_metadata:
+            return
+
         metadata = {}
         for index_field in RedPajamaMetadataParser.target_index_fields:
             if index_field not in raw_metadata:
@@ -42,6 +46,10 @@ class SlimPajamaMetadataParser(MetadataParser):
             return
 
         raw_metadata = payload["meta"]
+
+        if not raw_metadata:
+            return
+
         self.add_metadata(sample_id=line_number, redpajama_set_name=raw_metadata["redpajama_set_name"])
 
 

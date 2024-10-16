@@ -11,6 +11,10 @@ from mixtera.core.query import ArbitraryMixture, MixtureKey, Query
 from mixtera.core.query.mixture import StaticMixture
 
 
+def directory_is_empty(directory: str) -> bool:
+    return not any(Path(directory).iterdir())
+
+
 class TestQueryE2E(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with

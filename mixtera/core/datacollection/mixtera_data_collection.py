@@ -38,6 +38,7 @@ class MixteraDataCollection:
 
     def _configure_duckdb(self):
         # TODO(create issue): Make number of cores and memory configurable
+        assert self._connection is not None, "Cannot configure DuckDB as connection is None"
 
         # Set cores
         num_cores = os.cpu_count() or 1
