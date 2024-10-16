@@ -109,11 +109,7 @@ def test_filter_both(
         f"2_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
-    query = (
-        Query.for_job(job_id)
-        .select(("language", "==", "HTML"))
-        .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
-    )
+    query = Query.for_job(job_id).select(("language", "==", "HTML")).select(("language", "==", "JavaScript"))
     result_samples = create_and_iterate_dataloaders(
         client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
@@ -169,11 +165,7 @@ def test_filter_license_and_html(
         f"5_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
-    query = (
-        Query.for_job(job_id)
-        .select(("language", "==", "HTML"))
-        .union(Query.for_job(job_id).select(("license", "==", "CC")))
-    )
+    query = Query.for_job(job_id).select(("language", "==", "HTML")).select(("license", "==", "CC"))
     result_samples = create_and_iterate_dataloaders(
         client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
     )
@@ -196,11 +188,7 @@ def test_filter_both_with_order_validation(
         f"6_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}_{mixture_str}"
     )
-    query = (
-        Query.for_job(job_id)
-        .select(("language", "==", "HTML"))
-        .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
-    )
+    query = Query.for_job(job_id).select(("language", "==", "HTML")).select(("language", "==", "JavaScript"))
 
     # Collect batches for each node in each group
     group_batches = {}
@@ -264,7 +252,7 @@ def test_reader_reproducibility(
                             query = (
                                 Query.for_job(job_id)
                                 .select(("language", "==", "HTML"))
-                                .union(Query.for_job(job_id).select(("language", "==", "JavaScript")))
+                                .select(("language", "==", "JavaScript"))
                             )
                             torch_ds = MixteraTorchDataset(
                                 client,

@@ -32,7 +32,7 @@ def write_jsonl(path: Path) -> None:
             + '{ "text": "'
             + str(i)
             + '", "meta": { "language": "'
-            + ("JavaScript" if i < 500 else "HTML")
+            + ("JavaScript" if i % 2 == 0 else "HTML")
             + '", "license": "CC"}}\n'
         )
 
@@ -74,8 +74,7 @@ def setup_local_client(directory: Path):
 
 def run_query(client: MixteraClient, chunk_size: int):
     job_id = str(round(time.time() * 1000)) # Get some job ID based on current timestamp
-    #query = Query.for_job(job_id).select(("language", "==", "JavaScript")) # In our example, we want to query all samples tagged JavaScript
-    query = Query.for_job(job_id).select(None)
+    query = Query.for_job(job_id).select(("language", "==", "JavaScript")) # In our example, we want to query all samples tagged JavaScript
 
     mixture = ArbitraryMixture(chunk_size=chunk_size)
     qea = QueryExecutionArgs(mixture=mixture)

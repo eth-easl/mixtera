@@ -91,7 +91,7 @@ def test_filter_both(
     query = (
         Query.for_job(result_streaming_args.job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript")))
+        .select(("language", "==", "JavaScript"))
     )
     assert client.execute_query(query, query_exec_args)
     result_samples = []
@@ -154,9 +154,7 @@ def test_filter_license_and_html(
     )
     # TODO(#41): This test currently tests unexpected behavior - we want to deduplicate!
     query = (
-        Query.for_job(result_streaming_args.job_id)
-        .select(("language", "==", "HTML"))
-        .union(Query.for_job(result_streaming_args.job_id).select(("license", "==", "CC")))
+        Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML")).select(("license", "==", "CC"))
     )
     assert client.execute_query(query, query_exec_args)
     result_samples = []
@@ -190,7 +188,7 @@ def test_reproducibility(
         query = (
             Query.for_job(result_streaming_args.job_id)
             .select(("language", "==", "HTML"))
-            .union(Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript")))
+            .select(("language", "==", "JavaScript"))
         )
         query_exec_args.mixture = mixture
         client.execute_query(query, query_exec_args)
