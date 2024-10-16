@@ -196,3 +196,16 @@ def merge_sorted_lists(
         merged_list.extend(sorted_list2[j:])
 
     return merged_list
+
+
+def numpy_to_native(value: Any) -> Any:
+    if isinstance(value, list):
+        return [numpy_to_native(v) for v in value]
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+
+    return value  # Assume it's already a native type

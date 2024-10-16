@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Callable, List, Type
+from typing import Any, Callable, List, Type
 
 import dill
 import duckdb
@@ -13,6 +13,7 @@ from mixtera.core.datacollection.property import Property
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
+from mixtera.utils.utils import numpy_to_native
 
 
 class MixteraDataCollection:
@@ -36,7 +37,7 @@ class MixteraDataCollection:
         self._configure_duckdb()
         self._vacuum()
 
-    def _configure_duckdb(self):
+    def _configure_duckdb(self) -> None:
         # TODO(create issue): Make number of cores and memory configurable
         assert self._connection is not None, "Cannot configure DuckDB as connection is None"
 
@@ -104,7 +105,7 @@ class MixteraDataCollection:
         logger.info("Database initialized.")
         return conn
 
-    def _vacuum(self):
+    def _vacuum(self) -> None:
         logger.info("Vacuuming the DuckDB.")
         self._connection.execute("VACUUM")
         logger.info("Vacuumd.")
@@ -176,6 +177,11 @@ class MixteraDataCollection:
             cur = self._connection.cursor()
             result = cur.execute(query, (identifier, loc, type_id, serialized_parsing_func)).fetchone()
             self._connection.commit()
+
+            if result is None:
+                logger.error("result is None without any DuckDB error. This should not happen.")
+                return -1
+
             inserted_id = result[0]
             self._db_incr_version()
         except duckdb.Error as err:
@@ -203,7 +209,7 @@ class MixteraDataCollection:
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _add_columns_to_samples_table(self, columns: set[str]):
+    def _add_columns_to_samples_table(self, columns: set[str]) -> None:
         cur = self._connection.cursor()
         for column in columns:
             cur.execute(f"SELECT 1 FROM pragma_table_info('samples') WHERE name='{column}';")
@@ -214,7 +220,7 @@ class MixteraDataCollection:
                 cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a duckdb list
         self._connection.commit()
 
-    def _insert_samples_with_metadata(self, dataset_id: int, file_id: int, metadata: list[dict]):
+    def _insert_samples_with_metadata(self, dataset_id: int, file_id: int, metadata: list[dict]) -> None:
         if not metadata:
             logger.warning(f"No metadata extracted from file {file_id} in dataset {dataset_id}")
             return
@@ -247,6 +253,10 @@ class MixteraDataCollection:
             result = cur.execute(query, (identifier,)).fetchone()
         except duckdb.Error as err:
             logger.error(f"A DuckDB error occurred during selection: {err}")
+            return False
+
+        if result is None:
+            logger.error("result is None without any DuckDB error. This should not happen.")
             return False
 
         assert result[0] <= 1
@@ -398,21 +408,48 @@ class MixteraDataCollection:
         executor.load_data(files, data_only_on_primary)
         new_properties = executor.run()
 
-        self._add_columns_to_samples_table([property_name])
+        self._add_columns_to_samples_table({property_name})
         self._insert_property_values(property_name, new_properties)
         self._db_incr_version()
         return True
 
-    def _insert_property_values(self, property_name: str, new_properties: dict):
-        query = f"UPDATE samples SET {property_name} = ? WHERE dataset_id = ? AND file_id = ? AND sample_id = ?;"
-        cur = self._connection.cursor()
+    def _insert_property_values(self, property_name: str, new_properties: list[dict[str, Any]]) -> None:
+        if not new_properties:
+            logger.warning(f"No new properties to insert for {property_name}.")
+            return
 
-        for dataset_id, file_data in new_properties.items():
-            for file_id, sample_data in file_data.items():
-                for sample_id, value in sample_data.items():
-                    cur.execute(query, (value, dataset_id, file_id, sample_id))
+        df = pl.DataFrame(new_properties)
 
-        self._connection.commit()
+        conn = self._connection
+        # cursor = conn.cursor()
+
+        # Updating samples table with the new property values
+        for row in df.iter_rows():
+            dataset_id = int(row[0])
+            file_id = int(row[1])
+            sample_id = int(row[2])
+            property_value = row[3]
+
+            property_value_native = numpy_to_native(property_value)
+
+            # Since the property columns are VARCHAR[] (list of strings), ensure property_value is a list
+            if not isinstance(property_value_native, list):
+                property_value_native = [property_value_native]
+
+            logger.error(property_name)
+            logger.error((property_value_native, dataset_id, file_id, sample_id))
+
+            # TODO(create issue): See: https://github.com/duckdb/duckdb/issues/3265
+            # We cannot update the property column here as it is a list column.
+            # We need to either find a hack for this (remove samples & reinsert?) or wait for DuckDB to fix this.
+            # This has been an issue in DuckDB for some years, so probably we want to hack this.
+            _ = """cursor.execute(
+                f"UPDATE samples SET {property_name} = ? WHERE dataset_id = ? AND file_id = ? AND sample_id = ?;",
+                (property_value_native, dataset_id, file_id, sample_id),
+            )"""
+            raise NotImplementedError("DuckDB currently does not support updates on list columns.")
+
+        conn.commit()
 
     def __getstate__(self) -> dict:
         # We cannot pickle the DuckDB connection.
@@ -420,6 +457,6 @@ class MixteraDataCollection:
         del d["_connection"]
         return d
 
-    def __setstate__(self, state: dict):
+    def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
         self._connection = self._load_db_from_disk()

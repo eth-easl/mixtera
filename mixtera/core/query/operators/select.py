@@ -5,9 +5,11 @@ from mixtera.core.query.query import QueryPlan
 
 from ._base import Operator
 
+Condition = Union[Tuple[str, str, Any], list[Tuple[str, str, Any]], None]
+
 
 class Select(Operator):
-    def __init__(self, conditions: Union[Tuple[str, str, Any], list[Tuple[str, str, Any]], None]) -> None:
+    def __init__(self, conditions: Condition) -> None:
         super().__init__()
         if isinstance(conditions, tuple):
             self.conditions = [conditions]
@@ -16,10 +18,10 @@ class Select(Operator):
         else:
             self.conditions = []
 
-    def generate_sql(self, connection) -> tuple[str, list[Any]]:
+    def generate_sql(self) -> tuple[str, list[Any]]:
         # TODO(create issue): This is really janky SQL generation.
         # We should clean this up with a proper query tree again.
-        def process_conditions(conditions):
+        def process_conditions(conditions: list[Tuple[str, str, Any]]) -> tuple[list, list]:
             clauses = []
             params = []
             for field, op, value in conditions:

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
@@ -56,10 +55,8 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
         if count > 0:
             self._batches.append(self._create_batch(data, file_ids, dataset_ids, line_ids))
 
-    def run(self) -> defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int, int]]]]]:
-        inference_result_per_file: defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int]]]]] = defaultdict(
-            lambda: defaultdict(lambda: defaultdict(list))
-        )
+    def run(self) -> list[dict[str, Any]]:
+        inference_results = []
 
         for batch in tqdm(self._batches, desc="Processing batches", total=len(self._batches)):
             batch_predictions = self._calc_func(self, batch)
@@ -74,27 +71,19 @@ class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):
             for prediction, file_id, dataset_id, line_id in zip(
                 batch_predictions, batch["file_id"], batch["dataset_id"], batch["line_id"]
             ):
-                # TODO(#11): This currently assumes we are in a categorical bucket and do not need to discretize
-                # (prediction directly gives bucket)
-                if not isinstance(prediction, str):
-                    raise NotImplementedError(
-                        "Right now we assume prediction to be a category, numerical values not yet supported."
-                    )
+                # prediction can be a value or a list of values (for properties that are lists)
+                if not isinstance(prediction, (str, int, float, list)):
+                    raise NotImplementedError("Predictions must be string, int, float, or list of these types.")
 
-                inference_result_per_file[prediction][dataset_id][file_id].append(line_id)
+                result = {
+                    "dataset_id": dataset_id,
+                    "file_id": file_id,
+                    "sample_id": line_id,
+                    "property_value": prediction,
+                }
+                inference_results.append(result)
 
-        # TODO(MaxiBoether): adjust for duckdb
-        return inference_result_per_file
-        # rangified: defaultdict[str, defaultdict[int, defaultdict[int, list[tuple[int, int]]]]] = defaultdict(
-        #    lambda: defaultdict(lambda: defaultdict(list))
-        # )
-
-        # for bucket_val, datasets in inference_result_per_file.items():
-        #    for dataset_id, files in datasets.items():
-        #        for file_id, list_of_lines in files.items():
-        #            rangified[bucket_val][dataset_id][file_id] = ranges(list_of_lines)
-
-        # return rangified
+        return inference_results
 
     @staticmethod
     def _read_samples_from_file(file: str, dtype: Type[Dataset]) -> Generator[tuple[int, str], None, None]:

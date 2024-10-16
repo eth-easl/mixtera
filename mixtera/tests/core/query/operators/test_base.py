@@ -52,9 +52,8 @@ class TestOperator(unittest.TestCase):
         self.assertEqual(self.operator.string(0), expected_string)
 
     def test_generate_sql_not_implemented(self):
-        mock_connection = MagicMock()
         with self.assertRaises(NotImplementedError):
-            self.operator.generate_sql(mock_connection)
+            self.operator.generate_sql()
 
 
 if __name__ == "__main__":

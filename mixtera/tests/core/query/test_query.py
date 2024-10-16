@@ -1,10 +1,11 @@
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, List
 from unittest.mock import MagicMock, patch
 
 import polars as pl
-from integrationtests.utils import TestMetadataParser
+from integrationtests.utils import TestMetadataParser as ExampleMetadataParser
 from mixtera.core.client.mixtera_client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.query import Operator, Query, QueryPlan
@@ -13,7 +14,7 @@ from polars.testing import assert_frame_equal
 
 
 def parsing_func(sample):
-    import json
+    import json  # pylint: disable=import-outside-toplevel
 
     return json.loads(sample)["text"]
 
@@ -29,7 +30,7 @@ class TestQuery(unittest.TestCase):
         # While it would be nice to mock all of this, we need some DB to test the queries on
         # Which would mean instantiating the DB in a mock - it's not clear this is better than
         # just using the client directly.
-        with open(self.dir / "data.jsonl", "w") as text_file:
+        with open(self.dir / "data.jsonl", "w", encoding="utf-8") as text_file:
             text_file.write('{ "text": "0", "meta": { "language": "JavaScript", "license": "CC"} }\n')
             text_file.write('{ "text": "1", "meta": { "language": "JavaScript", "license": "CC"} }\n')
             text_file.write('{ "text": "2", "meta": { "language": "HTML", "license": "CC"} }\n')
@@ -39,7 +40,7 @@ class TestQuery(unittest.TestCase):
             text_file.write('{ "text": "6", "meta": { "language": "HTML", "license": "MIT"} }\n')
             text_file.write('{ "text": "7", "meta": { "language": "JavaScript", "license": "CC"} }\n')
         self.client = MixteraClient.from_directory(self.dir)
-        self.client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
+        self.client.register_metadata_parser("TEST_PARSER", ExampleMetadataParser)
         self.client.register_dataset(
             "query_test_execute_dataset", self.dir / "data.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
         )
@@ -66,6 +67,9 @@ class TestQuery(unittest.TestCase):
                 super().__init__()
                 self.arg1 = arg1
                 self.arg2 = arg2
+
+            def generate_sql(self) -> tuple[str, List[Any]]:
+                return ("test_operator", [])
 
         Query.register(TestOperator)
 
@@ -132,10 +136,6 @@ class TestQuery(unittest.TestCase):
         call_args, _ = mock_query_result.call_args
         result_df: pl.DataFrame = call_args[1]
         result_df.drop_in_place("group_id")
-        from loguru import logger
-
-        logger.error(expected_df)
-        logger.error(result_df)
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
     @patch("mixtera.core.query.query.QueryResult", autospec=True)

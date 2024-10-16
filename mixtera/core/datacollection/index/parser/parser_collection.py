@@ -20,7 +20,7 @@ class RedPajamaMetadataParser(MetadataParser):
         if not raw_metadata:
             return
 
-        metadata = {}
+        metadata: dict[str, list] = {}
         for index_field in RedPajamaMetadataParser.target_index_fields:
             if index_field not in raw_metadata:
                 continue

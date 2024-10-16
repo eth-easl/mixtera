@@ -77,7 +77,7 @@ class Query:
         """
         logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
         conn = mdc._connection
-        base_query, parameters = self.root.generate_sql(conn)
+        base_query, parameters = self.root.generate_sql()
         logger.debug(f"SQL:\n{base_query}\nParameters:\n{parameters}")
 
         # First, we need to get the column names from the base query

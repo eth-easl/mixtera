@@ -351,7 +351,7 @@ class TestQueryResult(unittest.TestCase):
                 assert len(d1.keys()) == 1
                 assert 0 in d1
                 for fid, ranges in d1[0].items():
-                    assert fid == 0 or fid == 1
+                    assert fid in {0, 1}
                     for r_start, r_end in ranges:
                         assert r_end - r_start == 2
 

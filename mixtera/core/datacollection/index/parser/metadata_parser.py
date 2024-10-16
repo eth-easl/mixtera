@@ -37,7 +37,7 @@ class MetadataParser(ABC):
 
     def add_metadata(self, sample_id: int, **kwargs: dict[str, Any]) -> None:
         internal_keys = set(["file_id", "dataset_id"])
-        metadata = {"sample_id": sample_id}
+        metadata: dict[str, int | list] = {"sample_id": sample_id}
         for key, value in kwargs.items():
             if key in internal_keys:
                 logger.warning(f"You're supplying a Mixtera-internal key: {key}. Skipping.")

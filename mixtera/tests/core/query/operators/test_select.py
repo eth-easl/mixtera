@@ -41,32 +41,28 @@ class TestSelect(unittest.TestCase):
         self.assertIn(self.select, existing_select.children)
 
     def test_generate_sql_single_condition(self):
-        mock_connection = MagicMock()
-        sql, params = self.select.generate_sql(mock_connection)
+        sql, params = self.select.generate_sql()
         expected_sql = "SELECT * FROM samples WHERE (array_contains(field, ?))"
         self.assertEqual(sql, expected_sql)
         self.assertEqual(params, ["value"])
 
     def test_generate_sql_multiple_conditions(self):
         select = Select([("field1", "==", "value1"), ("field2", ">", 5)])
-        mock_connection = MagicMock()
-        sql, params = select.generate_sql(mock_connection)
+        sql, params = select.generate_sql()
         expected_sql = "SELECT * FROM samples WHERE (array_contains(field1, ?) AND any_value(field2) > ?)"
         self.assertEqual(sql, expected_sql)
         self.assertEqual(params, ["value1", 5])
 
     def test_generate_sql_no_conditions(self):
         select = Select(None)
-        mock_connection = MagicMock()
-        sql, params = select.generate_sql(mock_connection)
+        sql, params = select.generate_sql()
         expected_sql = "SELECT * FROM samples"
         self.assertEqual(sql, expected_sql)
         self.assertEqual(params, [])
 
     def test_generate_sql_with_list_values(self):
         select = Select([("field1", "==", ["value1", "value2"]), ("field2", ">", [5, 10])])
-        mock_connection = MagicMock()
-        sql, params = select.generate_sql(mock_connection)
+        sql, params = select.generate_sql()
         expected_sql = (
             "SELECT * FROM samples WHERE (array_has_any(field1, [?, ?])"
             + " AND (any_value(field2) > ? OR any_value(field2) > ?))"
@@ -77,8 +73,7 @@ class TestSelect(unittest.TestCase):
     def test_generate_sql_with_nested_select(self):
         child_select = Select(("field2", "!=", "value2"))
         self.select.children.append(child_select)
-        mock_connection = MagicMock()
-        sql, params = self.select.generate_sql(mock_connection)
+        sql, params = self.select.generate_sql()
         expected_sql = "SELECT * FROM samples WHERE (array_contains(field, ?)) OR (NOT array_contains(field2, ?))"
         self.assertEqual(sql, expected_sql)
         self.assertEqual(params, ["value", "value2"])
