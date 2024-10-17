@@ -360,7 +360,9 @@ def test_tds(local_dir: Path, server_dir: Path) -> None:
 
     assert server_client.check_dataset_exists("ldc_torch_integrationtest_dataset"), "Dataset does not exist!"
 
-    for mixture in [ArbitraryMixture(x) for x in [1, 2000]] + [InferringMixture(2)]:
+    # TODO(#111): See above.
+    # :    + [InferringMixture(2)]
+    for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
         for dp_groups, num_nodes_per_group in [(1, 1), (1, 2), (2, 1), (2, 2), (4, 4)]:
             for num_workers in [0, 3, 8]:
                 for batch_size in [1, 500]:
