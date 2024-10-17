@@ -1,18 +1,19 @@
-import sqlite3
+import os
 from pathlib import Path
-from typing import Callable, List, Optional, Type
+from typing import Any, Callable, List, Type
 
 import dill
+import duckdb
+import polars as pl
+import psutil
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
-from mixtera.core.datacollection.index import Index
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryRangeIndex
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.datacollection.property import Property
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import defaultdict_to_dict, numpy_to_native_type
+from mixtera.utils.utils import numpy_to_native
 
 
 class MixteraDataCollection:
@@ -21,62 +22,93 @@ class MixteraDataCollection:
             raise RuntimeError(f"Directory {directory} does not exist.")
 
         self._directory = directory
-        self._database_path = self._directory / "mixtera.sqlite"
+        self._database_path = self._directory / "mixtera.duckdb"
 
         self._properties: list[Property] = []
         self._datasets: list[Dataset] = []
 
-        # Index instantiations and parameters
-        self._index: Index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
         self._metadata_factory = MetadataParserFactory()
 
         if not self._database_path.exists():
             self._connection = self._init_database()
         else:
-            self._connection = sqlite3.connect(self._database_path)
+            self._connection = self._load_db_from_disk()
 
-    def __getstate__(self) -> dict:
-        # We cannot pickle the sqlite connection.
-        d = dict(self.__dict__)
-        del d["_connection"]
-        return d
+        self._configure_duckdb()
+        self._vacuum()
 
-    def _init_database(self) -> sqlite3.Connection:
+    def _configure_duckdb(self) -> None:
+        # TODO(#118): Make number of cores and memory configurable
+        assert self._connection is not None, "Cannot configure DuckDB as connection is None"
+
+        # Set cores
+        num_cores = os.cpu_count() or 1
+        num_duckdb_threads = max(num_cores - 4, 1)
+        self._connection.execute(f"SET threads TO {num_duckdb_threads}")
+
+        # Set DRAM
+        total_memory_bytes = psutil.virtual_memory().total
+        # We allow duckdb to use 2/3 of the available DRAM
+        duckdb_mem_gb = round((total_memory_bytes * 0.66) / (1024**3))
+        self._connection.execute(f"SET memory_limit = '{duckdb_mem_gb}GB'")
+
+        # Set tmpdir (to use fast SSD, potentially)
+        duckdb_tmp_dir = self._directory / "duckdbtmp"
+        duckdb_tmp_dir.mkdir(exist_ok=True)
+        self._connection.execute(f"PRAGMA temp_directory = '{duckdb_tmp_dir}'")
+
+    def _load_db_from_disk(self) -> duckdb.DuckDBPyConnection:
+        assert self._database_path.exists()
+        logger.info(f"Loading database from {self._database_path}")
+        conn = duckdb.connect(str(self._database_path))
+        logger.info("Database loaded.")
+        return conn
+
+    def _init_database(self) -> duckdb.DuckDBPyConnection:
         assert hasattr(self, "_database_path")
         assert not self._database_path.exists()
         logger.info("Initializing database.")
-        conn = sqlite3.connect(self._database_path)
+        conn = duckdb.connect(str(self._database_path))
         cur = conn.cursor()
+
+        # Dataset table
+        cur.execute("CREATE SEQUENCE seq_dataset_id START 1;")
         cur.execute(
             "CREATE TABLE IF NOT EXISTS datasets"
-            " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE,"
+            " (id INTEGER PRIMARY KEY NOT NULL DEFAULT nextval('seq_dataset_id'), name TEXT NOT NULL UNIQUE,"
             " location TEXT NOT NULL, type INTEGER NOT NULL,"
             " parsing_func BLOB NOT NULL);"
         )
 
+        # File table
+        cur.execute("CREATE SEQUENCE seq_file_id START 1;")
         cur.execute(
             "CREATE TABLE IF NOT EXISTS files"
-            " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+            " (id INTEGER PRIMARY KEY NOT NULL DEFAULT nextval('seq_file_id'),"
             " dataset_id INTEGER NOT NULL,"
             " location TEXT NOT NULL,"
-            " FOREIGN KEY(dataset_id) REFERENCES datasets(id)"
-            " ON DELETE CASCADE);"
+            " FOREIGN KEY(dataset_id) REFERENCES datasets(id));"
         )
+
+        # Sample table
+        cur.execute("CREATE SEQUENCE seq_sample_id START 1;")
+        # We don't use foreign key constraints here for insert performance reasons if we have a lot of samples
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS indices"
-            " (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
-            " property_name TEXT NOT NULL,"
-            " property_value TEXT NOT NULL,"
-            " dataset_id INTEGER NOT NULL,"
-            " file_id INTEGER NOT NULL,"
-            " line_start INTEGER NOT NULL,"
-            " line_end INTEGER NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS samples"
+            " (dataset_id INTEGER NOT NULL, file_id INTEGER NOT NULL,"
+            " sample_id INTEGER NOT NULL DEFAULT nextval('seq_sample_id'),"
+            " PRIMARY KEY (dataset_id, file_id, sample_id));"
         )
         cur.execute("CREATE TABLE IF NOT EXISTS version (id INTEGER PRIMARY KEY, version_number INTEGER)")
         cur.execute("INSERT INTO version (id, version_number) VALUES (1, 1)")
         conn.commit()
         logger.info("Database initialized.")
         return conn
+
+    def _vacuum(self) -> None:
+        logger.info("Vacuuming the DuckDB.")
+        self._connection.execute("VACUUM")
+        logger.info("Vacuumd.")
 
     def get_db_version(self) -> int:
         assert self._connection, "Not connected to db!"
@@ -111,12 +143,11 @@ class MixteraDataCollection:
                 logger.error(f"Error while inserting file {file}")
                 return False
             metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
-            dtype.build_file_index(file, metadata_parser)
-            metadata_parser.finalize()
-            self._insert_index_into_table(metadata_parser.get_index())
+            dtype.inform_metadata_parser(file, metadata_parser)
+            self._insert_samples_with_metadata(dataset_id, file_id, metadata_parser.metadata)
 
         self._db_incr_version()
-
+        self._vacuum()
         return True
 
     def _insert_dataset_into_table(
@@ -139,188 +170,108 @@ class MixteraDataCollection:
         if not valid_types:
             return -1
 
-        serialized_parsing_func = sqlite3.Binary(dill.dumps(parsing_func))
+        serialized_parsing_func = dill.dumps(parsing_func)
 
         try:
-            query = "INSERT INTO datasets (name, location, type, parsing_func) VALUES (?, ?, ?, ?);"
+            query = "INSERT INTO datasets (name, location, type, parsing_func) VALUES (?, ?, ?, ?) RETURNING id;"
             cur = self._connection.cursor()
-            cur.execute(query, (identifier, loc, type_id, serialized_parsing_func))
+            result = cur.execute(query, (identifier, loc, type_id, serialized_parsing_func)).fetchone()
             self._connection.commit()
-            inserted_id = cur.lastrowid
+
+            if result is None:
+                logger.error("result is None without any DuckDB error. This should not happen.")
+                return -1
+
+            inserted_id = result[0]
             self._db_incr_version()
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during insertion: {err}")
+        except duckdb.Error as err:
+            logger.error(f"A DuckDB error occurred during insertion: {err}")
             return -1
 
         if inserted_id:
             logger.info(f"Successfully registered dataset {identifier} with id {inserted_id}.")
-            return inserted_id  # Return the last inserted id
+            return inserted_id
 
         logger.error(f"Failed to register dataset {identifier}.")
         return -1
 
     def _insert_file_into_table(self, dataset_id: int, loc: Path) -> int:
-        # TODO(#61): Potentially batch inserts of multiple files if this is too slow.
-        query = "INSERT INTO files (dataset_id, location) VALUES (?, ?);"
+        query = "INSERT INTO files (dataset_id, location) VALUES (?, ?) RETURNING id;"
         cur = self._connection.cursor()
         logger.info(f"Inserting file at {loc} for dataset id = {dataset_id}")
-        cur.execute(
-            query,
-            (
-                dataset_id,
-                str(loc),
-            ),
-        )
+        result = cur.execute(query, (dataset_id, str(loc))).fetchone()
         self._connection.commit()
         self._db_incr_version()
 
-        if cur.rowcount == 1:
-            assert cur.lastrowid is not None and cur.lastrowid >= 0
-            return cur.lastrowid
+        if result:
+            return result[0]
 
         logger.error(f"Failed to register file {loc}.")
         return -1
 
-    def _insert_index_into_table(self, index: InMemoryDictionaryRangeIndex, full_or_fail: bool = False) -> int:
-        """
-        Inserts an `InMemoryDictionaryRangeIndex` into the index table. This
-        method bulk-schedules the insertion of each row.
-
-        Args:
-            index: the index to be inserted
-            full_or_fail: if True, and not all rows are inserted, the method will fail.
-                If False, partial insertion in the DB are allowed and are only reported.
-
-        Returns:
-            The number of inserted rows. If insertion fails -1 will be returned.
-        """
+    def _add_columns_to_samples_table(self, columns: set[str]) -> None:
         cur = self._connection.cursor()
-        query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
-            VALUES (?, ?, ?, ?, ?, ?);"
+        for column in columns:
+            cur.execute(f"SELECT 1 FROM pragma_table_info('samples') WHERE name='{column}';")
+            if not cur.fetchone():  # Column does not exist already
+                # TODO(#11): Support something else than string values
+                # TODO(#114): Allow marking properties as single properties (no lists)
+                # TODO(#116): Allow providing list of pre-specified values to use enums instead of strings
+                cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a duckdb list
+        self._connection.commit()
 
-        # Build a large payload to schedule the execution of many SQL statements
-        query_payload = []
-        raw_index = index.get_full_dict_index()
-        for property_name, property_values in raw_index.items():
-            for property_value, dataset_ids in property_values.items():
-                for dataset_id, file_ids in dataset_ids.items():
-                    for file_id, ranges in file_ids.items():
-                        for range_values in ranges:
-                            query_payload.append(
-                                (
-                                    property_name,
-                                    property_value,
-                                    dataset_id,
-                                    file_id,
-                                    range_values[0],
-                                    range_values[1],
-                                )
-                            )
+    def _insert_samples_with_metadata(self, dataset_id: int, file_id: int, metadata: list[dict]) -> None:
+        if not metadata:
+            logger.warning(f"No metadata extracted from file {file_id} in dataset {dataset_id}")
+            return
 
-        # Try to execute statement
-        try:
-            cur.executemany(query, query_payload)
-            self._connection.commit()
-            self._db_incr_version()
-        except sqlite3.Error as err:
-            logger.error(f"An sqlite error occurred when bulk inserting index: {err}")
-            return -1
+        assert "sample_id" in metadata[0].keys(), "The metadata parser should have collected the sample_id"
 
-        # Assert that insertion completed fully or partially
-        if cur.rowcount != len(query_payload):
-            error_message = f"Failed to insert fully: {cur.rowcount} out of {len(query_payload)} rows inserted!"
-            logger.error(error_message)
-            if full_or_fail:
-                raise AssertionError(error_message)
+        # Obtain all collected metadata, extend table if necessary
+        metadata_keys = set(key for sample in metadata for key in sample.keys())
+        self._add_columns_to_samples_table(metadata_keys)
 
-        return cur.rowcount
-
-    def _insert_partial_index_into_table(self, property_name: str, partial_index: Index) -> int:
-        query = "INSERT INTO indices (property_name, property_value, dataset_id, file_id, line_start, line_end) \
-            VALUES (?, ?, ?, ?, ?, ?);"
-        cur = self._connection.cursor()
-        partial_index = defaultdict_to_dict(partial_index)
-        partial_index = numpy_to_native_type(partial_index)
-        try:
-            for prediction in partial_index:
-                for dataset_id in partial_index[prediction]:
-                    for file_id in partial_index[prediction][dataset_id]:
-                        for line_id in partial_index[prediction][dataset_id][file_id]:
-                            cur.execute(
-                                query,
-                                (
-                                    property_name,
-                                    prediction,
-                                    dataset_id,
-                                    file_id,
-                                    line_id[0],
-                                    line_id[1],
-                                ),
-                            )
-            self._connection.commit()
-            self._db_incr_version()
-
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during insertion: {err}")
-            return -1
-        if cur.rowcount == 1:
-            assert cur.lastrowid is not None and cur.lastrowid >= 0
-            return cur.lastrowid
-
-        logger.error(f"Failed to register index for property {property_name}.")
-
-        return -1
-
-    def _reformat_index(self, raw_indices: List) -> InMemoryDictionaryRangeIndex:
-        # received from database: [(property_name, property_value, dataset_id, file_id, line_ids), ...]
-        # converts to: {property_name: {property_value: {dataset_id: {file_id: [line_ids]}}}}
-        index = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
-        for prop_name, prop_val, dataset_id, file_id, line_start, line_end in raw_indices:
-            index.append_entry(prop_name, prop_val, dataset_id, file_id, (line_start, line_end))
-        return index
-
-    def _read_index_from_database(self, property_name: Optional[str] = None) -> InMemoryDictionaryRangeIndex:
-        cur = self._connection.cursor()
-        try:
-            query = "SELECT property_name, property_value, dataset_id, file_id, line_start, line_end from indices"
-            if property_name:
-                query += " WHERE property_name = ?;"
-                cur.execute(query, (property_name,))
-            else:
-                query += ";"
-                cur.execute(query)
-            results = self._reformat_index(cur.fetchall())
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during selection: {err}")
-            results = IndexFactory.create_index(IndexTypes.IN_MEMORY_DICT_RANGE)
-        return results
+        # Now, we insert the actual samples via a polars.Dataframe, that seems to be the fastest in microbenchmarks
+        data = [
+            {
+                "dataset_id": dataset_id,
+                "file_id": file_id,
+                "sample_id": sample["sample_id"],
+                **{key: sample.get(key) for key in metadata_keys},
+            }
+            for sample in metadata
+        ]
+        df = pl.DataFrame(data)
+        self._connection.execute("INSERT INTO samples SELECT * FROM df")
+        self._connection.commit()
+        del df  # to tell linters we use this variable
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
             query = "SELECT COUNT(*) from datasets WHERE name = ?;"
             cur = self._connection.cursor()
-            cur.execute(query, (identifier,))
-            result = cur.fetchone()[0]
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during selection: {err}")
+            result = cur.execute(query, (identifier,)).fetchone()
+        except duckdb.Error as err:
+            logger.error(f"A DuckDB error occurred during selection: {err}")
             return False
 
-        assert result <= 1
-        return result == 1
+        if result is None:
+            logger.error("result is None without any DuckDB error. This should not happen.")
+            return False
+
+        assert result[0] <= 1
+        return result[0] == 1
 
     def list_datasets(self) -> List[str]:
         try:
             query = "SELECT name from datasets;"
             cur = self._connection.cursor()
-            cur.execute(
-                query,
-            )
-            result = cur.fetchall()
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during selection: {err}")
+            result = cur.execute(query).fetchall()
+        except duckdb.Error as err:
+            logger.error(f"A DuckDB error occurred during selection: {err}")
             return []
 
-        return [dataset for (dataset,) in result]
+        return [dataset[0] for dataset in result]
 
     def remove_dataset(self, identifier: str) -> bool:
         if not self.check_dataset_exists(identifier):
@@ -328,55 +279,55 @@ class MixteraDataCollection:
             return False
 
         try:
-            delete_indices_query = """
-            DELETE FROM indices
+            delete_samples_query = """
+            DELETE FROM samples
             WHERE dataset_id IN (
                 SELECT id FROM datasets WHERE name = ?
             );
             """
             cur = self._connection.cursor()
-            cur.execute(delete_indices_query, (identifier,))
+            cur.execute(delete_samples_query, (identifier,))
+
+            delete_files_query = """
+            DELETE FROM files
+            WHERE dataset_id IN (
+                SELECT id FROM datasets WHERE name = ?
+            );
+            """
+            cur.execute(delete_files_query, (identifier,))
 
             delete_dataset_query = "DELETE FROM datasets WHERE name = ?;"
             cur.execute(delete_dataset_query, (identifier,))
-
             self._connection.commit()
             self._db_incr_version()
-
-            #  Reset the index to reflect the changes
-            self._index = self._read_index_from_database()
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during deletion: {err}")
+        except duckdb.Error as err:
+            logger.error(f"A DuckDB error occurred during deletion: {err}")
             return False
 
         return True
 
     def _get_all_files(self) -> list[tuple[int, int, Type[Dataset], str]]:
         try:
-            query = "SELECT files.id, files.dataset_id, files.location from files;"
-            cur = self._connection.cursor()
-            cur.execute(
-                query,
+            query = (
+                "SELECT files.id, files.dataset_id, files.location, datasets.type"
+                + " from files JOIN datasets ON files.dataset_id = datasets.id;"
             )
-            result = cur.fetchall()
-        except sqlite3.Error as err:
-            logger.error(f"A sqlite error occured during selection: {err}")
+            cur = self._connection.cursor()
+            result = cur.execute(query).fetchall()
+        except duckdb.Error as err:
+            logger.error(f"A DuckDB error occurred during selection: {err}")
             return []
 
-        dataset_ids = set(did for _, did, _ in result)
-        id_to_type_map = {did: self._get_dataset_type_by_id(did) for did in dataset_ids}
-
-        return [(fid, did, id_to_type_map[did], loc) for fid, did, loc in result]
+        return [(fid, did, Dataset.from_type_id(dtype), loc) for fid, did, loc, dtype in result]
 
     def _get_dataset_func_by_id(self, did: int) -> Callable[[str], str]:
         try:
             query = "SELECT parsing_func from datasets WHERE id = ?;"
             cur = self._connection.cursor()
-            cur.execute(query, (did,))
-            result = cur.fetchone()
-        except sqlite3.Error as err:
+            result = cur.execute(query, (did,)).fetchone()
+        except duckdb.Error as err:
             logger.error(f"Error while selecting parsing_func for did {did}")
-            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+            raise RuntimeError(f"A DuckDB error occurred during selection: {err}") from err
 
         if result is None:
             raise RuntimeError(f"Could not get dataset parsing func by id for did {did}")
@@ -387,11 +338,10 @@ class MixteraDataCollection:
         try:
             query = "SELECT type from datasets WHERE id = ?;"
             cur = self._connection.cursor()
-            cur.execute(query, (did,))
-            result = cur.fetchone()
-        except sqlite3.Error as err:
+            result = cur.execute(query, (did,)).fetchone()
+        except duckdb.Error as err:
             logger.error(f"Error while selecting parsing_func for did {did}")
-            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+            raise RuntimeError(f"A DuckDB error occured during selection: {err}") from err
 
         if result is None:
             raise RuntimeError(f"Could not get dataset type by id for did {did}")
@@ -407,11 +357,10 @@ class MixteraDataCollection:
         try:
             query = "SELECT location from files WHERE id = ?;"
             cur = self._connection.cursor()
-            cur.execute(query, (fid,))
-            result = cur.fetchone()
-        except sqlite3.Error as err:
+            result = cur.execute(query, (fid,)).fetchone()
+        except duckdb.Error as err:
             logger.error(f"Error while selecting location for fid {fid}")
-            raise RuntimeError(f"A sqlite error occured during selection: {err}") from err
+            raise RuntimeError(f"A DuckDB error occurred during selection: {err}") from err
 
         if result is None:
             raise RuntimeError(f"Could not get file path by id for file id {fid}")
@@ -454,48 +403,73 @@ class MixteraDataCollection:
                 " but deviate from their default value. Please ensure correct parameters."
             )
 
-        # TODO(#11): support for numerical buckets
         if property_type == PropertyType.NUMERICAL:
             logger.error("Numerical properties are not yet implemented.")
             return False
 
         files = self._get_all_files()
-        logger.info(f"Extending index for {len(files)} files.")
+        logger.info(f"Adding property {property_name} for {len(files)} files.")
 
         executor = PropertyCalculationExecutor.from_mode(
             execution_mode, degree_of_parallelism, batch_size, setup_func, calc_func
         )
         executor.load_data(files, data_only_on_primary)
-        new_index = executor.run()
-        self._insert_partial_index_into_table(property_name, new_index)
+        new_properties = executor.run()
+
+        self._add_columns_to_samples_table({property_name})
+        self._insert_property_values(property_name, new_properties)
         self._db_incr_version()
         return True
 
-    def get_index(self, property_name: Optional[str] = None) -> Optional[InMemoryDictionaryRangeIndex]:
-        """
-        This function returns the index of the MixteraDataCollection.
+    def _insert_property_values(self, property_name: str, new_properties: list[dict[str, Any]]) -> None:
+        if not new_properties:
+            logger.warning(f"No new properties to insert for {property_name}.")
+            return
 
-        Args:
-            property_name (Optional[str], optional): The name of the property to query.
-                If not provided, all properties are returned.
+        df = pl.DataFrame(new_properties)
 
-        Returns:
-            An `InMemoryDictionaryRangeIndex` object or None if a `property_name`
-            is specified, but is not present in the index.
-        """
-        if property_name is None:
-            logger.warning(
-                "No property name provided, returning all indices from database. ",
-                "This may be slow, consider providing a property name.",
-            )
-            self._index = self._read_index_from_database()
-            return self._index
-        if not self._index.has_feature(property_name):
-            # If the property is not in the index, it may be in the database, so we check it there
-            # TODO(xiaozhe): user may also interested to force refresh the index from database.
-            self._index.merge(self._read_index_from_database(property_name))
-        if not self._index.has_feature(property_name):
-            logger.warning(f"Property {property_name} not found in index, returning None.")
-            return None
-        # The type of self._index and the returned value is `InMemoryDictionaryRangeIndex`
-        return self._index.get_index_by_features(property_name)
+        conn = self._connection
+        # cursor = conn.cursor()
+
+        # Updating samples table with the new property values
+        for row in df.iter_rows():
+            dataset_id = int(row[0])
+            file_id = int(row[1])
+            sample_id = int(row[2])
+            property_value = row[3]
+
+            property_value_native = numpy_to_native(property_value)
+
+            # Since the property columns are VARCHAR[] (list of strings), ensure property_value is a list
+            if not isinstance(property_value_native, list):
+                property_value_native = [property_value_native]
+
+            logger.error(property_name)
+            logger.error((property_value_native, dataset_id, file_id, sample_id))
+
+            # TODO(#117): See: https://github.com/duckdb/duckdb/issues/3265
+            # We cannot update the property column here as it is a list column.
+            # We need to either find a hack for this (remove samples & reinsert?) or wait for DuckDB to fix this.
+            # This has been an issue in DuckDB for some years, so probably we want to hack this.
+            _ = """cursor.execute(
+                f"UPDATE samples SET {property_name} = ? WHERE dataset_id = ? AND file_id = ? AND sample_id = ?;",
+                (property_value_native, dataset_id, file_id, sample_id),
+            )"""
+            raise NotImplementedError("DuckDB currently does not support updates on list columns.")
+
+        conn.commit()
+
+    def __getstate__(self) -> dict:
+        # We cannot pickle the DuckDB connection.
+        d = dict(self.__dict__)
+        del d["_connection"]
+        return d
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        # self._connection = self._load_db_from_disk()
+        logger.warning(
+            "Re-instantiating the MDC after pickling. "
+            + "This should only happen within a dataloader worker running locally using spawn. "
+            + "We will not hold a connection to the DuckDB anymore, since the DuckDB does not allow this. "
+        )

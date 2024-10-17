@@ -11,9 +11,12 @@ dependencies:
   - pip
   - tqdm
   - loguru
+  - psutil
   - numpy==1.26.4 # Numpy 2.0 leads to a mypy crash: https://github.com/python/mypy/issues/17396
   - dill
-  - portion
   - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency
   - huggingface::datasets
   - conda-forge::transformers
+  - pip: # Both duckdb and polars recommend their pip build over conda
+    - duckdb
+    - polars 

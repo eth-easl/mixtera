@@ -1,25 +1,19 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from mixtera.core.datacollection.index.index_collection import IndexFactory, IndexTypes, InMemoryDictionaryIndex
+from loguru import logger
 
 
 class MetadataParser(ABC):
     """
     Base class for parsing metadata. This class should be extended for parsing
     specific data collections' metadata. This class should be instantiated for
-    each dataset and file, potentially allowing for parallel processing. When
-    the object has completed its parsing job, the `mark_complete` method should
-    be called. This compresses the index transparently.
+    each dataset and file, potentially allowing for parallel processing.
     """
 
-    def __init__(
-        self, dataset_id: int, file_id: int, index_type: Optional[IndexTypes] = IndexTypes.IN_MEMORY_DICT_LINES
-    ):
+    def __init__(self, dataset_id: int, file_id: int):
         """
-        Initializes the metadata parser. This initializer also sets up its own
-        index structure that gets manipulated. In the future, the index structure
-        might be passed as a parameter to the initializer.
+        Initializes the metadata parser.
 
         Args:
           dataset_id: the id of the source dataset
@@ -27,13 +21,12 @@ class MetadataParser(ABC):
         """
         self.dataset_id: int = dataset_id
         self.file_id: int = file_id
-        self._finalized = False
-        self._index: InMemoryDictionaryIndex = IndexFactory.create_index(index_type)
+        self.metadata: list[dict] = []
 
     @abstractmethod
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         """
-        Parses the given medata object and extends the given index in place.
+        Parses the given medata object and extends the internal state.
 
         Args:
           line_number: the line number of the current instance
@@ -42,29 +35,14 @@ class MetadataParser(ABC):
         """
         raise NotImplementedError()
 
-    def get_index(self) -> InMemoryDictionaryIndex:
-        """
-        Returns the fully parsed metadata index. This method should only be called
-        once the index has been marked as complete.
-        """
-        assert (
-            self._finalized
-        ), "Retrieving index without first marking parsing as complete. Index will be transparently compressed!"
-        return self._index
+    def add_metadata(self, sample_id: int, **kwargs: dict[str, Any]) -> None:
+        internal_keys = set(["file_id", "dataset_id"])
+        metadata: dict[str, int | list] = {"sample_id": sample_id}
+        for key, value in kwargs.items():
+            if key in internal_keys:
+                logger.warning(f"You're supplying a Mixtera-internal key: {key}. Skipping.")
+                continue
 
-    def finalize(self) -> None:
-        """
-        Mark the completion of the metadata parsing process and convert the inner index
-        to a row range-based representation.
-        """
-        if not self._finalized:
-            self._finalized = True
-            self._index = self._index.compress()
-
-    @property
-    def is_finalized(self) -> bool:
-        """
-        True if the parsing has been finalized, and the underlying index has
-        been converted to ranges.
-        """
-        return self._finalized
+            # TODO(#114, #116): Allow non-list columns and enums
+            metadata[key] = value if isinstance(value, list) else [value]
+        self.metadata.append(metadata)

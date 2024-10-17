@@ -12,7 +12,7 @@ class CroissantDataset(Dataset):
     type: DatasetType = DatasetType.CROISSANT_DATASET
 
     @staticmethod
-    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> None:
+    def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
         raise NotImplementedError("CroissantDataset not yet supported.")
 
     @staticmethod
