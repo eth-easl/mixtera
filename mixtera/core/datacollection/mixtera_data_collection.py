@@ -168,13 +168,16 @@ class MixteraDataCollection:
         num_workers = max(num_cores - 4, 1)
         logger.info("Prepared tasks for reading")
 
-        # Process files in parallel using multiprocessing
-        with Pool(num_workers) as pool:
-            results = pool.map(process_file_for_metadata, tasks)
-        logger.info("Tasks finished, inserting samples.")
+        chunk_size = 1000 # Make this adjustable??
 
-        # Insert collected metadata into the database in the main process
-        self._insert_samples_with_metadata(dataset_id, results)
+        with Pool(num_workers) as pool:
+            for i in range(0, len(tasks), chunk_size):
+                chunk = tasks[i:i + chunk_size]
+                results = pool.map(process_file_for_metadata, chunk)
+                logger.info(f"Processed chunk {i // chunk_size + 1}, inserting samples.")
+                # Insert collected metadata into the database in the main process
+                self._insert_samples_with_metadata(dataset_id, results)
+        logger.info("All tasks finished.")
 
         self._db_incr_version()
         self._vacuum()
@@ -228,7 +231,7 @@ class MixteraDataCollection:
         return -1
 
     def _insert_files_into_table(self, dataset_id: int, locs: List[Path]) -> List[int]:
-        df_files = pl.DataFrame([(dataset_id, str(loc)) for loc in locs], schema=["dataset_id", "location"])
+        df_files = pl.DataFrame([(dataset_id, str(loc)) for loc in locs], schema=["dataset_id", "location"], orient="row")
         self._connection.register("df_files", df_files)
         logger.info(f"Inserting {len(locs)} files for dataset id = {dataset_id}")
 
