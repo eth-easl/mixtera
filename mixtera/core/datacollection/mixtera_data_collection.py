@@ -1,3 +1,4 @@
+from multiprocessing import Pool
 import os
 from pathlib import Path
 from typing import Any, Callable, List, Type
@@ -15,6 +16,12 @@ from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
 from mixtera.utils.utils import numpy_to_native
 
+def process_file_for_metadata(task):
+    dataset_id, file_id, file_path_str, metadata_factory, metadata_parser_type, dtype_class = task
+    file = Path(file_path_str)
+    metadata_parser = metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
+    dtype_class.inform_metadata_parser(file, metadata_parser)
+    return (file_id, metadata_parser.metadata)
 
 class MixteraDataCollection:
     def __init__(self, directory: Path) -> None:
@@ -136,15 +143,33 @@ class MixteraDataCollection:
     ) -> bool:
         if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, parsing_func)) == -1:
             return False
+            
+        files = list(dtype.iterate_files(loc))
+        if not files:
+            logger.warning(f"No files found in {loc} for dataset {identifier}")
+            return False
 
-        file: Path
-        for file in dtype.iterate_files(loc):
+        # Insert files into the files table and get file IDs
+        file_ids = []
+        for file in files:
             if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
                 logger.error(f"Error while inserting file {file}")
                 return False
-            metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
-            dtype.inform_metadata_parser(file, metadata_parser)
-            self._insert_samples_with_metadata(dataset_id, file_id, metadata_parser.metadata)
+            file_ids.append(file_id)
+
+        tasks = [(dataset_id, file_id, str(file), self._metadata_factory, metadata_parser_type, dtype) for file_id, file in zip(file_ids, files)]
+
+        # Determine the number of worker processes
+        num_cores = os.cpu_count() or 1
+        num_workers = max(num_cores - 4, 1)
+
+        # Process files in parallel using multiprocessing
+        with Pool(num_workers) as pool:
+            results = pool.map(process_file_for_metadata, tasks)
+
+        # Insert collected metadata into the database in the main process
+        for file_id, metadata in results:
+            self._insert_samples_with_metadata(dataset_id, file_id, metadata)
 
         self._db_incr_version()
         self._vacuum()
