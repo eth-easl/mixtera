@@ -2,15 +2,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
-from loguru import logger
 
 @dataclass
 class MetadataProperty:
     name: str
-    dtype: Literal["STRING", "ENUM"] 
+    dtype: Literal["STRING", "ENUM"]
     multiple: bool  # True if can take multiple values
     nullable: bool  # True if can be None
     enum_options: set[str] | None = None  # For ENUM types
+
 
 class MetadataParser(ABC):
     """
@@ -42,7 +42,7 @@ class MetadataParser(ABC):
         """
         Return the list of MetadataProperty objects defining the schema.
         """
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
@@ -65,26 +65,25 @@ class MetadataParser(ABC):
             if value is None:
                 if not prop.nullable:
                     raise RuntimeError(f"Property '{key}' is not nullable, but no value was provided.")
-                else:
-                    metadata[key] = None
-                    continue
+
+                metadata[key] = None
+                continue
 
             if prop.multiple:
-                if not isinstance(value, list):
-                    # We might want to a warning that is only shown once here.
-                    metadata[key] = [value]
-                metadata[key] = value
-            else:
-                if isinstance(value, list):
-                    raise RuntimeError(f"Property '{key}' expects a single value, but got a list.")
-                metadata[key] = value
+                value = [value] if not isinstance(value, list) else value
+            elif isinstance(value, list):
+                raise RuntimeError(f"Property '{key}' expects a single value, but got a list.")
+
+            metadata[key] = value
 
             # Validate value in case of enum
             if prop.dtype == "ENUM":
                 valid_values = prop.enum_options
                 if prop.multiple:
-                    if not all([ele in valid_values for ele in value]):
-                        raise RuntimeError(f"Property '{key}' has invalid ENUM values: {set(value) - set(valid_values)}")
+                    if not all(ele in valid_values for ele in value):
+                        raise RuntimeError(
+                            f"Property '{key}' has invalid ENUM values: {set(value) - set(valid_values)}"
+                        )
                 else:
                     if value not in valid_values:
                         raise RuntimeError(f"Property '{key}' has invalid ENUM value: {value}")

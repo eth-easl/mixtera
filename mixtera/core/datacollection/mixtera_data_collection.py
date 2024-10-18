@@ -11,6 +11,7 @@ import pyarrow as pa
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
+from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty
 from mixtera.core.datacollection.property import Property
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
@@ -157,6 +158,11 @@ class MixteraDataCollection:
 
         logger.info(f"Gathered {len(files)} files, ready to insert")
 
+        parser_class = self._metadata_factory._registry[metadata_parser_type]
+        properties = parser_class.get_properties()
+        self._add_columns_to_samples_table(properties)
+        logger.info("Columns added to samples table based on parser schema.")
+
         # Insert files into the files table and get file IDs
         file_ids = self._insert_files_into_table(dataset_id, files)
         if not file_ids or len(file_ids) != len(files):
@@ -185,7 +191,7 @@ class MixteraDataCollection:
                 results = pool.map(process_file_for_metadata, chunk)
                 logger.info(f"Processed chunk {i // chunk_size + 1}, inserting samples.")
                 # Insert collected metadata into the database in the main process
-                self._insert_samples_with_metadata(dataset_id, results)
+                self._insert_samples_with_metadata(dataset_id, results, properties)
         logger.info("All tasks finished.")
 
         self._db_incr_version()
@@ -271,40 +277,51 @@ class MixteraDataCollection:
         self._db_incr_version()
         return file_ids
 
-    def _add_columns_to_samples_table(self, columns: set[str]) -> None:
+    def _add_columns_to_samples_table(self, properties: list[MetadataProperty]) -> None:
         cur = self._connection.cursor()
 
         # Fetch all existing column names once
         cur.execute("SELECT name FROM pragma_table_info('samples');")
         existing_columns = set(row[0] for row in cur.fetchall())
-
-        # Determine columns that need to be added
-        columns_to_add = columns - existing_columns
+        columns_to_add = [prop for prop in properties if prop.name not in existing_columns]
 
         if columns_to_add:
-            for column in columns_to_add:
-                # TODO(#11): Support something else than string values
-                # TODO(#114): Allow marking properties as single properties (no lists)
-                # TODO(#116): Allow providing list of pre-specified values to use enums instead of strings
-                cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a DuckDB list
+            for prop in columns_to_add:
+                # Decide column type
+                if prop.dtype == "STRING":
+                    column_type = "VARCHAR[]" if prop.multiple else "VARCHAR"
+                elif prop.dtype == "ENUM":
+                    # Create ENUM type if not exists
+                    enum_type_name = f"enum_{prop.name}"
+                    cur.execute(
+                        "SELECT COUNT(*) FROM duckdb_types WHERE LOWER(type_name) = LOWER(?)", (enum_type_name,)
+                    )
+                    if cur.fetchone()[0] == 0:
+                        enum_values = "', '".join(prop.enum_options)
+                        create_enum_query = f"CREATE TYPE {enum_type_name} AS ENUM ('{enum_values}');"
+                        cur.execute(create_enum_query)
+                    column_type = f"{enum_type_name}[]" if prop.multiple else enum_type_name
+                else:
+                    raise RuntimeError(f"Unsupported dtype {prop.dtype} for property {prop.name}")
+
+                # Define NULL or NOT NULL
+                nullable_str = "NULL" if prop.nullable else "NOT NULL"
+                # TODO(https://github.com/duckdb/duckdb/issues/57): DuckDB currently does not support this.
+                nullable_str = ""
+                # Add the column
+                alter_query = f"ALTER TABLE samples ADD COLUMN {prop.name} {column_type} {nullable_str};"
+                cur.execute(alter_query)
+
             self._connection.commit()
 
-    def _insert_samples_with_metadata(self, dataset_id: int, results: list[tuple[int, list[dict]]]) -> None:
+    def _insert_samples_with_metadata(
+        self, dataset_id: int, results: list[tuple[int, list[dict]]], properties: list[MetadataProperty]
+    ) -> None:
         if not results:
             logger.warning(f"No metadata extracted for dataset {dataset_id}")
             return
 
-        # Obtain all collected metadata, extend table if necessary
-        metadata_keys = {key for _, dict_list in results for d in dict_list for key in d.keys()}
-        logger.info("Obtained keys.")
-        self._add_columns_to_samples_table(metadata_keys)
-
-        logger.info("Prepared table for sample insertion.")
-
-        # Remove columns that are already included
-        metadata_keys -= {"dataset_id", "file_id", "sample_id"}
-        # Sort the metadata keys to ensure consistent ordering
-        sorted_metadata_keys = sorted(metadata_keys)
+        sorted_metadata_keys = sorted([prop.name for prop in properties])
         all_columns = ["dataset_id", "file_id", "sample_id"] + sorted_metadata_keys
 
         # Initialize the data dict with empty lists for each column
@@ -322,7 +339,27 @@ class MixteraDataCollection:
         logger.debug("Collected column-wise data for constructing pyarrow table.")
 
         # We need to construct the pyarrow table with consistent column ordering
-        table = pa.Table.from_arrays([pa.array(data_columns[key]) for key in all_columns], names=all_columns)
+        # We could do pa.Table.from_arrays([pa.array(data_columns[key]) for key in all_columns],
+        # but that uses pyarrows type inference.
+        # Let's be explicit in typing to avoid issues down the line
+
+        arrays = []
+        for col_name in all_columns:
+            values = data_columns[col_name]
+            if col_name in ["dataset_id", "file_id", "sample_id"]:
+                arrays.append(pa.array(values, type=pa.int64()))
+            else:
+                prop = next((p for p in properties if p.name == col_name), None)
+                assert prop is not None, "Should not happen"
+                if prop.dtype in ["STRING", "ENUM"]:
+                    array = pa.array(values, type=pa.list_(pa.string()) if prop.multiple else pa.string())
+                else:
+                    # Extend later for numeric columns
+                    raise RuntimeError(f"Unsupported dtype {prop.dtype} for property {prop.name}")
+                arrays.append(array)
+
+        table = pa.Table.from_arrays(arrays, names=all_columns)
+
         logger.debug("Constructed PyArrow Table.")
 
         # It is important to specify the columns in the insertion query

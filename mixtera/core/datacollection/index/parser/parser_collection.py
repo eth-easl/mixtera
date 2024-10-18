@@ -3,6 +3,7 @@ from typing import Any, Optional
 from loguru import logger
 from mixtera.core.datacollection.index.parser import MetadataParser, MetadataProperty
 
+
 class RedPajamaMetadataParser(MetadataParser):
     @classmethod
     def get_properties(cls) -> list[MetadataProperty]:
@@ -23,17 +24,31 @@ class RedPajamaMetadataParser(MetadataParser):
         self.add_metadata(sample_id=line_number, **metadata)
 
 
-
 class SlimPajamaMetadataParser(MetadataParser):
     """
     Metadata parser class for the SlimPajama dataset.
     """
+
     @classmethod
     def get_properties(cls) -> list[MetadataProperty]:
         return [
-            MetadataProperty(name="redpajama_set_name", dtype="ENUM", multiple=False, nullable=False, enum_options={"RedPajamaCommonCrawl", "RedPajamaC4", "RedPajamaWikipedia", "RedPajamaStackExchange", "RedPajamaGithub", "RedPajamaArXiv", "RedPajamaBook"}),
+            MetadataProperty(
+                name="redpajama_set_name",
+                dtype="ENUM",
+                multiple=False,
+                nullable=False,
+                enum_options={
+                    "RedPajamaCommonCrawl",
+                    "RedPajamaC4",
+                    "RedPajamaWikipedia",
+                    "RedPajamaStackExchange",
+                    "RedPajamaGithub",
+                    "RedPajamaArXiv",
+                    "RedPajamaBook",
+                },
+            ),
         ]
-    
+
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         self.add_metadata(sample_id=line_number, redpajama_set_name=payload["meta"]["redpajama_set_name"])
 
@@ -43,7 +58,10 @@ class MetadataParserFactory:
 
     def __init__(self) -> None:
         # Stores the name of the parser, and its associated class
-        self._registry = {"RED_PAJAMA": RedPajamaMetadataParser, "SLIM_PAJAMA": SlimPajamaMetadataParser}
+        self._registry: dict[str, type[MetadataParser]] = {
+            "RED_PAJAMA": RedPajamaMetadataParser,
+            "SLIM_PAJAMA": SlimPajamaMetadataParser,
+        }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
         """
