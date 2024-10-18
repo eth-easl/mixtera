@@ -102,6 +102,7 @@ class QueryResult:
                     and not (isinstance(row[col_idx[k]], list) and len(row[col_idx[k]]) == 0)
                 }
                 current_mixture_key = MixtureKey(properties)
+                prev_indicator = indicator
 
             # Append interval to the chunker index
             chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
