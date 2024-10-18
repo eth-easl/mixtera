@@ -123,18 +123,16 @@ class Query:
             SELECT
                 *,
                 sample_id - LAG(sample_id, 1, sample_id)
-                    OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS diff,
-                DENSE_RANK() OVER (ORDER BY {partition_clause}) AS group_change_indicator
+                    OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS diff
             FROM base_data
         ),
         intervals AS (
             SELECT
-                {partition_clause},
+                {', '.join(group_cols)},
                 SUM(CASE WHEN diff != 1 THEN 1 ELSE 0 END)
                     OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS group_id,
                 MIN(sample_id) as interval_start,
-                MAX(sample_id) + 1 as interval_end,
-                MIN(group_change_indicator) as group_change_indicator
+                MAX(sample_id) + 1 as interval_end
             FROM grouped_samples
             GROUP BY {partition_clause}, diff, sample_id
         )
@@ -142,8 +140,7 @@ class Query:
             {partition_clause},
             group_id,
             MIN(interval_start) as interval_start,
-            MAX(interval_end) as interval_end,
-            MIN(group_change_indicator) as group_change_indicator
+            MAX(interval_end) as interval_end
         FROM intervals
         GROUP BY {partition_clause}, group_id
         ORDER BY {partition_clause}, interval_start
