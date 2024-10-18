@@ -113,17 +113,8 @@ def hash_dict(d: dict) -> int:
     Returns:
         A hash
     """
-    #  Step 1: Convert the dictionary to a list of key-value pairs
-    items = list(d.items())
-
-    # Step 2: Sort the list of key-value pairs
-    items.sort()
-
-    #  Step 3: Convert each value list to a hash
-    items = [(k, hash_list(v)) for k, v in items]
-
-    # Step 4: Convert the list of key-value pairs to a hash
-    return hash_list([f"{k}:{v}" for k, v in items])
+    combined_string = ";".join(f"{k}:{','.join(map(str, sorted(v)))}" for k, v in sorted(d.items()))
+    return hash(combined_string)
 
 
 def seed_everything_from_list(seed_list: List[Any]) -> None:
