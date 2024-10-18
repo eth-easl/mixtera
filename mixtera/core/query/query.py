@@ -128,7 +128,7 @@ class Query:
         ),
         intervals AS (
             SELECT
-                {', '.join(group_cols)},
+                {partition_clause},
                 SUM(CASE WHEN diff != 1 THEN 1 ELSE 0 END)
                     OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS group_id,
                 MIN(sample_id) as interval_start,
@@ -137,13 +137,13 @@ class Query:
             GROUP BY {partition_clause}, diff, sample_id
         )
         SELECT
-            {', '.join(group_cols)},
+            {partition_clause},
             group_id,
             MIN(interval_start) as interval_start,
             MAX(interval_end) as interval_end
         FROM intervals
         GROUP BY {partition_clause}, group_id
-        ORDER BY {', '.join(group_cols)}, interval_start
+        ORDER BY {partition_clause}, interval_start
         """
         self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).pl(), mixture)
 

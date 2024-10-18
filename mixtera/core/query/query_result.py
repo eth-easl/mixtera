@@ -73,6 +73,48 @@ class QueryResult:
         logger.info("Converting to chunker index structure...")
         chunker_index = create_chunker_index()
 
+        # Build column index mapping to access columns by indices
+        col_idx = {name: idx for idx, name in enumerate(df.columns)}
+
+        # Identify the property columns
+        exclude_keys = ["dataset_id", "file_id", "group_id", "interval_start", "interval_end"]
+        property_columns = [col for col in df.columns if col not in exclude_keys]
+
+        # Initialize variables for caching
+        prev_properties = None
+        current_mixture_key = None
+
+        for row in tqdm(df.iter_rows(named=False), desc="Building chunker index.", total=len(df)):
+            # Access values by index
+            dataset_id = row[col_idx["dataset_id"]]
+            file_id = row[col_idx["file_id"]]
+            interval_start = row[col_idx["interval_start"]]
+            interval_end = row[col_idx["interval_end"]]
+            interval = [interval_start, interval_end]
+
+            # Build properties dictionary per row as before
+            properties = {
+                k: row[col_idx[k]] if isinstance(row[col_idx[k]], list) else [row[col_idx[k]]]
+                for k in property_columns
+                if row[col_idx[k]] is not None and not (isinstance(row[col_idx[k]], list) and len(row[col_idx[k]]) == 0)
+            }
+
+            # Check if properties have changed
+            if properties != prev_properties:
+                current_mixture_key = MixtureKey(properties)
+                prev_properties = properties
+
+            # Append interval to the chunker index
+            chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
+
+        logger.info("Chunker index creation completed")
+        return chunker_index
+
+    @staticmethod
+    def _create_chunker_index_old(df: pl.DataFrame) -> ChunkerIndex:
+        logger.info("Converting to chunker index structure...")
+        chunker_index = create_chunker_index()
+
         for row in tqdm(df.iter_rows(named=True), desc="Building chunker index.", total=len(df)):
             dataset_id = row["dataset_id"]
             file_id = row["file_id"]
