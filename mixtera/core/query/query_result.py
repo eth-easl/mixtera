@@ -93,7 +93,7 @@ class QueryResult:
             indicator = row[col_idx["group_change_indicator"]]
             interval = (interval_start, interval_end)
 
-            if indicator != prev_indicator:
+            if True:
                 # Build properties dictionary per row
                 properties = {
                     k: row[col_idx[k]] if isinstance(row[col_idx[k]], list) else [row[col_idx[k]]]
