@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from functools import cache
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -19,6 +20,7 @@ class MixtureKey:
             properties: a dictionary of properties for the mixture key
         """
         self.properties = properties
+        self._hash: int | None = None
 
     def __eq__(self, other: object) -> bool:
         #  TODO(#112): This is currently not commutative, i.e., a == b does not imply b == a
@@ -80,8 +82,9 @@ class MixtureKey:
         return is_less_than, is_greater_than
 
     def __hash__(self) -> int:
+        self._hash = self._hash if self._hash is not None else hash_dict(self.properties)
         #  Since we are want to use this class as a key in a dictionary, we need to implement the __hash__ method
-        return hash_dict(self.properties)
+        return self._hash
 
     def __str__(self) -> str:
         #  We sort the properties to ensure that the string representation is deterministic
