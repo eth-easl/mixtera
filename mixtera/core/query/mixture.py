@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from functools import cache
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -11,6 +10,7 @@ if TYPE_CHECKING:
 
 
 class MixtureKey:
+    __slots__ = ["properties", "_hash"]
 
     def __init__(self, properties: dict[str, list[str | int | float]]) -> None:
         """

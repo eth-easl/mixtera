@@ -77,12 +77,12 @@ class QueryResult:
         col_idx = {name: idx for idx, name in enumerate(df.columns)}
 
         # Identify the property columns
-        exclude_keys = ["dataset_id", "file_id", "group_id", "interval_start", "interval_end"]
+        exclude_keys = ["dataset_id", "file_id", "group_id", "interval_start", "interval_end", "group_change_indicator"]
         property_columns = [col for col in df.columns if col not in exclude_keys]
 
         # Initialize variables for caching
-        prev_properties = None
         current_mixture_key = None
+        prev_indicator = None
 
         for row in tqdm(df.iter_rows(named=False), desc="Building chunker index.", total=len(df)):
             # Access values by index
@@ -90,18 +90,18 @@ class QueryResult:
             file_id = row[col_idx["file_id"]]
             interval_start = row[col_idx["interval_start"]]
             interval_end = row[col_idx["interval_end"]]
+            indicator = row[col_idx["group_change_indicator"]]
             interval = (interval_start, interval_end)
 
-            # Build properties dictionary per row as before
-            properties = {
-                k: row[col_idx[k]] if isinstance(row[col_idx[k]], list) else [row[col_idx[k]]]
-                for k in property_columns
-                if row[col_idx[k]] is not None and not (isinstance(row[col_idx[k]], list) and len(row[col_idx[k]]) == 0)
-            }
-            new_key = MixtureKey(properties)
-            # Check if properties have changed
-            if new_key != current_mixture_key:
-                current_mixture_key = new_key
+            if indicator != prev_indicator:
+                # Build properties dictionary per row
+                properties = {
+                    k: row[col_idx[k]] if isinstance(row[col_idx[k]], list) else [row[col_idx[k]]]
+                    for k in property_columns
+                    if row[col_idx[k]] is not None
+                    and not (isinstance(row[col_idx[k]], list) and len(row[col_idx[k]]) == 0)
+                }
+                current_mixture_key = MixtureKey(properties)
 
             # Append interval to the chunker index
             chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
