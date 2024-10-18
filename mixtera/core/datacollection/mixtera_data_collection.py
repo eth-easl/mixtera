@@ -1,4 +1,5 @@
 import os
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Callable, List, Type
 
@@ -6,6 +7,7 @@ import dill
 import duckdb
 import polars as pl
 import psutil
+import pyarrow as pa
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
@@ -13,7 +15,18 @@ from mixtera.core.datacollection.property import Property
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.processing.property_calculation.executor import PropertyCalculationExecutor
-from mixtera.utils.utils import numpy_to_native
+from mixtera.utils.utils import DummyPool, numpy_to_native
+
+
+def process_file_for_metadata(
+    task: tuple[int, int, str, MetadataParserFactory, str, type[Dataset]]
+) -> tuple[int, dict]:
+    # This function is outside of the class in order to be pickable
+    dataset_id, file_id, file_path_str, metadata_factory, metadata_parser_type, dtype_class = task
+    file = Path(file_path_str)
+    metadata_parser = metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
+    dtype_class.inform_metadata_parser(file, metadata_parser)
+    return (file_id, metadata_parser.metadata)
 
 
 class MixteraDataCollection:
@@ -137,17 +150,47 @@ class MixteraDataCollection:
         if (dataset_id := self._insert_dataset_into_table(identifier, loc, dtype, parsing_func)) == -1:
             return False
 
-        file: Path
-        for file in dtype.iterate_files(loc):
-            if (file_id := self._insert_file_into_table(dataset_id, file)) == -1:
-                logger.error(f"Error while inserting file {file}")
-                return False
-            metadata_parser = self._metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
-            dtype.inform_metadata_parser(file, metadata_parser)
-            self._insert_samples_with_metadata(dataset_id, file_id, metadata_parser.metadata)
+        files = list(dtype.iterate_files(loc))
+        if not files:
+            logger.warning(f"No files found in {loc} for dataset {identifier}")
+            return False
+
+        logger.info(f"Gathered {len(files)} files, ready to insert")
+
+        # Insert files into the files table and get file IDs
+        file_ids = self._insert_files_into_table(dataset_id, files)
+        if not file_ids or len(file_ids) != len(files):
+            logger.error(f"Error while inserting files for dataset {identifier}")
+            return False
+        tasks = [
+            (dataset_id, file_id, str(file), self._metadata_factory, metadata_parser_type, dtype)
+            for file_id, file in zip(file_ids, files)
+        ]
+
+        # Determine the number of worker processes
+        num_cores = os.cpu_count() or 1
+        num_workers = max(num_cores - 4, 1)
+        logger.info("Prepared tasks for reading")
+
+        chunk_size = 1000  # Make this adjustable??
+
+        # If we used mocking in unit tests, they get lost when we use a mp.Pool
+        # Hence, we need to disable multiprocessing for tests here
+        pool_c = DummyPool if os.environ.get("PYTEST_CURRENT_TEST") else Pool
+
+        with pool_c(num_workers) as pool:
+            for i in range(0, len(tasks), chunk_size):
+                chunk = tasks[i : i + chunk_size]
+                results = pool.map(process_file_for_metadata, chunk)
+                logger.info(f"Processed chunk {i // chunk_size + 1}, inserting samples.")
+                # Insert collected metadata into the database in the main process
+                self._insert_samples_with_metadata(dataset_id, results)
+        logger.info("All tasks finished.")
 
         self._db_incr_version()
         self._vacuum()
+
+        logger.info("Finished dataset registration.")
         return True
 
     def _insert_dataset_into_table(
@@ -195,56 +238,108 @@ class MixteraDataCollection:
         logger.error(f"Failed to register dataset {identifier}.")
         return -1
 
-    def _insert_file_into_table(self, dataset_id: int, loc: Path) -> int:
-        query = "INSERT INTO files (dataset_id, location) VALUES (?, ?) RETURNING id;"
-        cur = self._connection.cursor()
-        logger.info(f"Inserting file at {loc} for dataset id = {dataset_id}")
-        result = cur.execute(query, (dataset_id, str(loc))).fetchone()
+    def _insert_files_into_table(self, dataset_id: int, locs: List[Path]) -> List[int]:
+        df_files = pl.DataFrame(
+            [(dataset_id, str(loc)) for loc in locs], schema=["dataset_id", "location"], orient="row"
+        )
+        self._connection.register("df_files", df_files)
+        logger.info(f"Inserting {len(locs)} files for dataset id = {dataset_id}")
+
+        try:
+            # Insert data and return IDs with associated locations
+            insert_query = """
+            INSERT INTO files (dataset_id, location)
+            SELECT dataset_id, location FROM df_files
+            RETURNING id, location;
+            """
+            result = self._connection.execute(insert_query).fetchall()
+
+            # Create a mapping from location to id
+            id_map = {loc: fid for fid, loc in result}
+
+            # Retrieve file IDs in the order of locs
+            file_ids = [id_map[str(loc)] for loc in locs]
+
+        except duckdb.Error as err:
+            logger.error(f"DuckDB error during insertion of files: {err}")
+            return []
+        finally:
+            self._connection.unregister("df_files")
+
         self._connection.commit()
         self._db_incr_version()
-
-        if result:
-            return result[0]
-
-        logger.error(f"Failed to register file {loc}.")
-        return -1
+        return file_ids
 
     def _add_columns_to_samples_table(self, columns: set[str]) -> None:
         cur = self._connection.cursor()
-        for column in columns:
-            cur.execute(f"SELECT 1 FROM pragma_table_info('samples') WHERE name='{column}';")
-            if not cur.fetchone():  # Column does not exist already
+
+        # Fetch all existing column names once
+        cur.execute("SELECT name FROM pragma_table_info('samples');")
+        existing_columns = set(row[0] for row in cur.fetchall())
+
+        # Determine columns that need to be added
+        columns_to_add = columns - existing_columns
+
+        if columns_to_add:
+            for column in columns_to_add:
                 # TODO(#11): Support something else than string values
                 # TODO(#114): Allow marking properties as single properties (no lists)
                 # TODO(#116): Allow providing list of pre-specified values to use enums instead of strings
-                cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a duckdb list
-        self._connection.commit()
+                cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a DuckDB list
+            self._connection.commit()
 
-    def _insert_samples_with_metadata(self, dataset_id: int, file_id: int, metadata: list[dict]) -> None:
-        if not metadata:
-            logger.warning(f"No metadata extracted from file {file_id} in dataset {dataset_id}")
+    def _insert_samples_with_metadata(self, dataset_id: int, results: list[tuple[int, list[dict]]]) -> None:
+        if not results:
+            logger.warning(f"No metadata extracted for dataset {dataset_id}")
             return
 
-        assert "sample_id" in metadata[0].keys(), "The metadata parser should have collected the sample_id"
-
         # Obtain all collected metadata, extend table if necessary
-        metadata_keys = set(key for sample in metadata for key in sample.keys())
+        metadata_keys = {key for _, dict_list in results for d in dict_list for key in d.keys()}
+        logger.info("Obtained keys.")
         self._add_columns_to_samples_table(metadata_keys)
 
-        # Now, we insert the actual samples via a polars.Dataframe, that seems to be the fastest in microbenchmarks
-        data = [
-            {
-                "dataset_id": dataset_id,
-                "file_id": file_id,
-                "sample_id": sample["sample_id"],
-                **{key: sample.get(key) for key in metadata_keys},
-            }
-            for sample in metadata
-        ]
-        df = pl.DataFrame(data)
-        self._connection.execute("INSERT INTO samples SELECT * FROM df")
-        self._connection.commit()
-        del df  # to tell linters we use this variable
+        logger.info("Prepared table for sample insertion.")
+
+        # Remove columns that are already included
+        metadata_keys -= {"dataset_id", "file_id", "sample_id"}
+        # Sort the metadata keys to ensure consistent ordering
+        sorted_metadata_keys = sorted(metadata_keys)
+        all_columns = ["dataset_id", "file_id", "sample_id"] + sorted_metadata_keys
+
+        # Initialize the data dict with empty lists for each column
+        data_columns: dict[str, Any] = {key: [] for key in all_columns}
+
+        # Collect data column-wise
+        for file_id, metadata in results:
+            for sample in metadata:
+                data_columns["dataset_id"].append(dataset_id)
+                data_columns["file_id"].append(file_id)
+                data_columns["sample_id"].append(sample["sample_id"])
+                for key in sorted_metadata_keys:
+                    data_columns[key].append(sample.get(key))
+
+        logger.debug("Collected column-wise data for constructing pyarrow table.")
+
+        # We need to construct the pyarrow table with consistent column ordering
+        table = pa.Table.from_arrays([pa.array(data_columns[key]) for key in all_columns], names=all_columns)
+        logger.debug("Constructed PyArrow Table.")
+
+        # It is important to specify the columns in the insertion query
+        # Otherwise we do not guarantee that the values silently land in a different column.
+        columns = ", ".join(all_columns)
+        insert_query = f"INSERT INTO samples ({columns}) SELECT {columns} FROM samples_data"
+
+        # Insert data into DuckDB using the registered Arrow Table
+        try:
+            self._connection.register("samples_data", table)
+            self._connection.execute(insert_query)
+            self._connection.commit()
+            logger.debug("Data inserted successfully.")
+        except Exception as e:
+            logger.error(f"Error during data insertion using PyArrow Table: {e}")
+            raise
+        finally:
+            self._connection.unregister("samples_data")
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
