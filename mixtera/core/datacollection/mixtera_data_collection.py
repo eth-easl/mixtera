@@ -6,6 +6,8 @@ from typing import Any, Callable, List, Type
 import dill
 import duckdb
 import polars as pl
+import pyarrow as pa
+
 import psutil
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset
@@ -22,26 +24,7 @@ def process_file_for_metadata(task):
     file = Path(file_path_str)
     metadata_parser = metadata_factory.create_metadata_parser(metadata_parser_type, dataset_id, file_id)
     dtype_class.inform_metadata_parser(file, metadata_parser)
-    metadata: list[dict] = metadata_parser.metadata
-
-    if not metadata:
-        return None  # No data to process
-
-    # Collect unique metadata keys excluding 'sample_id'
-    metadata_keys = set().union(*(sample.keys() for sample in metadata)) - {"sample_id"}
-
-    num_samples = len(metadata)
-    data = {
-        "dataset_id": [dataset_id] * num_samples,
-        "file_id": [file_id] * num_samples,
-        "sample_id": [sample["sample_id"] for sample in metadata],
-    }
-
-    # Collect each metadata key
-    for key in metadata_keys:
-        data[key] = [sample.get(key) for sample in metadata]
-
-    return data
+    return (file_id, metadata_parser.metadata)
 
 
 class MixteraDataCollection:
@@ -169,7 +152,7 @@ class MixteraDataCollection:
         if not files:
             logger.warning(f"No files found in {loc} for dataset {identifier}")
             return False
-
+        
         logger.info(f"Gathered {len(files)} files, ready to insert")
 
         # Insert files into the files table and get file IDs
@@ -187,11 +170,11 @@ class MixteraDataCollection:
         num_workers = max(num_cores - 4, 1)
         logger.info("Prepared tasks for reading")
 
-        chunk_size = 1000  # Make this adjustable??
+        chunk_size = 1000 # Make this adjustable??
 
         with Pool(num_workers) as pool:
             for i in range(0, len(tasks), chunk_size):
-                chunk = tasks[i : i + chunk_size]
+                chunk = tasks[i:i + chunk_size]
                 results = pool.map(process_file_for_metadata, chunk)
                 logger.info(f"Processed chunk {i // chunk_size + 1}, inserting samples.")
                 # Insert collected metadata into the database in the main process
@@ -250,9 +233,7 @@ class MixteraDataCollection:
         return -1
 
     def _insert_files_into_table(self, dataset_id: int, locs: List[Path]) -> List[int]:
-        df_files = pl.DataFrame(
-            [(dataset_id, str(loc)) for loc in locs], schema=["dataset_id", "location"], orient="row"
-        )
+        df_files = pl.DataFrame([(dataset_id, str(loc)) for loc in locs], schema=["dataset_id", "location"], orient="row")
         self._connection.register("df_files", df_files)
         logger.info(f"Inserting {len(locs)} files for dataset id = {dataset_id}")
 
@@ -264,13 +245,13 @@ class MixteraDataCollection:
             RETURNING id, location;
             """
             result = self._connection.execute(insert_query).fetchall()
-
+            
             # Create a mapping from location to id
             id_map = {loc: fid for fid, loc in result}
-
+            
             # Retrieve file IDs in the order of locs
             file_ids = [id_map[str(loc)] for loc in locs]
-
+            
         except duckdb.Error as err:
             logger.error(f"DuckDB error during insertion of files: {err}")
             return []
@@ -290,41 +271,58 @@ class MixteraDataCollection:
                 cur.execute(f"ALTER TABLE samples ADD COLUMN {column} VARCHAR[];")  # [] indicates a duckdb list
         self._connection.commit()
 
-    def _insert_samples_with_metadata(self, dataset_id: int, results: list[dict]) -> None:
+    def _insert_samples_with_metadata(self, dataset_id: int, results: list[tuple[int, list[dict]]]) -> None:
         if not results:
             logger.warning(f"No metadata extracted for dataset {dataset_id}")
             return
 
-        # Initialize the data dict with empty lists for each column
-        data = {key: [] for key in ["dataset_id", "file_id", "sample_id"]}
+        assert "sample_id" in results[0][1][0].keys(), "The metadata parser should have collected the sample_id"
 
-        # Collect all metadata keys
-        metadata_keys = set()
-        for result in results:
-            metadata_keys.update(result.keys())
-
-        metadata_keys -= {"dataset_id", "file_id", "sample_id"}
-        for key in metadata_keys:
-            data[key] = []
-
-        # Aggregate data column-wise
-        for result in results:
-            for key in data:
-                data[key].extend(result.get(key, []))
-
+        # Obtain all collected metadata, extend table if necessary
+        metadata_keys = {key for _, dict_list in results for d in dict_list for key in d.keys()}
         logger.info("Obtained keys.")
         self._add_columns_to_samples_table(metadata_keys)
+
         logger.info("Prepared table for sample insertion.")
 
-        # Construct the DataFrame from the aggregated data
-        df = pl.DataFrame(data)
-        logger.info("Constructed dataframe.")
+        # Initialize the data dict with empty lists for each column
+        data_columns = {key: [] for key in ['dataset_id', 'file_id', 'sample_id'] + list(metadata_keys)}
 
-        # Insert the DataFrame into DuckDB
-        self._connection.register("df", df)
-        self._connection.execute("INSERT INTO samples SELECT * FROM df")
-        self._connection.commit()
-        del df  # Clean up memory
+        metadata_keys -= {"dataset_id", "file_id", "sample_id"}
+
+        # Collect data column-wise
+        for file_id, metadata in results:
+            for sample in metadata:
+                data_columns['dataset_id'].append(dataset_id)
+                data_columns['file_id'].append(file_id)
+                data_columns['sample_id'].append(sample['sample_id'])
+                for key in metadata_keys:
+                    data_columns[key].append(sample.get(key))
+
+        logger.info("Collected column-wise data for insertion.")
+
+        # Create a PyArrow Table from the data columns
+        import pyarrow as pa
+
+        # Convert data to PyArrow arrays
+        arrow_arrays = {}
+        for key, values in data_columns.items():
+            # If values are lists, you may need to handle them appropriately
+            arrow_arrays[key] = pa.array(values)
+
+        # Construct the PyArrow Table
+        table = pa.Table.from_arrays(list(arrow_arrays.values()), names=list(arrow_arrays.keys()))
+        logger.info("Constructed PyArrow Table.")
+
+        # Insert data into DuckDB using the registered Arrow Table
+        try:
+            self._connection.register("samples_data", table)
+            self._connection.execute("INSERT INTO samples SELECT * FROM samples_data")
+            self._connection.commit()
+            logger.info("Data inserted successfully using PyArrow Table.")
+        except Exception as e:
+            logger.error(f"Error during data insertion using PyArrow Table: {e}")
+            raise
 
     def check_dataset_exists(self, identifier: str) -> bool:
         try:
