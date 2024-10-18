@@ -128,21 +128,36 @@ class Query:
         ),
         intervals AS (
             SELECT
-                {', '.join(group_cols)},
+                {partition_clause},
                 SUM(CASE WHEN diff != 1 THEN 1 ELSE 0 END)
                     OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS group_id,
                 MIN(sample_id) as interval_start,
                 MAX(sample_id) + 1 as interval_end
             FROM grouped_samples
             GROUP BY {partition_clause}, diff, sample_id
+        ),
+        grouped_intervals AS (
+            SELECT
+                {partition_clause},
+                group_id,
+                MIN(interval_start) as interval_start,
+                MAX(interval_end) as interval_end
+            FROM intervals
+            GROUP BY {partition_clause}, group_id
+        ),
+        numbered_groups AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (ORDER BY dataset_id, file_id, interval_start) AS group_change_indicator
+            FROM grouped_intervals
         )
         SELECT
             {partition_clause},
             group_id,
-            MIN(interval_start) as interval_start,
-            MAX(interval_end) as interval_end
-        FROM intervals
-        GROUP BY {partition_clause}, group_id
+            interval_start,
+            interval_end,
+            group_change_indicator
+        FROM numbered_groups
         ORDER BY {partition_clause}, interval_start
         """
         self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).pl(), mixture)
