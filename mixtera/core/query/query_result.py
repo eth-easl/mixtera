@@ -90,7 +90,7 @@ class QueryResult:
             file_id = row[col_idx["file_id"]]
             interval_start = row[col_idx["interval_start"]]
             interval_end = row[col_idx["interval_end"]]
-            interval = [interval_start, interval_end]
+            interval = (interval_start, interval_end)
 
             # Build properties dictionary per row as before
             properties = {
@@ -98,11 +98,10 @@ class QueryResult:
                 for k in property_columns
                 if row[col_idx[k]] is not None and not (isinstance(row[col_idx[k]], list) and len(row[col_idx[k]]) == 0)
             }
-
+            new_key = MixtureKey(properties)
             # Check if properties have changed
-            if properties != prev_properties:
-                current_mixture_key = MixtureKey(properties)
-                prev_properties = properties
+            if new_key != current_mixture_key:
+                current_mixture_key = new_key
 
             # Append interval to the chunker index
             chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
