@@ -1,56 +1,41 @@
 from typing import Any, Optional
 
 from loguru import logger
-from mixtera.core.datacollection.index.parser import MetadataParser
-
+from mixtera.core.datacollection.index.parser import MetadataParser, MetadataProperty
 
 class RedPajamaMetadataParser(MetadataParser):
-    """
-    Metadata parser class for the RedPajama dataset.
-    """
-
-    target_index_fields = ["language", "publication_date"]
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(name="language", dtype="STRING", multiple=True, nullable=True),
+            MetadataProperty(name="publication_date", dtype="STRING", multiple=False, nullable=True),
+        ]
 
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
-        if "meta" not in payload:
-            return
-
-        raw_metadata = payload["meta"]
-
-        if not raw_metadata:
-            return
-
         metadata: dict[str, list] = {}
-        for index_field in RedPajamaMetadataParser.target_index_fields:
-            if index_field not in raw_metadata:
-                continue
-            value = raw_metadata[index_field]
-            if index_field == "language":
-                metadata["language"] = []
-                for language in value:
-                    metadata["language"].append(language["name"])
-            else:
-                # TODO(#11): Support numerical buckets, not just categorical
-                metadata[index_field] = value
+        languages = payload.get("meta", {}).get("language", [])
+        if languages:
+            metadata["language"] = [lang["name"] for lang in languages]
+        publication_date = payload.get("meta", {}).get("publication_date")
+        if publication_date:
+            metadata["publication_date"] = publication_date
 
         self.add_metadata(sample_id=line_number, **metadata)
+
 
 
 class SlimPajamaMetadataParser(MetadataParser):
     """
     Metadata parser class for the SlimPajama dataset.
     """
-
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(name="redpajama_set_name", dtype="ENUM", multiple=False, nullable=False, enum_options={"RedPajamaCommonCrawl", "RedPajamaC4", "RedPajamaWikipedia", "RedPajamaStackExchange", "RedPajamaGithub", "RedPajamaArXiv", "RedPajamaBook"}),
+        ]
+    
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
-        if "meta" not in payload:
-            return
-
-        raw_metadata = payload["meta"]
-
-        if not raw_metadata:
-            return
-
-        self.add_metadata(sample_id=line_number, redpajama_set_name=raw_metadata["redpajama_set_name"])
+        self.add_metadata(sample_id=line_number, redpajama_set_name=payload["meta"]["redpajama_set_name"])
 
 
 class MetadataParserFactory:
