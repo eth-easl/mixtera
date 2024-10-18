@@ -4,6 +4,7 @@
 import numpy as np
 cimport numpy as np
 import cython
+from tqdm import tqdm
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -43,6 +44,12 @@ def _create_chunker_index_np(
     cdef object value
     cdef str k
 
+    # Initialize the progress bar
+    pbar = tqdm(total=total_rows, desc="Building chunker index")
+
+    cdef int update_interval = 10000  # Adjust as needed
+    cdef int next_update = update_interval
+
     for idx in range(total_rows):
         dataset_id = dataset_ids[idx]
         file_id = file_ids[idx]
@@ -62,7 +69,6 @@ def _create_chunker_index_np(
             elif isinstance(value, np.ndarray):
                 value = value.tolist()
 
-            # Continue with your existing checks
             if value is not None and not (isinstance(value, list) and len(value) == 0):
                 if isinstance(value, list):
                     properties[k] = value
@@ -80,5 +86,18 @@ def _create_chunker_index_np(
         if file_id not in chunker_index[current_mixture_key][dataset_id]:
             chunker_index[current_mixture_key][dataset_id][file_id] = []
         chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
+
+        # Update progress bar every 'update_interval' iterations
+        if idx + 1 >= next_update:
+            pbar.update(update_interval)
+            next_update += update_interval
+
+    # Final progress bar update
+    remaining = total_rows % update_interval
+    if remaining > 0:
+        pbar.update(remaining)
+
+    # Close the progress bar
+    pbar.close()
 
     return chunker_index
