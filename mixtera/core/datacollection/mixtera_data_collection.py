@@ -172,7 +172,8 @@ class MixteraDataCollection:
         num_workers = max(num_cores - 4, 1)
         logger.info("Prepared tasks for reading")
 
-        chunk_size = 1000  # Make this adjustable??
+        # We should make this configurable at some point, but it is not on the hot path of query execution...
+        chunk_size = 2000
 
         # If we used mocking in unit tests, they get lost when we use a mp.Pool
         # Hence, we need to disable multiprocessing for tests here
@@ -327,12 +328,9 @@ class MixteraDataCollection:
         # It is important to specify the columns in the insertion query
         # Otherwise we do not guarantee that the values silently land in a different column.
         columns = ", ".join(all_columns)
-        insert_query = f"INSERT INTO samples ({columns}) SELECT {columns} FROM samples_data"
-
-        # Insert data into DuckDB using the registered Arrow Table
         try:
             self._connection.register("samples_data", table)
-            self._connection.execute(insert_query)
+            self._connection.execute(f"INSERT INTO samples ({columns}) SELECT {columns} FROM samples_data")
             self._connection.commit()
             logger.debug("Data inserted successfully.")
         except Exception as e:
