@@ -4,7 +4,9 @@
 import io
 import os
 
-from setuptools import find_packages, setup
+from setuptools import find_packages, setup, Extension
+from Cython.Build import cythonize
+import numpy
 
 # Package meta-data.
 NAME = "mixtera"
@@ -35,6 +37,21 @@ except FileNotFoundError:
 about = {}
 project_slug = NAME
 
+extensions = [
+    Extension(
+        "chunker_index",
+        ["mixtera/chunker_index.pyx"],
+        include_dirs=[numpy.get_include()],
+        define_macros=[
+            ('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION'),
+        ],
+        extra_compile_args=['-O3'],
+        language="c"
+    )
+]
+
+
+
 # Where the magic happens:
 setup(
     name=NAME,
@@ -55,6 +72,8 @@ setup(
     include_package_data=True,
     license="MIT",
     keywords=KEYWORDS,
+    ext_modules=cythonize(extensions),
+    zip_safe=False,
     scripts = [
         'mixtera/cli/mixtera-cli',
         'mixtera/cli/mixtera', # Duplication of mixtera-cli

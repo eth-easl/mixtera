@@ -14,6 +14,7 @@ from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import defaultdict_to_dict, merge_sorted_lists, seed_everything_from_list
 from tqdm import tqdm
+from chunker_index import _create_chunker_index_np
 
 
 class QueryResult:
@@ -67,47 +68,48 @@ class QueryResult:
             "file_path": {fid: mdc._get_file_path_by_id(fid) for fid in file_ids},
             "total_length": total_length,
         }
-
     @staticmethod
-    def _create_chunker_index(df: pl.DataFrame) -> ChunkerIndex:
-        logger.info("Converting to chunker index structure...")
-        chunker_index = create_chunker_index()
+    def _create_chunker_index(results: pl.DataFrame) -> ChunkerIndex:
+        """
+        Static method to create a chunker index from the results DataFrame.
 
-        # Build column index mapping to access columns by indices
-        col_idx = {name: idx for idx, name in enumerate(df.columns)}
+        Args:
+            results (pl.DataFrame): The results of the query.
+
+        Returns:
+            ChunkerIndex: The created chunker index.
+        """
+        # Extract necessary columns as NumPy arrays
+        dataset_ids = results["dataset_id"].to_numpy()
+        file_ids = results["file_id"].to_numpy()
+        interval_starts = results["interval_start"].to_numpy()
+        interval_ends = results["interval_end"].to_numpy()
+        indicators = results["group_change_indicator"].to_numpy()
 
         # Identify the property columns
         exclude_keys = ["dataset_id", "file_id", "group_id", "interval_start", "interval_end", "group_change_indicator"]
-        property_columns = [col for col in df.columns if col not in exclude_keys]
+        property_columns = [col for col in results.columns if col not in exclude_keys]
 
-        # Initialize variables for caching
-        current_mixture_key = None
-        prev_indicator = None
+        # Extract property columns into a dictionary of NumPy arrays
+        property_arrays = {col: results[col].to_numpy() for col in property_columns}
+        print("dataset_ids.dtype:", dataset_ids.dtype)
+        print("file_ids.dtype:", file_ids.dtype)
+        print("interval_starts.dtype:", interval_starts.dtype)
+        print("interval_ends.dtype:", interval_ends.dtype)
+        print("indicators.dtype:", indicators.dtype)
 
-        for row in tqdm(df.iter_rows(named=False), desc="Building chunker index.", total=len(df)):
-            # Access values by index
-            dataset_id = row[col_idx["dataset_id"]]
-            file_id = row[col_idx["file_id"]]
-            interval_start = row[col_idx["interval_start"]]
-            interval_end = row[col_idx["interval_end"]]
-            indicator = row[col_idx["group_change_indicator"]]
-            interval = (interval_start, interval_end)
+        # Call the Cython function to create the chunker index
+        chunker_index = _create_chunker_index_np(
+            dataset_ids,
+            file_ids,
+            interval_starts,
+            interval_ends,
+            indicators,
+            property_arrays,
+            property_columns,
+            MixtureKey
+        )
 
-            if True:
-                # Build properties dictionary per row
-                properties = {
-                    k: row[col_idx[k]] if isinstance(row[col_idx[k]], list) else [row[col_idx[k]]]
-                    for k in property_columns
-                    if row[col_idx[k]] is not None
-                    and not (isinstance(row[col_idx[k]], list) and len(row[col_idx[k]]) == 0)
-                }
-                current_mixture_key = MixtureKey(properties)
-                prev_indicator = indicator
-
-            # Append interval to the chunker index
-            chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
-
-        logger.info("Chunker index creation completed")
         return chunker_index
 
     @staticmethod
