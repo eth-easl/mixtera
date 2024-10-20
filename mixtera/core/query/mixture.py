@@ -314,15 +314,15 @@ class HierarchicalStaticMixture(Mixture):
         for key, val in component.items():
             if key == "portion":
                 assert isinstance(val, float), "Portion should be a float."
-                cur_portion *= float(val)
+                cur_portion *= val
             elif key == "submixture":
                 assert isinstance(val, list), "Submixture should be a list."
                 # Base Case: When we reach to the last level of the submixture.
                 if len(val) == 0:
                     user_mixture[cur_key] = cur_portion
                     return
-                for mix in val:
-                    self.convert_to_mixture_key_format(user_mixture, mix, cur_portion, cur_key)
+                for sub_mixture in val:
+                    self.convert_to_mixture_key_format(user_mixture, sub_mixture, cur_portion, cur_key)
             else:
                 assert isinstance(val, str), "Property type should be a string."
                 cur_key.properties[key] = [val]
