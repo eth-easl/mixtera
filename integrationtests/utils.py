@@ -9,18 +9,23 @@ REPRODUCIBILITY_ITERATIONS = 4
 
 
 def write_jsonl(path: Path, file_count: int, instance_count_per_file: int, fraction_multiplier: int) -> None:
+    # We alternate within each language between the two licenses.
+    counters = {"JavaScript": 0, "HTML": 0}
+
     for file_number in range(file_count):
         data = ""
         for i in range(instance_count_per_file):
-            data = (
-                data
-                + '{ "text": "'
-                + str(i)
-                + '", "meta": { "language": "'
-                + ("JavaScript" if i % fraction_multiplier == 0 else "HTML")
-                + '", "license": "CC"}}\n'
-            )
+            # Determine the language and increment the counter
+            language = "JavaScript" if i % fraction_multiplier == 0 else "HTML"
+            counters[language] += 1
 
+            # Determine the license based on the counter for the current language
+            license = "MIT" if counters[language] % 2 == 0 else "CC"
+
+            # Append the data string with the new entry
+            data += f'{{ "text": "{i}", "meta": {{ "language": "{language}", "license": "{license}"}}}}\n'
+
+        # Write the data to a file
         with open(path / f"data_{file_number}.jsonl", "w") as text_file:
             text_file.write(data)
 
@@ -53,5 +58,9 @@ def calc_func(executor: Any, batch: dict[str, np.ndarray]) -> List[Any]:
 class TestMetadataParser(MetadataParser):
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         metadata = payload["meta"]
-        self._index.append_entry("language", metadata["language"], self.dataset_id, self.file_id, line_number)
-        self._index.append_entry("license", metadata["license"], self.dataset_id, self.file_id, line_number)
+        self.add_metadata(
+            sample_id=line_number,
+            language=metadata["language"],
+            license=metadata["license"],
+            doublelanguage=[metadata["language"], metadata["language"]],
+        )

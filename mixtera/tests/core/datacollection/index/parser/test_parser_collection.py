@@ -1,8 +1,13 @@
 import json
 import unittest
+from typing import Any, Optional
 
-from mixtera.core.datacollection.index.parser.parser_collection import MetadataParserFactory, RedPajamaMetadataParser
-from mixtera.utils import defaultdict_to_dict
+from mixtera.core.datacollection.index.parser.metadata_parser import MetadataParser
+from mixtera.core.datacollection.index.parser.parser_collection import (
+    MetadataParserFactory,
+    RedPajamaMetadataParser,
+    SlimPajamaMetadataParser,
+)
 
 
 class TestRedPajamaMetadataParser(unittest.TestCase):
@@ -102,55 +107,124 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         )
 
         lines = [elem1, elem2, elem3, elem4]
-        expected = {
-            "language": {
-                "C": {0: {0: [(0, 2)]}},
-                "C++": {0: {0: [(0, 2)]}},
-                "CoffeeScript": {0: {0: [(0, 1)]}},
-                "PHP": {0: {0: [(1, 2)]}},
+        expected = [
+            {"sample_id": 0, "language": ["C", "C++", "CoffeeScript"], "publication_date": ["asd123"]},
+            {
+                "sample_id": 1,
+                "language": ["C", "C++", "PHP"],
             },
-            "publication_date": {"asd123": {0: {0: [(0, 1)]}}},
-        }
+        ]
 
         for line_number, metadata in enumerate(lines):
             red_pajama_metadata_parser.parse(line_number, metadata)
 
-        red_pajama_metadata_parser.finalize()
-        result_index = defaultdict_to_dict(red_pajama_metadata_parser.get_index().get_full_dict_index())
-        self.assertEqual(expected, result_index)
+        self.assertEqual(expected, red_pajama_metadata_parser.metadata)
 
-    def test_get_index(self):
+    def test_parse_empty_meta(self):
         dataset_id: int = 0
         file_id: int = 0
         red_pajama_metadata_parser = RedPajamaMetadataParser(dataset_id, file_id)
 
-        red_pajama_metadata_parser._index._index = {
-            "language": {
-                "C": {0: {0: [0, 2, 4, 9]}},
-                "PHP": {0: {0: [1]}},
-            },
-            "publication_date": {"asd123": {0: {0: [0, 2, 3, 4, 5, 9, 10]}}},
-        }
+        elem_empty_meta = json.loads(
+            """{
+       "text":"...",
+       "meta":{}
+    }"""
+        )
 
-        target_index = {
-            "language": {
-                "C": {0: {0: [(0, 1), (2, 3), (4, 5), (9, 10)]}},
-                "PHP": {0: {0: [(1, 2)]}},
-            },
-            "publication_date": {"asd123": {0: {0: [(0, 1), (2, 6), (9, 11)]}}},
-        }
+        red_pajama_metadata_parser.parse(0, elem_empty_meta)
+        self.assertEqual([], red_pajama_metadata_parser.metadata)
 
-        red_pajama_metadata_parser.finalize()
-        self.assertEqual(target_index, red_pajama_metadata_parser.get_index().get_full_dict_index())
+    def test_parse_no_meta(self):
+        dataset_id: int = 0
+        file_id: int = 0
+        red_pajama_metadata_parser = RedPajamaMetadataParser(dataset_id, file_id)
+
+        elem_no_meta = json.loads(
+            """{
+       "text":"..."
+    }"""
+        )
+
+        red_pajama_metadata_parser.parse(0, elem_no_meta)
+        self.assertEqual([], red_pajama_metadata_parser.metadata)
+
+
+class TestSlimPajamaMetadataParser(unittest.TestCase):
+    def test_parse(self):
+        dataset_id: int = 0
+        file_id: int = 0
+        slim_pajama_metadata_parser = SlimPajamaMetadataParser(dataset_id, file_id)
+
+        elem = json.loads(
+            """{
+       "text":"...",
+       "meta":{
+          "redpajama_set_name": "common_crawl"
+       }
+    }"""
+        )
+
+        expected = [{"sample_id": 0, "redpajama_set_name": ["common_crawl"]}]
+
+        slim_pajama_metadata_parser.parse(0, elem)
+        self.assertEqual(expected, slim_pajama_metadata_parser.metadata)
+
+    def test_parse_no_meta(self):
+        dataset_id: int = 0
+        file_id: int = 0
+        slim_pajama_metadata_parser = SlimPajamaMetadataParser(dataset_id, file_id)
+
+        elem_no_meta = json.loads(
+            """{
+       "text":"..."
+    }"""
+        )
+
+        slim_pajama_metadata_parser.parse(0, elem_no_meta)
+        self.assertEqual([], slim_pajama_metadata_parser.metadata)
 
 
 class TestMetadataParserFactory(unittest.TestCase):
     def test_create_metadata_parser(self):
         dataset_id: int = 0
         file_id: int = 0
-        metadata_parser = MetadataParserFactory()
+        metadata_parser_factory = MetadataParserFactory()
 
-        tests_and_targets = [("RED_PAJAMA", RedPajamaMetadataParser)]
+        tests_and_targets = [("RED_PAJAMA", RedPajamaMetadataParser), ("SLIM_PAJAMA", SlimPajamaMetadataParser)]
 
         for dtype, ctype in tests_and_targets:
-            self.assertIsInstance(metadata_parser.create_metadata_parser(dtype, dataset_id, file_id), ctype)
+            parser = metadata_parser_factory.create_metadata_parser(dtype, dataset_id, file_id)
+            self.assertIsInstance(parser, ctype)
+            self.assertEqual(parser.dataset_id, dataset_id)
+            self.assertEqual(parser.file_id, file_id)
+
+    def test_add_and_remove_parser(self):
+        metadata_parser_factory = MetadataParserFactory()
+
+        class DummyParser(MetadataParser):
+            def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+                pass
+
+        # Test adding a new parser
+        self.assertTrue(metadata_parser_factory.add_parser("DUMMY", DummyParser))
+
+        # Test adding an existing parser without overwrite
+        self.assertFalse(metadata_parser_factory.add_parser("DUMMY", DummyParser))
+
+        # Test adding an existing parser with overwrite
+        self.assertTrue(metadata_parser_factory.add_parser("DUMMY", DummyParser, overwrite=True))
+
+        # Test removing an existing parser
+        metadata_parser_factory.remove_parser("DUMMY")
+        with self.assertRaises(ModuleNotFoundError):
+            metadata_parser_factory.create_metadata_parser("DUMMY", 0, 0)
+
+        # Test removing a non-existing parser (should not raise an error)
+        metadata_parser_factory.remove_parser("NON_EXISTING")
+
+    def test_create_nonexistent_parser(self):
+        metadata_parser_factory = MetadataParserFactory()
+
+        with self.assertRaises(ModuleNotFoundError):
+            metadata_parser_factory.create_metadata_parser("NON_EXISTING", 0, 0)

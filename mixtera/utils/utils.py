@@ -5,79 +5,13 @@ import random
 import time
 from collections import defaultdict
 from copy import deepcopy
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Union
 
 import numpy as np
-import portion as P
 
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
     return [item for sublist in non_flat_list for item in sublist]
-
-
-def ranges(nums: List[int]) -> List[Tuple[int, int]]:
-    """
-    This method compresses a list of integers into a list of ranges (lower bound
-    inclusve, upper bound exclusive). E.g. [1,2,3,5,6] --> [(1,4), (5,7)].
-
-    Args:
-        nums: The original list of ranges to compress. This is a list of ints.
-
-    Returns:
-        A list of compressed ranges with the lower bound being inclusive and
-        the upper bound being exclusive.
-    """
-    # Assumes nums is sorted and unique
-    # Taken from https://stackoverflow.com/a/48106843
-    gaps = [[s, e] for s, e in zip(nums, nums[1:]) if s + 1 < e]
-    edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
-    return [(s, e + 1) for s, e in zip(edges, edges)]
-
-
-def merge_dicts(d1: dict, d2: dict) -> dict:
-    """
-    Recursively merges two dict structures. Assumes that the innermost
-    dictionaries have unique keys and thus can be merged without concern for collisions.
-    """
-    for key, value in d2.items():
-        if isinstance(value, dict):
-            node = d1[key] if key in d1 else {}
-            d1[key] = merge_dicts(node, value)
-        else:
-            # We're at the innermost level, which has unique keys, so just add them
-            if isinstance(value, list):
-                d1[key] = value + d1[key] if key in d1 else value
-            else:
-                d1[key] = value
-    return d1
-
-
-def intersect_dicts(d1: dict, d2: dict) -> dict:
-    """
-    Recursively intersects two dict structures. Assumes that the innermost
-    dictionaries have unique keys and thus can be intersected without concern for collisions.
-    """
-    common_keys = d1.keys() & d2.keys()
-
-    #  Remove all keys and values from d1 that are not in d2
-    for key in set(d1.keys()) - common_keys:
-        del d1[key]
-
-    for key in common_keys:
-        if isinstance(d1[key], dict) and isinstance(d2[key], dict):
-            d1[key] = intersect_dicts(d1[key], d2[key])
-        else:
-            #  At the innermost level we either have a list of values or a list of ranges
-            if isinstance(d1[key], list) and isinstance(d1[key][0], int):
-                d1[key] = list(set(d1[key]) & set(d2[key]))
-            elif isinstance(d1[key], list) and isinstance(d1[key][0], tuple):
-                d1[key] = intervals_to_ranges(
-                    ranges_to_intervals(d1[key])
-                    & ranges_to_intervals(d2[key])  # type: ignore  # mypy can't handle & operators on Interval objects
-                )
-            else:
-                raise ValueError(f"Unsupported value type {type(d1[key])} for intersection.")
-    return d1
 
 
 def defaultdict_to_dict(ddict: Union[dict, defaultdict]) -> dict[Any, Any]:
@@ -145,55 +79,6 @@ def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Un
       The `to_return` object or a copy of it if `copy` is `True`
     """
     return to_return if not copy else deepcopy(to_return)
-
-
-def merge_property_dicts(left: dict, right: dict, unique_lists: bool = False) -> dict:
-    """
-    Merge two dictionaries that contain key-value pairs of the form:
-        {
-            property_name: [property_value_1, ...],
-            ...
-        }
-
-    Args:
-        left: left property dictionary
-        right: right property dictionary
-        unique_lists: if True, the per-property merged list does not contain
-            duplicate values
-
-    Returns:
-        The merged dictionaries. The merge should be side-effect safe.
-    """
-    new_dict = {}
-    intersection = set()
-
-    for k, v in left.items():
-        if k in right:
-            intersection.add(k)
-        else:
-
-            new_dict[k] = v.copy()
-
-    for k, v in right.items():
-        if k not in intersection:
-            new_dict[k] = v.copy()
-        else:
-            if unique_lists:
-                new_dict[k] = list(set(v + left[k]))
-            else:
-                new_dict[k] = v + left[k]
-
-    return new_dict
-
-
-def ranges_to_intervals(list_of_ranges: List[Tuple[int, int]]) -> List[P.Interval]:
-    """Convert a list of ranges to a list of intervals."""
-    return P.Interval(*[P.closed(start, end) for start, end in list_of_ranges])
-
-
-def intervals_to_ranges(intervals: List[P.Interval]) -> List[Tuple[int, int]]:
-    """Convert a list of intervals to a list of ranges."""
-    return [(int(interval.lower), int(interval.upper)) for interval in intervals]
 
 
 def hash_list(string_list: list[str]) -> int:
@@ -277,3 +162,50 @@ def is_on_github_actions() -> bool:
         return True
 
     return False
+
+
+def merge_sorted_lists(
+    sorted_list1: list[tuple[int, ...]], sorted_list2: list[tuple[int, ...]]
+) -> list[tuple[int, ...]]:
+    """
+    Merges two sorted lists of tuples into a single sorted list of tuples.
+    The lists are sorted based on the first element of each tuple.
+
+    Args:
+        sorted_list1: A list of tuples, each sorted by the first element.
+        sorted_list2: Another list of tuples, each sorted by the first element.
+
+    Returns:
+        A merged list of tuples, sorted by the first element of each tuple.
+    """
+    merged_list = []
+    i, j = 0, 0
+
+    while i < len(sorted_list1) and j < len(sorted_list2):
+        if sorted_list1[i][0] <= sorted_list2[j][0]:
+            merged_list.append(sorted_list1[i])
+            i += 1
+        else:
+            merged_list.append(sorted_list2[j])
+            j += 1
+
+    if i < len(sorted_list1):
+        merged_list.extend(sorted_list1[i:])
+
+    if j < len(sorted_list2):
+        merged_list.extend(sorted_list2[j:])
+
+    return merged_list
+
+
+def numpy_to_native(value: Any) -> Any:
+    if isinstance(value, list):
+        return [numpy_to_native(v) for v in value]
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+
+    return value  # Assume it's already a native type

@@ -83,7 +83,7 @@ def test_filter_both(
     query = (
         Query.for_job(result_streaming_args.job_id)
         .select(("language", "==", "HTML"))
-        .union(Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript")))
+        .select(("language", "==", "JavaScript"))
     )
     client.execute_query(query, query_exec_args)
     result_samples = []
@@ -114,7 +114,7 @@ def test_filter_license(
         result_samples.append(sample)
 
     assert (
-        len(result_samples) == TEST_LOCAL_INSTANCE_COUNT
+        len(result_samples) == TEST_LOCAL_INSTANCE_COUNT // 2
     ), f"Got {len(result_samples)} samples instead of the expected {TEST_LOCAL_INSTANCE_COUNT}!"
     for sample in result_samples:
         assert 0 <= int(sample) < TEST_LOCAL_INSTANCE_COUNT, f"Sample {sample} should not appear"
@@ -142,9 +142,7 @@ def test_filter_license_and_html(
         + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
     )
     query = (
-        Query.for_job(result_streaming_args.job_id)
-        .select(("language", "==", "HTML"))
-        .union(Query.for_job(result_streaming_args.job_id).select(("license", "==", "CC")))
+        Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML")).select(("license", "==", "CC"))
     )
     client.execute_query(query, query_exec_args)
     result_samples = []
@@ -152,11 +150,12 @@ def test_filter_license_and_html(
     for sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
 
+    expected_samples = EXPECTED_HTML_SAMPLES + EXPECTED_JS_SAMPLES // 2
     assert (
-        len(result_samples) == TEST_LOCAL_INSTANCE_COUNT
-    ), f"Got {len(result_samples)} samples instead of the expected {TEST_LOCAL_INSTANCE_COUNT}!"
+        len(result_samples) == expected_samples
+    ), f"Got {len(result_samples)} samples instead of the expected {expected_samples}!"
     for sample in result_samples:
-        assert 0 <= int(sample) < TEST_LOCAL_INSTANCE_COUNT, f"Sample {sample} should not appear"
+        assert 0 <= int(sample) < expected_samples, f"Sample {sample} should not appear"
 
 
 def test_reproducibility(
@@ -178,7 +177,7 @@ def test_reproducibility(
         query = (
             Query.for_job(result_streaming_args.job_id)
             .select(("language", "==", "HTML"))
-            .union(Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript")))
+            .select(("language", "==", "JavaScript"))
         )
         query_exec_args.mixture = mixture
         client.execute_query(query, query_exec_args)
@@ -246,6 +245,8 @@ def main() -> None:
     print(f"Running tests with {mp.get_start_method()} start method.")
     with tempfile.TemporaryDirectory() as directory:
         test_chunk_readers(Path(directory))
+
+    print("Local tests done.")
 
 
 if __name__ == "__main__":

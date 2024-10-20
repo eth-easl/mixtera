@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
@@ -12,7 +12,7 @@ from .mixture import Mixture
 class Query:
     def __init__(self, job_id: str) -> None:
         self.query_plan = QueryPlan()
-        self.results: Optional[QueryResult] = None
+        self.results: Any | None = None
         self.job_id = job_id
 
     def is_empty(self) -> bool:
@@ -76,6 +76,54 @@ class Query:
             mixture: A mixture object defining the mixture to be reflected in the chunks.
         """
         logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
-        self.root.post_order_traverse(mdc)
-        self.results = QueryResult(mdc, self.root.results, mixture)
+        conn = mdc._connection
+        base_query, parameters = self.root.generate_sql()
+        logger.debug(f"SQL:\n{base_query}\nParameters:\n{parameters}")
+
+        # First, we need to get the column names from the base query
+        columns_query = f"SELECT * FROM ({base_query}) LIMIT 0"
+        columns = conn.execute(columns_query, parameters).fetch_arrow_table().column_names
+
+        # Determine group columns (all columns except 'sample_id')
+        group_cols = ["dataset_id", "file_id"] + sorted(
+            [col for col in columns if col not in ["sample_id", "dataset_id", "file_id"]]
+        )
+
+        # Create the partition by clause for the window functions
+        partition_clause = ", ".join(group_cols)
+
+        # Wrap the base query in a CTE and add the chunking logic
+        full_query = f"""
+        WITH base_data AS (
+            {base_query}
+        ),
+        grouped_samples AS (
+            SELECT
+                *,
+                sample_id - LAG(sample_id, 1, sample_id)
+                    OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS diff
+            FROM base_data
+        ),
+        intervals AS (
+            SELECT
+                {', '.join(group_cols)},
+                SUM(CASE WHEN diff != 1 THEN 1 ELSE 0 END)
+                    OVER (PARTITION BY {partition_clause} ORDER BY sample_id) AS group_id,
+                MIN(sample_id) as interval_start,
+                MAX(sample_id) + 1 as interval_end
+            FROM grouped_samples
+            GROUP BY {partition_clause}, diff, sample_id
+        )
+        SELECT
+            {', '.join(group_cols)},
+            group_id,
+            MIN(interval_start) as interval_start,
+            MAX(interval_end) as interval_end
+        FROM intervals
+        GROUP BY {partition_clause}, group_id
+        ORDER BY {', '.join(group_cols)}, interval_start
+        """
+        self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).pl(), mixture)
+
+        logger.debug(f"Results:\n{self.results}")
         logger.debug("Query executed.")

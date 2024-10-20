@@ -26,7 +26,7 @@ class JSONLDataset(Dataset):
         yield from FileSystem.get_all_files_with_ext(loc, "jsonl")
 
     @staticmethod
-    def build_file_index(loc: Path, metadata_parser: MetadataParser) -> None:
+    def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
         with FileSystem.open_file(loc) as fd:
             for line_id, line in enumerate(fd):
                 metadata_parser.parse(line_id, json.loads(line))
