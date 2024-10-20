@@ -192,6 +192,7 @@ def test_reproducibility(
     for i in range(1, REPRODUCIBILITY_ITERATIONS):
         assert result_list[i] == result_list[i - 1], "Results are not reproducible"
 
+
 def test_client_chunksize(
     client: MixteraClient, query_exec_args: QueryExecutionArgs, result_streaming_args: ResultStreamingArgs
 ):
@@ -202,6 +203,7 @@ def test_client_chunksize(
     test_filter_unknown_license(client, query_exec_args, result_streaming_args)
     test_filter_license_and_html(client, query_exec_args, result_streaming_args)
     test_reproducibility(client, query_exec_args, result_streaming_args)
+
 
 def test_chunk_readers(dir: Path) -> None:
     setup_test_dataset(dir, TEST_LOCAL_INSTANCE_COUNT, TEST_LOCAL_FILE_COUNT, TEST_LOCAL_FRACTION_MULTIPLIER)
