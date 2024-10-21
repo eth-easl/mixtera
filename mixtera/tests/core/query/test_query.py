@@ -5,6 +5,7 @@ from typing import Any, List
 from unittest.mock import MagicMock, patch
 
 import polars as pl
+import pyarrow as pa
 from integrationtests.utils import TestMetadataParser as ExampleMetadataParser
 from mixtera.core.client.mixtera_client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
@@ -134,7 +135,8 @@ class TestQuery(unittest.TestCase):
         self.assertTrue(mock_query_result.called, "QueryResult was not called")
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -156,7 +158,8 @@ class TestQuery(unittest.TestCase):
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -178,7 +181,8 @@ class TestQuery(unittest.TestCase):
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -208,7 +212,8 @@ class TestQuery(unittest.TestCase):
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -230,7 +235,8 @@ class TestQuery(unittest.TestCase):
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -259,7 +265,8 @@ class TestQuery(unittest.TestCase):
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
