@@ -477,7 +477,9 @@ class QueryResult:
         # Since MixtureKey now serializes all necessary information into a string,
         # we can proceed as before.
 
-        for mixture_key, datasets in chunker_index.items():
+        for mixture_key, datasets in tqdm(
+            chunker_index.items(), desc="Flattening chunker index...", max=len(chunker_index)
+        ):
             mixture_key_str = str(mixture_key)
             for dataset_id, files in datasets.items():
                 for file_id, intervals in files.items():
@@ -504,7 +506,7 @@ class QueryResult:
         num_rows = table.num_rows
         columns = table.to_pydict()
 
-        for i in range(num_rows):
+        for i in tqdm(range(num_rows), max=num_rows, desc="Rebuilding chunker index from cache"):
             mixture_key_str = columns["mixture_key"][i]
             mixture_key = MixtureKey.from_string(mixture_key_str)
             dataset_id = columns["dataset_id"][i]
@@ -530,12 +532,15 @@ class QueryResult:
             del state[attrib]
             dill_pickled_attributes[attrib] = attrib_pickled
 
-        logger.debug("Serializing the chunker index.")
+        logger.debug("Preparing the chunker index for serialization.")
         chunker_index_table = self.flatten_chunker_index(state["_chunker_index"])
+        logger.debug("Writing the flattened index to bytes.")
         chunker_index_sink = pa.BufferOutputStream()
         with pa.ipc.new_stream(chunker_index_sink, chunker_index_table.schema) as writer:
             writer.write_table(chunker_index_table)
         chunker_index_bytes = chunker_index_sink.getvalue().to_pybytes()
+        logger.debug("Serialized chunker index.")
+
         del state["_chunker_index"]
 
         return {"other": state, "dilled": dill_pickled_attributes, "chunker_index_bytes": chunker_index_bytes}
