@@ -21,6 +21,8 @@ import io
 import functools
 from line_profiler import LineProfiler
 from pyinstrument import Profiler
+import pyarrow as pa
+from pyarrow import compute as pc
 
 def profilefunc(func):
     @functools.wraps(func)
@@ -75,7 +77,7 @@ class QueryResult:
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    def __init__(self, mdc: MixteraDataCollection, results: pl.DataFrame, mixture: Mixture) -> None:
+    def __init__(self, mdc: MixteraDataCollection, results: pa.Table, mixture: Mixture) -> None:
         """
         Args:
             mdc (MixteraDataCollection): The MixteraDataCollection object.
@@ -105,9 +107,9 @@ class QueryResult:
         self._num_returns_gen = 0
         logger.debug("QueryResult instantiated.")
 
-    def _parse_meta(self, mdc: MixteraDataCollection, results: pl.DataFrame) -> dict:
-        dataset_ids = set(results["dataset_id"].unique())
-        file_ids = set(results["file_id"].unique())
+    def _parse_meta(self, mdc: MixteraDataCollection, results: pa.Table) -> dict:
+        dataset_ids = set(pc.unique(results['dataset_id']).to_pylist())
+        file_ids = set(pc.unique(results['file_id']).to_pylist())
 
         total_length = len(results)
 
@@ -119,10 +121,7 @@ class QueryResult:
         }
     
     @staticmethod
-    @profilefunc
-    @profile_line_by_line
-    @profile_line_by_line2
-    def _create_chunker_index(df: pl.DataFrame) -> ChunkerIndex:
+    def _create_chunker_index(table: pa.Table) -> ChunkerIndex:
         """
         Static method to create a chunker index from the results DataFrame.
 
@@ -136,39 +135,43 @@ class QueryResult:
         logger.info("Converting to chunker index structure...")
         chunker_index = create_chunker_index()
 
-        # Build column index mapping to access columns by indices
-        col_idx = {name: idx for idx, name in enumerate(df.columns)}
+        exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end", "group_change_indicator"}
+        property_columns = {col for col in table.column_names if col not in exclude_keys}
 
-        # Identify the property columns
-        exclude_keys = ["dataset_id", "file_id", "group_id", "interval_start", "interval_end", "group_change_indicator"]
-        property_columns = [col for col in df.columns if col not in exclude_keys]
-
-        # Initialize variables for caching
         current_mixture_key = None
         prev_indicator = None
 
-        for row in tqdm(df.iter_rows(named=False), desc="Building chunker index.", total=len(df)):
-            # Access values by index
-            dataset_id = row[col_idx["dataset_id"]]
-            file_id = row[col_idx["file_id"]]
-            interval_start = row[col_idx["interval_start"]]
-            interval_end = row[col_idx["interval_end"]]
-            indicator = row[col_idx["group_change_indicator"]]
-            interval = (interval_start, interval_end)
+        total_rows = table.num_rows
+        processed_rows = 0
 
-            if indicator != prev_indicator: # maybe remove the indicator column again, premature optimization
-                # Build properties dictionary per row
-                properties = {
-                    k: row[col_idx[k]] if isinstance(row[col_idx[k]], list) else [row[col_idx[k]]]
-                    for k in property_columns
-                    if row[col_idx[k]] is not None
-                    and not (isinstance(row[col_idx[k]], list) and len(row[col_idx[k]]) == 0)
-                }
-                current_mixture_key = MixtureKey(properties)
-                prev_indicator = indicator
+        with tqdm(total=total_rows, desc="Building chunker index") as pbar:
+            for batch in tqdm(table.to_batches(), desc="Building chunker index.", total=table.num_rows):
+                batch_dict = batch.to_pydict()
+                num_rows = len(batch_dict['dataset_id'])
 
-            # Append interval to the chunker index
-            chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
+                for i in range(num_rows):
+                    dataset_id = batch_dict['dataset_id'][i]
+                    file_id = batch_dict['file_id'][i]
+                    interval_start = batch_dict['interval_start'][i]
+                    interval_end = batch_dict['interval_end'][i]
+                    indicator = batch_dict['group_change_indicator'][i]
+                    interval = (interval_start, interval_end)
+
+                    if indicator != prev_indicator:
+                        properties = {
+                            k: batch_dict[k][i] if isinstance(batch_dict[k][i], list) else [batch_dict[k][i]]
+                            for k in property_columns
+                            if batch_dict[k][i] is not None
+                            and not (isinstance(batch_dict[k][i], list) and len(batch_dict[k][i]) == 0)
+                        }
+                        current_mixture_key = MixtureKey(properties)
+                        prev_indicator = indicator
+
+                    chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
+
+                processed_rows += num_rows
+                pbar.update(num_rows)
+                print(num_rows)
 
         logger.info("Chunker index creation completed")
         return chunker_index

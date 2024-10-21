@@ -160,7 +160,7 @@ class Query:
         FROM numbered_groups
         ORDER BY {partition_clause}, interval_start
         """
-        self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).pl(), mixture)
+        self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).fetch_arrow_table(), mixture)
 
         logger.debug(f"Results:\n{self.results}")
         logger.debug("Query executed.")

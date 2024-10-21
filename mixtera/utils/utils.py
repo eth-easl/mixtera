@@ -113,9 +113,8 @@ def hash_dict(d: dict) -> int:
     Returns:
         A hash
     """
-    return hash(frozenset((k, tuple(sorted(v))) for k, v in d.items()))
-    #combined_string = ";".join(f"{k}:{','.join(map(str, sorted(v)))}" for k, v in sorted(d.items()))
-    #return hash(combined_string)
+    combined_string = ";".join(f"{k}:{','.join(map(str, sorted(v)))}" for k, v in sorted(d.items()))
+    return hash(combined_string)
 
 
 def seed_everything_from_list(seed_list: List[Any]) -> None:
