@@ -5,7 +5,7 @@ import random
 import time
 from collections import defaultdict
 from copy import deepcopy
-from typing import Any, Callable, Iterable, List, Optional, Type, Union
+from typing import Any, Callable, Iterable, Iterator, List, Optional, Type, Union
 
 import numpy as np
 from loguru import logger
@@ -228,3 +228,13 @@ class DummyPool:
     def map(self, func: Callable[[Any], Any], iterable: Iterable[Any]) -> List[Any]:
         logger.info("DummyPool executing functions sequentially.")
         return list(map(func, iterable))
+
+    def imap_unordered(self, func: Callable[[Any], Any], iterable: Iterable[Any]) -> Iterator[Any]:
+        logger.info("DummyPool executing functions sequentially with imap_unordered.")
+        results = []
+        for item in iterable:
+            result = func(item)
+            results.append(result)
+        # Shuffle to simulate unordered results.
+        random.shuffle(results)
+        yield from results

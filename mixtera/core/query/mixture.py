@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 
 class MixtureKey:
+    __slots__ = ["properties", "_hash"]
 
     def __init__(self, properties: dict[str, list[str | int | float]]) -> None:
         """
@@ -19,11 +20,15 @@ class MixtureKey:
             properties: a dictionary of properties for the mixture key
         """
         self.properties = properties
+        self._hash: int | None = None
 
     def __eq__(self, other: object) -> bool:
         #  TODO(#112): This is currently not commutative, i.e., a == b does not imply b == a
         if not isinstance(other, MixtureKey):
             return False
+
+        # Note: Because this does not actually implement equality, we CANNOT use the hash here
+        # (if it exists) to check whether we are equal. This is not equality! (Caused quite some debugging...)
 
         #  We compare the properties of the two MixtureKey objects
         for k, v in self.properties.items():
@@ -31,7 +36,8 @@ class MixtureKey:
             if k not in other.properties:
                 return False
             #  If the values of the two properties do not have any intersection, we return False
-            if not set(v).intersection(other.properties[k]) and (len(v) > 0 or len(other.properties[k]) > 0):
+            other_v = set(other.properties[k])
+            if not set(v).intersection(other_v) and (len(v) > 0 or len(other_v) > 0):
                 return False
         return True
 
@@ -81,11 +87,12 @@ class MixtureKey:
 
     def __hash__(self) -> int:
         #  Since we are want to use this class as a key in a dictionary, we need to implement the __hash__ method
-        return hash_dict(self.properties)
+        self._hash = self._hash if self._hash is not None else hash_dict(self.properties)
+        return self._hash
 
     def __str__(self) -> str:
         #  We sort the properties to ensure that the string representation is deterministic
-        return ";".join([f'{k}:{":".join([str(x) for x in v])}' for k, v in sorted(self.properties.items())])
+        return ";".join([f'{k}:{":".join([str(x) for x in sorted(v)])}' for k, v in sorted(self.properties.items())])
 
     def __repr__(self) -> str:
         return str(self)
