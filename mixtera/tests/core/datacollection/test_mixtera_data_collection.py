@@ -160,20 +160,22 @@ class TestLocalDataCollection(unittest.TestCase):
         conn.close()
 
     @patch("mixtera.core.datacollection.mixtera_data_collection.MixteraDataCollection._insert_samples_with_metadata")
-    @patch("mixtera.core.datacollection.mixtera_data_collection.MixteraDataCollection._insert_file_into_table")
+    @patch("mixtera.core.datacollection.mixtera_data_collection.MixteraDataCollection._insert_files_into_table")
     @patch("mixtera.core.datacollection.mixtera_data_collection.MixteraDataCollection._insert_dataset_into_table")
     @patch.object(MixteraDataCollection, "_configure_duckdb")
     def test_register_dataset(
         self,
         mock_configure_duckdb,
         mock_insert_dataset_into_table,
-        mock_insert_file_into_table,
+        mock_insert_files_into_table,
         mock_insert_samples_with_metadata,
     ):
         del mock_configure_duckdb
         dataset_id = 42
         mock_insert_dataset_into_table.return_value = dataset_id
-        mock_insert_file_into_table.return_value = 0  # File ID
+
+        # Mock the return value of _insert_files_into_table to be a list of file IDs
+        mock_insert_files_into_table.return_value = [1, 2]  # File IDs
 
         # Create instance without calling __init__
         directory = Path(self.temp_dir.name)
@@ -197,10 +199,8 @@ class TestLocalDataCollection(unittest.TestCase):
 
         # Assertions
         mock_insert_dataset_into_table.assert_called_once_with("test", "loc", mocked_dtype, proc_func)
-        self.assertEqual(mock_insert_file_into_table.call_count, 2)
-        mock_insert_file_into_table.assert_any_call(dataset_id, Path("test1.jsonl"))
-        mock_insert_file_into_table.assert_any_call(dataset_id, Path("test2.jsonl"))
-        self.assertEqual(mock_insert_samples_with_metadata.call_count, 2)
+        mock_insert_files_into_table.assert_called_once_with(dataset_id, [Path("test1.jsonl"), Path("test2.jsonl")])
+        mock_insert_samples_with_metadata.assert_called()
         mocked_dtype.inform_metadata_parser.assert_any_call(Path("test1.jsonl"), ANY)
         mocked_dtype.inform_metadata_parser.assert_any_call(Path("test2.jsonl"), ANY)
         self.assertEqual(mocked_dtype.inform_metadata_parser.call_count, 2)
@@ -209,6 +209,8 @@ class TestLocalDataCollection(unittest.TestCase):
         directory = Path(self.temp_dir.name)
         mdc = MixteraDataCollection(directory)
         (directory / "loc").mkdir(exist_ok=True)
+        (directory / "loc" / "file1.jsonl").touch()
+        (directory / "loc" / "file2.jsonl").touch()
 
         # First time, the dataset registration should succeed.
         self.assertTrue(
@@ -396,15 +398,17 @@ class TestLocalDataCollection(unittest.TestCase):
         # First, we need a dataset to associate the file with
         dataset_id = mdc._insert_dataset_into_table("test_ds", "loc", JSONLDataset, lambda data: f"prefix_{data}")
         self.assertTrue(dataset_id >= 1)
-        # Now insert a file into the table
-        file_id = mdc._insert_file_into_table(dataset_id, "file_path")
-        self.assertTrue(file_id >= 1)
+        # Now insert files into the table
+        file_ids = mdc._insert_files_into_table(dataset_id, [Path("file_path")])
+        self.assertTrue(len(file_ids) == 1)
+        self.assertTrue(file_ids[0] >= 1)
         mdc._connection.close()
 
     def test_check_dataset_exists(self):
         directory = Path(self.temp_dir.name)
         mdc = MixteraDataCollection(directory)
         (directory / "loc").mkdir(exist_ok=True)
+        (directory / "loc" / "temp2.jsonl").touch()
 
         self.assertFalse(mdc.check_dataset_exists("test"))
         self.assertFalse(mdc.check_dataset_exists("test2"))
@@ -435,6 +439,7 @@ class TestLocalDataCollection(unittest.TestCase):
         directory = Path(self.temp_dir.name)
         mdc = MixteraDataCollection(directory)
         (directory / "loc").mkdir(exist_ok=True)
+        (directory / "loc" / "temp2.jsonl").touch()
 
         self.assertListEqual([], mdc.list_datasets())
         self.assertTrue(

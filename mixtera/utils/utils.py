@@ -5,9 +5,10 @@ import random
 import time
 from collections import defaultdict
 from copy import deepcopy
-from typing import Any, List, Union
+from typing import Any, Callable, Iterable, List, Optional, Type, Union
 
 import numpy as np
+from loguru import logger
 
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
@@ -209,3 +210,21 @@ def numpy_to_native(value: Any) -> Any:
         return value.tolist()
 
     return value  # Assume it's already a native type
+
+
+class DummyPool:
+    def __init__(self, num_workers: int) -> None:
+        del num_workers
+
+    def __enter__(self) -> "DummyPool":
+        logger.info("Entering DummyPool.")
+        return self
+
+    def __exit__(
+        self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[Any]
+    ) -> None:
+        pass
+
+    def map(self, func: Callable[[Any], Any], iterable: Iterable[Any]) -> List[Any]:
+        logger.info("DummyPool executing functions sequentially.")
+        return list(map(func, iterable))
