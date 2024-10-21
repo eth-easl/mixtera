@@ -170,11 +170,13 @@ class QueryResult:
         num_cores = os.cpu_count() or 1
         num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
         # Use a dummy pool for testing, or a multiprocessing pool otherwise
-        pool_c = DummyPool if os.environ.get("PYTEST_CURRENT_TEST") else mp.Pool
+        in_test = os.environ.get("PYTEST_CURRENT_TEST") 
+        pool_c = DummyPool if in_test else mp.Pool
+        core_string = "" if in_test else f" (using {num_workers} cores)"
 
         with pool_c(num_workers) as pool:
             process_func = partial(QueryResult._process_batch, property_columns=property_columns)
-            with tqdm(total=total_rows, desc="Building chunker index") as pbar:
+            with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
                 results = []
                 for result, handled_rows in pool.imap_unordered(process_func, batches):
                     results.append(result)
