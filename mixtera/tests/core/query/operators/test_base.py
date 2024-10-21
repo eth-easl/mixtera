@@ -53,7 +53,7 @@ class TestOperator(unittest.TestCase):
 
     def test_generate_sql_not_implemented(self):
         with self.assertRaises(NotImplementedError):
-            self.operator.generate_sql()
+            self.operator.generate_sql(schema=None)
 
 
 if __name__ == "__main__":

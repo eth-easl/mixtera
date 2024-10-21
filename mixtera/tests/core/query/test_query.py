@@ -68,7 +68,7 @@ class TestQuery(unittest.TestCase):
                 self.arg1 = arg1
                 self.arg2 = arg2
 
-            def generate_sql(self) -> tuple[str, List[Any]]:
+            def generate_sql(self, schema: dict) -> tuple[str, List[Any]]:
                 return ("test_operator", [])
 
         Query.register(TestOperator)
@@ -116,7 +116,7 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1, 1, 1, 1, 1, 1],
                 "interval_start": [2, 5, 6, 0, 4, 7],
                 "interval_end": [4, 6, 7, 2, 5, 8],
-                "language": [["HTML"], ["HTML"], ["HTML"], ["JavaScript"], ["JavaScript"], ["JavaScript"]],
+                "language": ["HTML", "HTML", "HTML", "JavaScript", "JavaScript", "JavaScript"],
                 "doublelanguage": [
                     ["HTML", "HTML"],
                     ["HTML", "HTML"],
@@ -125,7 +125,7 @@ class TestQuery(unittest.TestCase):
                     ["JavaScript", "JavaScript"],
                     ["JavaScript", "JavaScript"],
                 ],
-                "license": [["CC"], ["CC"], ["MIT"], ["CC"], ["CC"], ["CC"]],
+                "license": ["CC", "CC", "MIT", "CC", "CC", "CC"],
             }
         )
 
@@ -149,9 +149,9 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 3,
                 "interval_start": [0, 4, 7],
                 "interval_end": [2, 5, 8],
-                "language": [["JavaScript"]] * 3,
+                "language": ["JavaScript"] * 3,
                 "doublelanguage": [["JavaScript", "JavaScript"]] * 3,
-                "license": [["CC"]] * 3,
+                "license": ["CC"] * 3,
             }
         )
 
@@ -171,9 +171,9 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 3,
                 "interval_start": [0, 4, 7],
                 "interval_end": [2, 5, 8],
-                "language": [["JavaScript"]] * 3,
+                "language": ["JavaScript"] * 3,
                 "doublelanguage": [["JavaScript", "JavaScript"]] * 3,
-                "license": [["CC"]] * 3,
+                "license": ["CC"] * 3,
             }
         )
 
@@ -194,7 +194,7 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 6,
                 "interval_start": [2, 5, 6, 0, 4, 7],
                 "interval_end": [4, 6, 7, 2, 5, 8],
-                "language": [["HTML"], ["HTML"], ["HTML"], ["JavaScript"], ["JavaScript"], ["JavaScript"]],
+                "language": ["HTML", "HTML", "HTML", "JavaScript", "JavaScript", "JavaScript"],
                 "doublelanguage": [
                     ["HTML", "HTML"],
                     ["HTML", "HTML"],
@@ -203,7 +203,7 @@ class TestQuery(unittest.TestCase):
                     ["JavaScript", "JavaScript"],
                     ["JavaScript", "JavaScript"],
                 ],
-                "license": [["CC"], ["CC"], ["MIT"], ["CC"], ["CC"], ["CC"]],
+                "license": ["CC", "CC", "MIT", "CC", "CC", "CC"],
             }
         )
 
@@ -223,9 +223,9 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 3,
                 "interval_start": [2, 5, 6],
                 "interval_end": [4, 6, 7],
-                "language": [["HTML"]] * 3,
+                "language": ["HTML"] * 3,
                 "doublelanguage": [["HTML", "HTML"]] * 3,
-                "license": [["CC"], ["CC"], ["MIT"]],
+                "license": ["CC", "CC", "MIT"],
             }
         )
 
@@ -245,7 +245,7 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 6,
                 "interval_start": [2, 5, 6, 0, 4, 7],
                 "interval_end": [4, 6, 7, 2, 5, 8],
-                "language": [["HTML"], ["HTML"], ["HTML"], ["JavaScript"], ["JavaScript"], ["JavaScript"]],
+                "language": ["HTML", "HTML", "HTML", "JavaScript", "JavaScript", "JavaScript"],
                 "doublelanguage": [
                     ["HTML", "HTML"],
                     ["HTML", "HTML"],
@@ -254,7 +254,7 @@ class TestQuery(unittest.TestCase):
                     ["JavaScript", "JavaScript"],
                     ["JavaScript", "JavaScript"],
                 ],
-                "license": [["CC"], ["CC"], ["MIT"], ["CC"], ["CC"], ["CC"]],
+                "license": ["CC", "CC", "MIT", "CC", "CC", "CC"],
             }
         )
 
