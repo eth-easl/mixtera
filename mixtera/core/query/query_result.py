@@ -23,6 +23,7 @@ from line_profiler import LineProfiler
 from pyinstrument import Profiler
 import pyarrow as pa
 from pyarrow import compute as pc
+from functools import partial
 
 def profilefunc(func):
     @functools.wraps(func)
@@ -119,63 +120,75 @@ class QueryResult:
             "file_path": {fid: mdc._get_file_path_by_id(fid) for fid in file_ids},
             "total_length": total_length,
         }
-    
+
+
+
     @staticmethod
-    def _create_chunker_index(table: pa.Table) -> ChunkerIndex:
-        """
-        Static method to create a chunker index from the results DataFrame.
-
-        Args:
-            results (pl.DataFrame): The results of the query.
-
-        Returns:
-            ChunkerIndex: The created chunker index.
-        """
-        # Extract necessary columns as NumPy arrays
-        logger.info("Converting to chunker index structure...")
-        chunker_index = create_chunker_index()
-
-        exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end", "group_change_indicator"}
-        property_columns = {col for col in table.column_names if col not in exclude_keys}
-
+    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> dict:
+        batch_dict = batch.to_pydict()
+        num_rows = len(batch_dict['dataset_id'])
+        local_chunker_index = create_chunker_index()
+        
         current_mixture_key = None
         prev_indicator = None
 
+        for i in range(num_rows):
+            dataset_id = batch_dict['dataset_id'][i]
+            file_id = batch_dict['file_id'][i]
+            interval_start = batch_dict['interval_start'][i]
+            interval_end = batch_dict['interval_end'][i]
+            indicator = batch_dict['group_change_indicator'][i]
+            interval = (interval_start, interval_end)
+
+            if indicator != prev_indicator:
+                properties = {
+                    k: batch_dict[k][i] if isinstance(batch_dict[k][i], list) else [batch_dict[k][i]]
+                    for k in property_columns
+                    if batch_dict[k][i] is not None
+                    and not (isinstance(batch_dict[k][i], list) and len(batch_dict[k][i]) == 0)
+                }
+                current_mixture_key = MixtureKey(properties)
+                prev_indicator = indicator
+
+            local_chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
+
+        return local_chunker_index
+
+    @staticmethod
+    def _merge_chunker_indices(indices: list[ChunkerIndex]) -> ChunkerIndex:
+        merged_index = create_chunker_index()
+        for index in tqdm(indices, desc="Merging partial results"):
+            for mixture_key, datasets in index.items():
+                for dataset_id, files in datasets.items():
+                    for file_id, intervals in files.items():
+                        merged_index[mixture_key][dataset_id][file_id].extend(intervals)
+        return merged_index
+
+    @staticmethod
+    def _create_chunker_index(table: pa.Table) -> ChunkerIndex:
+        logger.info("Converting to chunker index structure...")
+        
+        exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end", "group_change_indicator"}
+        property_columns = {col for col in table.column_names if col not in exclude_keys}
+
         total_rows = table.num_rows
-        processed_rows = 0
+        batches = list(table.to_batches())
+        num_processes = mp.cpu_count() - 4
 
-        with tqdm(total=total_rows, desc="Building chunker index") as pbar:
-            for batch in table.to_batches():
-                batch_dict = batch.to_pydict()
-                num_rows = len(batch_dict['dataset_id'])
-                logger.info(f"This batch contains {num_rows}")
+        with mp.Pool(num_processes) as pool:
+            process_func = partial(QueryResult._process_batch, property_columns=property_columns)
+            
+            with tqdm(total=total_rows, desc="Building chunker index") as pbar:
+                results = []
+                for result in pool.imap_unordered(process_func, batches):
+                    results.append(result)
+                    pbar.update(len(result))
 
-                for i in range(num_rows):
-                    dataset_id = batch_dict['dataset_id'][i]
-                    file_id = batch_dict['file_id'][i]
-                    interval_start = batch_dict['interval_start'][i]
-                    interval_end = batch_dict['interval_end'][i]
-                    indicator = batch_dict['group_change_indicator'][i]
-                    interval = (interval_start, interval_end)
-
-                    if indicator != prev_indicator:
-                        properties = {
-                            k: batch_dict[k][i] if isinstance(batch_dict[k][i], list) else [batch_dict[k][i]]
-                            for k in property_columns
-                            if batch_dict[k][i] is not None
-                            and not (isinstance(batch_dict[k][i], list) and len(batch_dict[k][i]) == 0)
-                        }
-                        current_mixture_key = MixtureKey(properties)
-                        prev_indicator = indicator
-
-                    chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
-
-                processed_rows += num_rows
-                pbar.update(num_rows)
+        logger.info("Merging results...")
+        chunker_index = QueryResult._merge_chunker_indices(results)
 
         logger.info("Chunker index creation completed")
         return chunker_index
-
 
     @staticmethod
     def _create_chunker_index_old(df: pl.DataFrame) -> ChunkerIndex:
