@@ -152,7 +152,7 @@ class QueryResult:
 
             local_chunker_index[current_mixture_key][dataset_id][file_id].append(interval)
 
-        return local_chunker_index
+        return local_chunker_index, num_rows
 
     @staticmethod
     def _merge_chunker_indices(indices: list[ChunkerIndex]) -> ChunkerIndex:
@@ -180,9 +180,9 @@ class QueryResult:
             
             with tqdm(total=total_rows, desc="Building chunker index") as pbar:
                 results = []
-                for result in pool.imap_unordered(process_func, batches):
+                for result, handled_rows in pool.imap_unordered(process_func, batches):
                     results.append(result)
-                    pbar.update(len(result))
+                    pbar.update(handled_rows)
 
         logger.info("Merging results...")
         chunker_index = QueryResult._merge_chunker_indices(results)
