@@ -26,6 +26,9 @@ class MixtureKey:
         #  TODO(#112): This is currently not commutative, i.e., a == b does not imply b == a
         if not isinstance(other, MixtureKey):
             return False
+        
+        if other._hash is not None and self._hash is not None and other._hash != self._hash:
+            return False
 
         #  We compare the properties of the two MixtureKey objects
         for k, v in self.properties.items():
@@ -33,7 +36,8 @@ class MixtureKey:
             if k not in other.properties:
                 return False
             #  If the values of the two properties do not have any intersection, we return False
-            if not set(v).intersection(other.properties[k]) and (len(v) > 0 or len(other.properties[k]) > 0):
+            other_v = set(other.properties[k])
+            if not set(v).intersection(other_v) and (len(v) > 0 or len(other_v) > 0):
                 return False
         return True
 
