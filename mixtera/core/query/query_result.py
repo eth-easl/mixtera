@@ -467,7 +467,7 @@ class QueryResult:
             return self._generator.send((self._mixture, chunk_target_index))
 
     # SERIALIZATION
-    def flatten_chunker_index(self, chunker_index: ChunkerIndex) -> pa.Table:
+    def flatten_chunker_index(self) -> pa.Table:
         mixture_keys = []
         dataset_ids = []
         file_ids = []
@@ -478,7 +478,7 @@ class QueryResult:
         # we can proceed as before.
 
         for mixture_key, datasets in tqdm(
-            chunker_index.items(), desc="Flattening chunker index...", max=len(chunker_index)
+            self._chunker_index.items(), desc="Flattening chunker index...", total=len(self._chunker_index)
         ):
             mixture_key_str = str(mixture_key)
             for dataset_id, files in datasets.items():
@@ -501,21 +501,19 @@ class QueryResult:
         )
         return table
 
-    def rebuild_chunker_index_from_table(self, table: pa.Table) -> ChunkerIndex:
-        chunker_index = create_chunker_index()
+    def rebuild_chunker_index_from_table(self, table: pa.Table) -> None:
+        self._chunker_index = create_chunker_index()
         num_rows = table.num_rows
         columns = table.to_pydict()
 
-        for i in tqdm(range(num_rows), max=num_rows, desc="Rebuilding chunker index from cache"):
+        for i in tqdm(range(num_rows), total=num_rows, desc="Rebuilding chunker index from cache"):
             mixture_key_str = columns["mixture_key"][i]
             mixture_key = MixtureKey.from_string(mixture_key_str)
             dataset_id = columns["dataset_id"][i]
             file_id = columns["file_id"][i]
             interval_start = columns["interval_start"][i]
             interval_end = columns["interval_end"][i]
-            chunker_index[mixture_key][dataset_id][file_id].append([interval_start, interval_end])
-
-        return chunker_index
+            self._chunker_index[mixture_key][dataset_id][file_id].append([interval_start, interval_end])
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
