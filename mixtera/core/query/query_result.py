@@ -145,9 +145,10 @@ class QueryResult:
         processed_rows = 0
 
         with tqdm(total=total_rows, desc="Building chunker index") as pbar:
-            for batch in tqdm(table.to_batches(), desc="Building chunker index.", total=table.num_rows):
+            for batch in table.to_batches():
                 batch_dict = batch.to_pydict()
                 num_rows = len(batch_dict['dataset_id'])
+                logger.info(f"This batch contains {num_rows}")
 
                 for i in range(num_rows):
                     dataset_id = batch_dict['dataset_id'][i]
@@ -171,7 +172,6 @@ class QueryResult:
 
                 processed_rows += num_rows
                 pbar.update(num_rows)
-                print(num_rows)
 
         logger.info("Chunker index creation completed")
         return chunker_index
