@@ -72,5 +72,5 @@ class Operator:
             node_string += child.string(level + 1)
         return node_string
 
-    def generate_sql(self) -> tuple[str, List[Any]]:
+    def generate_sql(self, schema: dict) -> tuple[str, List[Any]]:
         raise NotImplementedError("generate_sql method must be implemented in the child class")

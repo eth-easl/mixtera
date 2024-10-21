@@ -4,6 +4,7 @@ from typing import Any, List, Optional
 
 import numpy as np
 from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty
 
 REPRODUCIBILITY_ITERATIONS = 4
 
@@ -56,6 +57,20 @@ def calc_func(executor: Any, batch: dict[str, np.ndarray]) -> List[Any]:
 
 
 class TestMetadataParser(MetadataParser):
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="language", dtype="ENUM", multiple=False, nullable=False, enum_options={"JavaScript", "HTML"}
+            ),
+            MetadataProperty(
+                name="license", dtype="STRING", multiple=False, nullable=False, enum_options={"CC", "MIT"}
+            ),  # Could be ENUM but we are using string to test
+            MetadataProperty(
+                name="doublelanguage", dtype="ENUM", multiple=True, nullable=False, enum_options={"JavaScript", "HTML"}
+            ),
+        ]
+
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         metadata = payload["meta"]
         self.add_metadata(
