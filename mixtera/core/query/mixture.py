@@ -91,8 +91,48 @@ class MixtureKey:
         return self._hash
 
     def __str__(self) -> str:
-        #  We sort the properties to ensure that the string representation is deterministic
-        return ";".join([f'{k}:{":".join([str(x) for x in sorted(v)])}' for k, v in sorted(self.properties.items())])
+        props = []
+        for k in sorted(self.properties.keys()):
+            v = self.properties[k]
+            # Ensure the values are sorted
+            v_sorted = sorted(v, key=lambda x: (type(x).__name__, x))
+            # Convert values to strings with type prefixes
+            v_str = ",".join(f"{type(item).__name__}:{item}" for item in v_sorted)
+            props.append(f"{k}:{v_str}")
+        # Join the properties with semicolons
+        return ";".join(props)
+
+    @classmethod
+    def from_string(cls, s: str) -> "MixtureKey":
+        properties = {}
+        if not s:
+            return cls(properties)
+
+        props = s.split(";")
+        for prop in props:
+            if ":" in prop:
+                k, v_str = prop.split(":", 1)
+                v_list = v_str.split(",")
+                v_converted = []
+                for item in v_list:
+                    if ":" in item:
+                        type_str, value_str = item.split(":", 1)
+                        # Convert the value back to its original type
+                        if type_str == "int":
+                            v_converted.append(int(value_str))
+                        elif type_str == "float":
+                            v_converted.append(float(value_str))
+                        elif type_str == "str":
+                            v_converted.append(value_str)
+                        else:
+                            raise ValueError(f"Unsupported type prefix '{type_str}' in MixtureKey deserialization.")
+                    else:
+                        v_converted.append(item)  # Default to string if no type prefix
+                properties[k] = v_converted
+            else:
+                # Handle keys with empty values
+                properties[prop] = []
+        return cls(properties)
 
     def __repr__(self) -> str:
         return str(self)

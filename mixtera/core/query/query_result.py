@@ -466,25 +466,87 @@ class QueryResult:
             self._num_returns_gen += 1
             return self._generator.send((self._mixture, chunk_target_index))
 
+    # SERIALIZATION
+    def flatten_chunker_index(self, chunker_index: ChunkerIndex) -> pa.Table:
+        mixture_keys = []
+        dataset_ids = []
+        file_ids = []
+        interval_starts = []
+        interval_ends = []
+
+        # Since MixtureKey now serializes all necessary information into a string,
+        # we can proceed as before.
+
+        for mixture_key, datasets in chunker_index.items():
+            mixture_key_str = str(mixture_key)
+            for dataset_id, files in datasets.items():
+                for file_id, intervals in files.items():
+                    for interval in intervals:
+                        mixture_keys.append(mixture_key_str)
+                        dataset_ids.append(dataset_id)
+                        file_ids.append(file_id)
+                        interval_starts.append(interval[0])
+                        interval_ends.append(interval[1])
+
+        table = pa.Table.from_pydict(
+            {
+                "mixture_key": mixture_keys,
+                "dataset_id": dataset_ids,
+                "file_id": file_ids,
+                "interval_start": interval_starts,
+                "interval_end": interval_ends,
+            }
+        )
+        return table
+
+    def rebuild_chunker_index_from_table(self, table: pa.Table) -> ChunkerIndex:
+        chunker_index = create_chunker_index()
+        num_rows = table.num_rows
+        columns = table.to_pydict()
+
+        for i in range(num_rows):
+            mixture_key_str = columns["mixture_key"][i]
+            mixture_key = MixtureKey.from_string(mixture_key_str)
+            dataset_id = columns["dataset_id"][i]
+            file_id = columns["file_id"][i]
+            interval_start = columns["interval_start"][i]
+            interval_end = columns["interval_end"][i]
+            chunker_index[mixture_key][dataset_id][file_id].append([interval_start, interval_end])
+
+        return chunker_index
+
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
 
         # Remove the generator since it is not pickable (and will be recreated on __next__)
         del state["_generator"]
 
-        #  The following attributes are pickled using dill since they are not pickable by
+        # The following attributes are pickled using dill since they are not pickable by
         # the default pickler (used by torch)
         dill_pickled_attributes = {}
-        for attrib in ["_meta", "_chunker_index"]:
+        for attrib in ["_meta"]:
+            logger.debug(f"Serializing {attrib}")
             attrib_pickled = dill.dumps(state[attrib])
             del state[attrib]
             dill_pickled_attributes[attrib] = attrib_pickled
 
-        # Return a dictionary with the pickled attribute and other picklable attributes
-        return {"other": state, "dilled": dill_pickled_attributes}
+        logger.debug("Serializing the chunker index.")
+        chunker_index_table = self.flatten_chunker_index(state["_chunker_index"])
+        chunker_index_sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(chunker_index_sink, chunker_index_table.schema) as writer:
+            writer.write_table(chunker_index_table)
+        chunker_index_bytes = chunker_index_sink.getvalue().to_pybytes()
+        del state["_chunker_index"]
+
+        return {"other": state, "dilled": dill_pickled_attributes, "chunker_index_bytes": chunker_index_bytes}
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__ = state["other"]
         self._generator = None
         for attrib, attrib_pickled in state["dilled"].items():
             setattr(self, attrib, dill.loads(attrib_pickled))
+
+        chunker_index_buffer = pa.BufferReader(state["chunker_index_bytes"])
+        with pa.ipc.open_stream(chunker_index_buffer) as reader:
+            chunker_index_table = reader.read_all()
+        self._chunker_index = self.rebuild_chunker_index_from_table(chunker_index_table)
