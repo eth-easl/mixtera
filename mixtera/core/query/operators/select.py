@@ -69,7 +69,7 @@ class Select(Operator):
                             clauses.append(f"NOT array_has_any({field}, [{placeholders}])")
                             params.extend(value)
                         else:
-                            # TODO(create issue): For comparison operators on arrays, use any_value for now...
+                            # TODO(#11): For comparison operators on arrays, use any_value for now...
                             # Need to think about that together with numeric values
                             clauses.append(f"any_value({field}) {sql_operator} ?")
                             params.append(value[0])  # Simplification for comparison operators
