@@ -170,7 +170,7 @@ class QueryResult:
         num_cores = os.cpu_count() or 1
         num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
         # Use a dummy pool for testing, or a multiprocessing pool otherwise
-        in_test = os.environ.get("PYTEST_CURRENT_TEST") 
+        in_test = os.environ.get("PYTEST_CURRENT_TEST")
         pool_c = DummyPool if in_test else mp.Pool
         core_string = "" if in_test else f" (using {num_workers} cores)"
 
