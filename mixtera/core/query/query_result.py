@@ -161,7 +161,11 @@ class QueryResult:
             for mixture_key, datasets in index.items():
                 for dataset_id, files in datasets.items():
                     for file_id, intervals in files.items():
-                        merged_index[mixture_key][dataset_id][file_id].extend(intervals)
+                        merged_index[mixture_key][dataset_id][file_id] = (
+                            intervals
+                            if file_id not in merged_index[mixture_key][dataset_id]
+                            else merge_sorted_lists(merged_index[mixture_key][dataset_id][file_id], intervals)
+                        )
         return merged_index
 
     @staticmethod
@@ -172,7 +176,7 @@ class QueryResult:
         property_columns = {col for col in table.column_names if col not in exclude_keys}
 
         total_rows = table.num_rows
-        batches = list(table.to_batches())
+        batches = table.to_batches(max_chunksize=1)
         num_processes = mp.cpu_count() - 4
 
         with mp.Pool(num_processes) as pool:
