@@ -356,7 +356,9 @@ class QueryResult:
                                     ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
                                     remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
 
-                                    logger.debug(f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}")
+                                    logger.debug(
+                                        f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
+                                    )
 
                                     # Merge the component chunk into the main chunk
                                     for dataset_id, files in component_chunk.items():
