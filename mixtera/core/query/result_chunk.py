@@ -388,7 +388,6 @@ class ResultChunk:
         total_processes = 0
         pickled_func_dict = dill.dumps(self._parsing_func_dict)
         start_as_daemon = True if mp.current_process().daemon else None
-        logger.info(f"start_as_daemon = {start_as_daemon}")
         for key, process_count in process_counts.items():
             processes[key] = []
 
