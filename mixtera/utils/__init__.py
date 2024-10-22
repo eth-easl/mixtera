@@ -3,6 +3,7 @@ This submodule contains general utility functions
 """
 
 from .utils import (  # noqa: F401
+    DummyPool,
     defaultdict_to_dict,
     flatten,
     hash_dict,
@@ -26,4 +27,5 @@ __all__ = [
     "is_on_github_actions",
     "merge_sorted_lists",
     "numpy_to_native",
+    "DummyPool",
 ]
