@@ -30,7 +30,7 @@ class TestQueryResult(unittest.TestCase):
                 "interval_end": [50, 100, 150, 200, 100],
                 "language": [["french"], ["english", "french"], ["english"], ["french"], ["french"]],
             }
-        )
+        ).to_arrow()
 
     def create_complex_df(self):
         return pl.DataFrame(
@@ -288,7 +288,7 @@ class TestQueryResult(unittest.TestCase):
                     ["english"],
                 ],
             }
-        )
+        ).to_arrow()
 
     def create_flexible_chunking_test_df(self):
         return pl.DataFrame(
@@ -305,7 +305,7 @@ class TestQueryResult(unittest.TestCase):
                     ["english", "german"],
                 ],
             }
-        )
+        ).to_arrow()
 
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_func_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
@@ -579,6 +579,7 @@ class TestQueryResult(unittest.TestCase):
 
         # Check the structure of the chunker index
         chunker_index = defaultdict_to_dict(query_result._chunker_index)
+
         self.assertDictEqual(chunker_index, reference_chunker_index)
 
         # Check the equality of the chunks

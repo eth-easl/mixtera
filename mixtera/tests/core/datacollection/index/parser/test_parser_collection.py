@@ -108,10 +108,25 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
 
         lines = [elem1, elem2, elem3, elem4]
         expected = [
-            {"sample_id": 0, "language": ["C", "C++", "CoffeeScript"], "publication_date": ["asd123"]},
+            {
+                "sample_id": 0,
+                "language": ["C", "C++", "CoffeeScript"],
+                "publication_date": "asd123",
+            },
             {
                 "sample_id": 1,
                 "language": ["C", "C++", "PHP"],
+                "publication_date": None,  # Publication date is missing
+            },
+            {
+                "sample_id": 2,
+                "language": None,
+                "publication_date": None,  # No meta data
+            },
+            {
+                "sample_id": 3,
+                "language": None,
+                "publication_date": None,  # No meta field at all
             },
         ]
 
@@ -133,7 +148,16 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         )
 
         red_pajama_metadata_parser.parse(0, elem_empty_meta)
-        self.assertEqual([], red_pajama_metadata_parser.metadata)
+
+        expected = [
+            {
+                "sample_id": 0,
+                "language": None,
+                "publication_date": None,
+            }
+        ]
+
+        self.assertEqual(expected, red_pajama_metadata_parser.metadata)
 
     def test_parse_no_meta(self):
         dataset_id: int = 0
@@ -147,7 +171,16 @@ class TestRedPajamaMetadataParser(unittest.TestCase):
         )
 
         red_pajama_metadata_parser.parse(0, elem_no_meta)
-        self.assertEqual([], red_pajama_metadata_parser.metadata)
+
+        expected = [
+            {
+                "sample_id": 0,
+                "language": None,
+                "publication_date": None,
+            }
+        ]
+
+        self.assertEqual(expected, red_pajama_metadata_parser.metadata)
 
 
 class TestSlimPajamaMetadataParser(unittest.TestCase):
@@ -160,12 +193,17 @@ class TestSlimPajamaMetadataParser(unittest.TestCase):
             """{
        "text":"...",
        "meta":{
-          "redpajama_set_name": "common_crawl"
+          "redpajama_set_name": "RedPajamaCommonCrawl"
        }
     }"""
         )
 
-        expected = [{"sample_id": 0, "redpajama_set_name": ["common_crawl"]}]
+        expected = [
+            {
+                "sample_id": 0,
+                "redpajama_set_name": "RedPajamaCommonCrawl",
+            }
+        ]
 
         slim_pajama_metadata_parser.parse(0, elem)
         self.assertEqual(expected, slim_pajama_metadata_parser.metadata)
@@ -181,8 +219,8 @@ class TestSlimPajamaMetadataParser(unittest.TestCase):
     }"""
         )
 
-        slim_pajama_metadata_parser.parse(0, elem_no_meta)
-        self.assertEqual([], slim_pajama_metadata_parser.metadata)
+        with self.assertRaises(RuntimeError):
+            slim_pajama_metadata_parser.parse(0, elem_no_meta)
 
 
 class TestMetadataParserFactory(unittest.TestCase):
@@ -203,6 +241,10 @@ class TestMetadataParserFactory(unittest.TestCase):
         metadata_parser_factory = MetadataParserFactory()
 
         class DummyParser(MetadataParser):
+            @classmethod
+            def get_properties(cls) -> list:
+                return []
+
             def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
                 pass
 

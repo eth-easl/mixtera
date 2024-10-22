@@ -5,6 +5,7 @@ from typing import Any, List
 from unittest.mock import MagicMock, patch
 
 import polars as pl
+import pyarrow as pa
 from integrationtests.utils import TestMetadataParser as ExampleMetadataParser
 from mixtera.core.client.mixtera_client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
@@ -68,7 +69,7 @@ class TestQuery(unittest.TestCase):
                 self.arg1 = arg1
                 self.arg2 = arg2
 
-            def generate_sql(self) -> tuple[str, List[Any]]:
+            def generate_sql(self, schema: dict) -> tuple[str, List[Any]]:
                 return ("test_operator", [])
 
         Query.register(TestOperator)
@@ -116,7 +117,7 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1, 1, 1, 1, 1, 1],
                 "interval_start": [2, 5, 6, 0, 4, 7],
                 "interval_end": [4, 6, 7, 2, 5, 8],
-                "language": [["HTML"], ["HTML"], ["HTML"], ["JavaScript"], ["JavaScript"], ["JavaScript"]],
+                "language": ["HTML", "HTML", "HTML", "JavaScript", "JavaScript", "JavaScript"],
                 "doublelanguage": [
                     ["HTML", "HTML"],
                     ["HTML", "HTML"],
@@ -125,7 +126,7 @@ class TestQuery(unittest.TestCase):
                     ["JavaScript", "JavaScript"],
                     ["JavaScript", "JavaScript"],
                 ],
-                "license": [["CC"], ["CC"], ["MIT"], ["CC"], ["CC"], ["CC"]],
+                "license": ["CC", "CC", "MIT", "CC", "CC", "CC"],
             }
         )
 
@@ -134,7 +135,8 @@ class TestQuery(unittest.TestCase):
         self.assertTrue(mock_query_result.called, "QueryResult was not called")
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -149,14 +151,15 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 3,
                 "interval_start": [0, 4, 7],
                 "interval_end": [2, 5, 8],
-                "language": [["JavaScript"]] * 3,
+                "language": ["JavaScript"] * 3,
                 "doublelanguage": [["JavaScript", "JavaScript"]] * 3,
-                "license": [["CC"]] * 3,
+                "license": ["CC"] * 3,
             }
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -171,14 +174,15 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 3,
                 "interval_start": [0, 4, 7],
                 "interval_end": [2, 5, 8],
-                "language": [["JavaScript"]] * 3,
+                "language": ["JavaScript"] * 3,
                 "doublelanguage": [["JavaScript", "JavaScript"]] * 3,
-                "license": [["CC"]] * 3,
+                "license": ["CC"] * 3,
             }
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -194,7 +198,7 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 6,
                 "interval_start": [2, 5, 6, 0, 4, 7],
                 "interval_end": [4, 6, 7, 2, 5, 8],
-                "language": [["HTML"], ["HTML"], ["HTML"], ["JavaScript"], ["JavaScript"], ["JavaScript"]],
+                "language": ["HTML", "HTML", "HTML", "JavaScript", "JavaScript", "JavaScript"],
                 "doublelanguage": [
                     ["HTML", "HTML"],
                     ["HTML", "HTML"],
@@ -203,12 +207,13 @@ class TestQuery(unittest.TestCase):
                     ["JavaScript", "JavaScript"],
                     ["JavaScript", "JavaScript"],
                 ],
-                "license": [["CC"], ["CC"], ["MIT"], ["CC"], ["CC"], ["CC"]],
+                "license": ["CC", "CC", "MIT", "CC", "CC", "CC"],
             }
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -223,14 +228,15 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 3,
                 "interval_start": [2, 5, 6],
                 "interval_end": [4, 6, 7],
-                "language": [["HTML"]] * 3,
+                "language": ["HTML"] * 3,
                 "doublelanguage": [["HTML", "HTML"]] * 3,
-                "license": [["CC"], ["CC"], ["MIT"]],
+                "license": ["CC", "CC", "MIT"],
             }
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 
@@ -245,7 +251,7 @@ class TestQuery(unittest.TestCase):
                 "file_id": [1] * 6,
                 "interval_start": [2, 5, 6, 0, 4, 7],
                 "interval_end": [4, 6, 7, 2, 5, 8],
-                "language": [["HTML"], ["HTML"], ["HTML"], ["JavaScript"], ["JavaScript"], ["JavaScript"]],
+                "language": ["HTML", "HTML", "HTML", "JavaScript", "JavaScript", "JavaScript"],
                 "doublelanguage": [
                     ["HTML", "HTML"],
                     ["HTML", "HTML"],
@@ -254,12 +260,13 @@ class TestQuery(unittest.TestCase):
                     ["JavaScript", "JavaScript"],
                     ["JavaScript", "JavaScript"],
                 ],
-                "license": [["CC"], ["CC"], ["MIT"], ["CC"], ["CC"], ["CC"]],
+                "license": ["CC", "CC", "MIT", "CC", "CC", "CC"],
             }
         )
 
         call_args, _ = mock_query_result.call_args
-        result_df: pl.DataFrame = call_args[1]
+        result_pa: pa.Table = call_args[1]
+        result_df: pl.DataFrame = pl.from_arrow(result_pa)
         result_df.drop_in_place("group_id")
         assert_frame_equal(expected_df, result_df, check_column_order=False, check_dtypes=False)
 

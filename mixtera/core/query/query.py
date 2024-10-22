@@ -77,8 +77,31 @@ class Query:
         """
         logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
         conn = mdc._connection
-        base_query, parameters = self.root.generate_sql()
+
+        # -- BEGIN INNER SELECTION QUERY GENERATION  -- #
+        # Fetch the table schema
+        schema_query = "PRAGMA table_info('samples');"
+        schema_info = conn.execute(schema_query).fetchall()
+        # schema_info is a list of tuples with the following structure:
+        # (cid, name, type, notnull, dflt_value, pk)
+
+        # Build a schema mapping: column_name -> {type: ..., multiple: bool}
+        schema = {}
+        for _, name, col_type, notnull, _, _ in schema_info:
+            # Determine if the column is an array type (ends with '[]')
+            is_array = col_type.strip().endswith("[]")
+            base_type = col_type.strip("[]").strip()
+            schema[name] = {
+                "type": base_type,
+                "multiple": is_array,
+                "nullable": not notnull == 1,  # notnull == 1 means NOT NULL constraint
+            }
+
+        logger.debug(schema)
+        base_query, parameters = self.root.generate_sql(schema)
         logger.debug(f"SQL:\n{base_query}\nParameters:\n{parameters}")
+
+        # -- BEGIN OF OUTER QUERY GENERATION -- #
 
         # First, we need to get the column names from the base query
         columns_query = f"SELECT * FROM ({base_query}) LIMIT 0"
@@ -123,7 +146,8 @@ class Query:
         GROUP BY {partition_clause}, group_id
         ORDER BY {', '.join(group_cols)}, interval_start
         """
-        self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).pl(), mixture)
+
+        self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).fetch_arrow_table(), mixture)
 
         logger.debug(f"Results:\n{self.results}")
         logger.debug("Query executed.")
