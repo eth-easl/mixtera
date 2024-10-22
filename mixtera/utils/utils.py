@@ -1,14 +1,18 @@
 import asyncio
 import hashlib
+import multiprocessing as mp
 import os
+import pickle
 import random
 import time
 from collections import defaultdict
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, List, Optional, Type, Union
 
 import numpy as np
 from loguru import logger
+from tqdm import tqdm
 
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
@@ -238,3 +242,102 @@ class DummyPool:
         # Shuffle to simulate unordered results.
         random.shuffle(results)
         yield from results
+
+
+# Serializaiton
+
+
+def serialize_mixture_key(args):
+    mixture_key, datasets, mixture_key_dir = args
+    # Save the MixtureKey object using pickle
+    with open(mixture_key_dir / "mixture_key.pkl", "wb") as f:
+        pickle.dump(mixture_key, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Serialize datasets
+    for dataset_id, files in datasets.items():
+        dataset_dir = mixture_key_dir / f"dataset_{dataset_id}"
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        for file_id, intervals in files.items():
+            intervals_array = np.array(intervals, dtype=np.int64)
+            file_path = dataset_dir / f"file_{file_id}.npy"
+            np.save(file_path, intervals_array)
+
+
+def deserialize_mixture_key(args):
+    mixture_key_dir = args
+    # Load the MixtureKey object using pickle
+    with open(mixture_key_dir / "mixture_key.pkl", "rb") as f:
+        mixture_key = pickle.load(f)
+
+    datasets = {}
+    for dataset_dir in mixture_key_dir.iterdir():
+        if dataset_dir.is_dir() and dataset_dir.name.startswith("dataset_"):
+            dataset_id = int(dataset_dir.name.split("_")[1])
+            files = {}
+            for file_path in dataset_dir.glob("file_*.npy"):
+                file_id = int(file_path.stem.split("_")[1])
+                intervals_array = np.load(file_path)
+                intervals = intervals_array.tolist()
+                files[file_id] = intervals
+            datasets[dataset_id] = files
+    return mixture_key, datasets
+
+
+def serialize_chunker_index(chunker_index, output_dir):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=False)
+
+    args_list = []
+    for idx, (mixture_key, datasets) in enumerate(chunker_index.items()):
+        mixture_key_dir = output_dir / f"mixture_key_{idx}"
+        mixture_key_dir.mkdir(parents=True, exist_ok=True)
+        args_list.append((mixture_key, datasets, mixture_key_dir))
+
+    num_cores = os.cpu_count() or 1
+    num_workers = max(num_cores - 4, 1)  # TODO(create issue): Make this configurable.
+    num_workers = max(min(num_workers, len(args_list)),1)
+
+    # Use a dummy pool for testing, or a multiprocessing pool otherwise
+    in_test = os.environ.get("PYTEST_CURRENT_TEST")
+    pool_c = DummyPool if in_test else mp.Pool
+    core_string = "" if in_test else f" (using {num_workers} cores)"
+
+    with pool_c(num_workers) as pool:
+        list(
+            tqdm(
+                pool.imap_unordered(serialize_mixture_key, args_list),
+                total=len(args_list),
+                desc=f"Serializing Mixture Keys­{core_string}",
+            )
+        )
+
+
+def deserialize_chunker_index(input_dir):
+    chunker_index = {}
+    input_dir = Path(input_dir)
+    mixture_key_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name.startswith("mixture_key_")]
+    args_list = mixture_key_dirs
+
+    num_cores = os.cpu_count() or 1
+    num_workers = max(num_cores - 4, 1)  # TODO(create issue): Make this configurable.
+    num_workers = max(min(num_workers, len(args_list)),1)
+
+    # Use a dummy pool for testing, or a multiprocessing pool otherwise
+    in_test = os.environ.get("PYTEST_CURRENT_TEST")
+    pool_c = DummyPool if in_test else mp.Pool
+    core_string = "" if in_test else f" (using {num_workers} cores)"
+
+    with pool_c(num_workers) as pool:
+        results = list(
+            tqdm(
+                pool.imap_unordered(deserialize_mixture_key, args_list),
+                total=len(args_list),
+                desc=f"Deserializing Mixture Keys­{core_string}",
+            )
+        )
+
+    # Reconstruct chunker_index
+    for mixture_key, datasets in results:
+        chunker_index[mixture_key] = datasets
+
+    return chunker_index

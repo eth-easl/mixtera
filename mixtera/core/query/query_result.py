@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
 import dill
-import klepto
 import pyarrow as pa
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
@@ -17,7 +16,14 @@ from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetE
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import DummyPool, defaultdict_to_dict, merge_sorted_lists, seed_everything_from_list
+from mixtera.utils.utils import (
+    DummyPool,
+    defaultdict_to_dict,
+    deserialize_chunker_index,
+    merge_sorted_lists,
+    seed_everything_from_list,
+    serialize_chunker_index,
+)
 from pyarrow import compute as pc
 from tqdm import tqdm
 
@@ -469,6 +475,8 @@ class QueryResult:
             self._num_returns_gen += 1
             return self._generator.send((self._mixture, chunk_target_index))
 
+    # SERIALIZATION ##
+
     def to_cache(self, path: Path) -> None:
         """
         Serialize the QueryResult object to a file at the given path.
@@ -504,19 +512,9 @@ class QueryResult:
 
         logger.debug("Stored pickable attributes.")
 
-        archive = klepto.archives.dir_archive(
-            path / "chunker.index",
-            dict=self._chunker_index,
-            cached=False,
-            serialized=True,
-            protocol=pickle.HIGHEST_PROTOCOL,
-        )
+        serialize_chunker_index(self._chunker_index, path / "chunker_index")
 
-        logger.debug("Initialized chunker index archive.")
-
-        archive.dump()
-
-        logger.debug("Dumped chunker index archive.")
+        logger.debug("Stored chunker index.")
 
     @classmethod
     def from_cache(cls, path: Path) -> "QueryResult":
@@ -558,14 +556,8 @@ class QueryResult:
 
         logger.debug("Instantiated non-pickable attributes.")
 
-        # Load the _chunker_index using klepto.dir_archive
-        archive = klepto.archives.dir_archive(
-            path / "chunker.index", cached=False, serialized=True, protocol=pickle.HIGHEST_PROTOCOL
-        )
-        logger.debug("Instantiated archive.")
+        query_result._chunker_index = deserialize_chunker_index(path / "chunker_index")
 
-        query_result._chunker_index = archive.__asdict__().copy()
-
-        logger.debug("Copied archive into object.")
+        logger.debug("Loaded chunker index.")
 
         return query_result
