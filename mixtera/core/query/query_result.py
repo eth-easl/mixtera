@@ -478,6 +478,28 @@ class QueryResult:
             return self._generator.send((self._mixture, chunk_target_index))
 
     # SERIALIZATION ##
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+
+        # Remove the generator since it is not pickable (and will be recreated on __next__)
+        del state["_generator"]
+
+        # The following attributes are pickled using dill since they are not pickable by
+        # the default pickler (used by torch)
+        dill_pickled_attributes = {}
+        for attrib in ["_meta", "_chunker_index"]:
+            attrib_pickled = dill.dumps(state[attrib])
+            del state[attrib]
+            dill_pickled_attributes[attrib] = attrib_pickled
+
+        # Return a dictionary with the pickled attribute and other picklable attributes
+        return {"other": state, "dilled": dill_pickled_attributes}
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__ = state["other"]
+        self._generator = None
+        for attrib, attrib_pickled in state["dilled"].items():
+            setattr(self, attrib, dill.loads(attrib_pickled))
 
     def to_cache(self, path: Path) -> None:
         """
