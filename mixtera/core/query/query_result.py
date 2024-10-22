@@ -241,8 +241,8 @@ class QueryResult:
         # dataset_id -> file_id -> list[intervals]
         current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
 
-        for dataset_id, document_entries in target_ranges.items():
-            for file_id, ranges in document_entries.items():
+        for dataset_id, document_entries in sorted(target_ranges.items(), key=lambda x: x[0]):
+            for file_id, ranges in sorted(document_entries.items(), key=lambda x: x[0]):
                 for base_range in ranges:
                     current_range = (base_range[0], base_range[1])
                     continue_processing = current_range[1] > current_range[0]
@@ -356,7 +356,7 @@ class QueryResult:
                                     ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
                                     remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
 
-                                    logger.debug(f"Received chunk size: {chunk_size} for {mixture_key}")
+                                    logger.debug(f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}")
 
                                     # Merge the component chunk into the main chunk
                                     for dataset_id, files in component_chunk.items():
@@ -511,6 +511,7 @@ class QueryResult:
             pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.debug("Stored pickable attributes.")
+        logger.debug(defaultdict_to_dict(self._chunker_index))
 
         serialize_chunker_index(self._chunker_index, path / "chunker_index")
 
@@ -557,6 +558,8 @@ class QueryResult:
         logger.debug("Instantiated non-pickable attributes.")
 
         query_result._chunker_index = deserialize_chunker_index(path / "chunker_index")
+
+        logger.debug(query_result._chunker_index)
 
         logger.debug("Loaded chunker index.")
 

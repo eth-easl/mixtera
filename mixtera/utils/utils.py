@@ -265,6 +265,7 @@ def serialize_mixture_key(args):
 
 def deserialize_mixture_key(args):
     mixture_key_dir = args
+
     # Load the MixtureKey object using pickle
     with open(mixture_key_dir / "mixture_key.pkl", "rb") as f:
         mixture_key = pickle.load(f)
@@ -287,8 +288,14 @@ def serialize_chunker_index(chunker_index, output_dir):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=False)
 
+    mixture_keys = list(chunker_index.keys())  # Preserve the original order of keys for reproducibility!
+    with open(output_dir / "mixture_keys_order.pkl", "wb") as f:
+        pickle.dump(mixture_keys, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
     args_list = []
-    for idx, (mixture_key, datasets) in enumerate(chunker_index.items()):
+    for idx, mixture_key in enumerate(mixture_keys):
+        datasets = chunker_index[mixture_key]
         mixture_key_dir = output_dir / f"mixture_key_{idx}"
         mixture_key_dir.mkdir(parents=True, exist_ok=True)
         args_list.append((mixture_key, datasets, mixture_key_dir))
@@ -315,7 +322,14 @@ def serialize_chunker_index(chunker_index, output_dir):
 def deserialize_chunker_index(input_dir):
     chunker_index = {}
     input_dir = Path(input_dir)
-    mixture_key_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name.startswith("mixture_key_")]
+    with open(input_dir / "mixture_keys_order.pkl", "rb") as f:
+        mixture_keys_order = pickle.load(f)
+    
+    mixture_key_dirs = []
+    for idx, mixture_key in enumerate(mixture_keys_order):
+        mixture_key_dir = input_dir / f"mixture_key_{idx}"
+        mixture_key_dirs.append(mixture_key_dir)
+
     args_list = mixture_key_dirs
 
     num_cores = os.cpu_count() or 1
@@ -330,7 +344,7 @@ def deserialize_chunker_index(input_dir):
     with pool_c(num_workers) as pool:
         results = list(
             tqdm(
-                pool.imap_unordered(deserialize_mixture_key, args_list),
+                pool.imap(deserialize_mixture_key, args_list), # Use imap to preserve order
                 total=len(args_list),
                 desc=f"Deserializing Mixture Keys­{core_string}",
             )
