@@ -12,6 +12,7 @@ from typing import Any, Callable, Iterable, Iterator, List, Optional, Type, Unio
 
 import numpy as np
 from loguru import logger
+from mixtera.core.datacollection.index import ChunkerIndex
 from tqdm import tqdm
 
 
@@ -244,8 +245,8 @@ class DummyPool:
         yield from results
 
 
-# Serializaiton
-def serialize_file(args):
+# Serialization support
+def serialize_file(args: tuple[Path, int, int, list[list[int]]]) -> None:
     mixture_key_dir, dataset_id, file_id, intervals = args
     dataset_dir = mixture_key_dir / f"dataset_{dataset_id}"
     dataset_dir.mkdir(parents=True, exist_ok=True)
@@ -254,7 +255,10 @@ def serialize_file(args):
     np.save(file_path, intervals_array)
 
 
-def serialize_chunker_index(chunker_index, output_dir):
+def serialize_chunker_index(
+    chunker_index: ChunkerIndex,
+    output_dir: str | Path,
+) -> None:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=False)
 
@@ -296,15 +300,14 @@ def serialize_chunker_index(chunker_index, output_dir):
         )
 
 
-def deserialize_file(args):
+def deserialize_file(args: tuple[Path, int, int, int]) -> tuple[int, int, int, List[List[int]]]:
     file_path, mixture_key_idx, dataset_id, file_id = args
     intervals_array = np.load(file_path)
     intervals = intervals_array.tolist()
     return (mixture_key_idx, dataset_id, file_id, intervals)
 
 
-def deserialize_chunker_index(input_dir):
-    chunker_index = {}
+def deserialize_chunker_index(input_dir: str | Path) -> ChunkerIndex:
     input_dir = Path(input_dir)
     with open(input_dir / "mixture_keys_order.pkl", "rb") as f:
         mixture_keys_order = pickle.load(f)
@@ -334,7 +337,7 @@ def deserialize_chunker_index(input_dir):
 
     # Now process all files in parallel
     num_cores = os.cpu_count() or 1
-    num_workers = max(num_cores - 4, 1)  # TODO: Make this configurable.
+    num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
     num_workers = max(min(num_workers, len(file_args_list)), 1)
 
     # Use a dummy pool for testing, or a multiprocessing pool otherwise
@@ -354,9 +357,9 @@ def deserialize_chunker_index(input_dir):
         )
 
     # Reconstruct the chunker_index
-    chunker_index = {}
+    chunker_index: ChunkerIndex = {}
     # Initialize per-mixture key dictionaries
-    chunker_index_per_mixture_key = [{} for _ in range(len(mixture_keys_list))]
+    chunker_index_per_mixture_key: list[dict] = [{} for _ in range(len(mixture_keys_list))]
 
     for mixture_key_idx, dataset_id, file_id, intervals in tqdm(results, desc="Merging loaded results"):
         mixture_key = mixture_keys_list[mixture_key_idx]
