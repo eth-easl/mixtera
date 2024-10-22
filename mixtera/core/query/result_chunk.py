@@ -39,7 +39,7 @@ def allow_daemon_spawn() -> None:
     def patched_start(self, *args, **kwargs) -> None:
         if self.daemon:  # if the child is a daemon
             # Goal: Remove assertion that our parent is not a daemon
-
+            logger.info("We are a daemon start - removing assertion that our parent is a daemon.")
             # Load source code of original start method
             source = textwrap.dedent(inspect.getsource(original_start))
 
@@ -49,6 +49,7 @@ def allow_daemon_spawn() -> None:
             # Remove assertion from AST
             for i, node in enumerate(tree.body[0].body):
                 if isinstance(node, ast.Assert) and "daemon" in ast.unparse(node):
+                    logger.info("Removing deamonic asesrtion!")
                     tree.body[0].body[i] = ast.Pass()
                     break
 
@@ -68,8 +69,9 @@ def allow_daemon_spawn() -> None:
             namespace["modified_start"](self, *args, **kwargs)
         else:
             # For non-daemon processes, use the original start method
+            logger.info("Non daemonic process, using original start method.")
             original_start(self, *args, **kwargs)
-
+    logger.info("Doing the monkey patch.")
     # Do the monkey-patch
     mp.Process.start = patched_start
 
@@ -386,6 +388,7 @@ class ResultChunk:
         total_processes = 0
         pickled_func_dict = dill.dumps(self._parsing_func_dict)
         start_as_daemon = True if mp.current_process().daemon else None
+        logger.info(f"start_as_daemon = {start_as_daemon}")
         for key, process_count in process_counts.items():
             processes[key] = []
 
