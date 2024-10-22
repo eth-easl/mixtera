@@ -39,7 +39,7 @@ def allow_daemon_spawn() -> None:
     def patched_start(self, *args, **kwargs) -> None:
         if self.daemon:  # if the child is a daemon
             # Goal: Remove assertion that our parent is not a daemon
-            logger.info("We are a daemon start - removing assertion that our parent is a daemon.")
+            logger.debug("We are a daemon process - removing assertion that our parent is a daemon.")
             # Load source code of original start method
             source = textwrap.dedent(inspect.getsource(original_start))
 
@@ -49,7 +49,7 @@ def allow_daemon_spawn() -> None:
             # Remove assertion from AST
             for i, node in enumerate(tree.body[0].body):
                 if isinstance(node, ast.Assert) and "daemon" in ast.unparse(node):
-                    logger.info("Removing deamonic asesrtion!")
+                    logger.debug("Removing deamonic asesrtion!")
                     tree.body[0].body[i] = ast.Pass()
                     break
 
@@ -69,11 +69,15 @@ def allow_daemon_spawn() -> None:
             namespace["modified_start"](self, *args, **kwargs)
         else:
             # For non-daemon processes, use the original start method
-            logger.info("Non daemonic process, using original start method.")
+            logger.debug("Non daemonic process, using original start method.")
             original_start(self, *args, **kwargs)
-    logger.info("Doing the monkey patch.")
-    # Do the monkey-patch
-    mp.Process.start = patched_start
+
+    if mp.Process.start == original_start:
+        logger.debug("Monkey-patching mp.Process.start.")
+        # Do the monkey-patch
+        mp.Process.start = patched_start
+    else:
+        logger.debug("Already monkey-patched, skipping.")
 
 
 class ResultChunk:
@@ -111,6 +115,8 @@ class ResultChunk:
             client: The MixteraClient instance
             args: The ResultStreamingArgs instance
         """
+        allow_daemon_spawn()
+
         self._degree_of_parallelism = args.chunk_reading_degree_of_parallelism
         self._per_window_mixture = args.chunk_reading_per_window_mixture
         self._window_size = args.chunk_reading_window_size
