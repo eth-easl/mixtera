@@ -513,7 +513,6 @@ class QueryResult:
             pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.debug("Stored pickable attributes.")
-        logger.debug(defaultdict_to_dict(self._chunker_index))
 
         serialize_chunker_index(self._chunker_index, path / "chunker_index")
 
@@ -560,8 +559,6 @@ class QueryResult:
         logger.debug("Instantiated non-pickable attributes.")
 
         query_result._chunker_index = deserialize_chunker_index(path / "chunker_index")
-
-        logger.debug(query_result._chunker_index)
 
         logger.debug("Loaded chunker index.")
 
