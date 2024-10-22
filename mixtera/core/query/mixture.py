@@ -269,7 +269,8 @@ class HierarchicalStaticMixture(Mixture):
         Args:
             chunk_size: the size of a chunk in number of instances
             mixture: HierarchicalMixture that enables submixture definitions.
-            ex: HierarchicalMixture(property_name="topic", components=[Component(value="law", weight=0.5), Component(value="medicine", weight=0.5)])
+            ex: HierarchicalMixture(property_name="topic", components=[Component(value="law", weight=0.5),
+            Component(value="medicine", weight=0.5)])
         """
         super().__init__(chunk_size)
         self._mixture = self.parse_user_mixture(chunk_size, mixture)
