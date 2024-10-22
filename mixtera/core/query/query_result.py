@@ -1,8 +1,10 @@
 import multiprocessing as mp
 import os
+import pickle
 import random
 from collections import defaultdict
 from functools import partial
+from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
 import dill
@@ -14,7 +16,14 @@ from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetE
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
-from mixtera.utils.utils import DummyPool, defaultdict_to_dict, merge_sorted_lists, seed_everything_from_list
+from mixtera.utils.utils import (
+    DummyPool,
+    defaultdict_to_dict,
+    deserialize_chunker_index,
+    merge_sorted_lists,
+    seed_everything_from_list,
+    serialize_chunker_index,
+)
 from pyarrow import compute as pc
 from tqdm import tqdm
 
@@ -232,8 +241,8 @@ class QueryResult:
         # dataset_id -> file_id -> list[intervals]
         current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
 
-        for dataset_id, document_entries in target_ranges.items():
-            for file_id, ranges in document_entries.items():
+        for dataset_id, document_entries in sorted(target_ranges.items(), key=lambda x: x[0]):
+            for file_id, ranges in sorted(document_entries.items(), key=lambda x: x[0]):
                 for base_range in ranges:
                     current_range = (base_range[0], base_range[1])
                     continue_processing = current_range[1] > current_range[0]
@@ -347,7 +356,9 @@ class QueryResult:
                                     ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
                                     remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
 
-                                    logger.debug(f"Received chunk size: {chunk_size} for {mixture_key}")
+                                    logger.debug(
+                                        f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
+                                    )
 
                                     # Merge the component chunk into the main chunk
                                     for dataset_id, files in component_chunk.items():
@@ -466,13 +477,14 @@ class QueryResult:
             self._num_returns_gen += 1
             return self._generator.send((self._mixture, chunk_target_index))
 
+    # SERIALIZATION ##
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
 
         # Remove the generator since it is not pickable (and will be recreated on __next__)
         del state["_generator"]
 
-        #  The following attributes are pickled using dill since they are not pickable by
+        # The following attributes are pickled using dill since they are not pickable by
         # the default pickler (used by torch)
         dill_pickled_attributes = {}
         for attrib in ["_meta", "_chunker_index"]:
@@ -488,3 +500,88 @@ class QueryResult:
         self._generator = None
         for attrib, attrib_pickled in state["dilled"].items():
             setattr(self, attrib, dill.loads(attrib_pickled))
+
+    def to_cache(self, path: Path) -> None:
+        """
+        Serialize the QueryResult object to a file at the given path.
+        The _chunker_index is stored using klepto.dir_archive for efficient
+        serialization.
+        """
+        if not os.path.isdir(path):
+            raise RuntimeError("QueryResult::to_file is expected to be called with a directory path.")
+
+        logger.info("Starting to cache QueryResult.")
+        # Handle attributes that should not be stored via pickle/dill
+        state = self.__dict__.copy()
+        for attrib in ["_lock", "_index", "_generator", "_chunker_index"]:
+            del state[attrib]
+
+        logger.debug("Removed unpickable attributed.")
+
+        # Handle attributed that should be dilled (pickle is a bit faster, but pickling lambas needs dill)
+        dilled = {}
+        for attrib in ["_meta"]:
+            dilled[attrib] = state[attrib]
+            del state[attrib]
+
+        logger.debug("Removed dillable attributes.")
+
+        with open(path / "dilled.pkl", "wb") as f:
+            dill.dump(dilled, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        logger.debug("Stored dillable attributes.")
+
+        with open(path / "pickled.pkl", "wb") as f:
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        logger.debug("Stored pickable attributes.")
+
+        serialize_chunker_index(self._chunker_index, path / "chunker_index")
+
+        logger.debug("Stored chunker index.")
+
+    @classmethod
+    def from_cache(cls, path: Path) -> "QueryResult":
+        """
+        Deserialize the QueryResult object from a file at the given path.
+        The _chunker_index is loaded using klepto.dir_archive.
+        """
+        if not os.path.isdir(path):
+            raise RuntimeError("QueryResult::from_cache expects a directory path.")
+        logger.info("Loading QueryResult from cache.")
+        # Load the pickled state
+        with open(path / "pickled.pkl", "rb") as f:
+            state = pickle.load(f)
+
+        logger.debug("Loaded pickable attributes.")
+
+        # Load the dilled attributes
+        with open(path / "dilled.pkl", "rb") as f:
+            dilled = dill.load(f)
+
+        logger.debug("Loaded dillable attributes.")
+
+        # Create a new instance without calling __init__
+        query_result = cls.__new__(cls)
+
+        # Set the state
+        query_result.__dict__.update(state)
+
+        # Set the dilled attributes
+        for attrib, value in dilled.items():
+            setattr(query_result, attrib, value)
+
+        logger.debug("Instantiated QueryResult from pickle/dill.")
+
+        # Initialize non-picklable attributes
+        query_result._lock = mp.Lock()
+        query_result._index = mp.Value("i", 0)
+        query_result._generator = None
+
+        logger.debug("Instantiated non-pickable attributes.")
+
+        query_result._chunker_index = deserialize_chunker_index(path / "chunker_index")
+
+        logger.debug("Loaded chunker index.")
+
+        return query_result

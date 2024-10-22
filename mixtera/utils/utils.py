@@ -1,14 +1,19 @@
 import asyncio
 import hashlib
+import multiprocessing as mp
 import os
+import pickle
 import random
 import time
 from collections import defaultdict
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, List, Optional, Type, Union
 
 import numpy as np
 from loguru import logger
+from mixtera.core.datacollection.index import ChunkerIndex
+from tqdm import tqdm
 
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
@@ -238,3 +243,136 @@ class DummyPool:
         # Shuffle to simulate unordered results.
         random.shuffle(results)
         yield from results
+
+
+# Serialization support
+def serialize_file(args: tuple[Path, int, int, list[list[int]]]) -> None:
+    mixture_key_dir, dataset_id, file_id, intervals = args
+    dataset_dir = mixture_key_dir / f"dataset_{dataset_id}"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    intervals_array = np.array(intervals, dtype=np.int64)
+    file_path = dataset_dir / f"file_{file_id}.npy"
+    np.save(file_path, intervals_array)
+
+
+def serialize_chunker_index(
+    chunker_index: ChunkerIndex,
+    output_dir: str | Path,
+) -> None:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=False)
+
+    mixture_keys = list(chunker_index.keys())  # Preserve the original order of keys for reproducibility!
+    with open(output_dir / "mixture_keys_order.pkl", "wb") as f:
+        pickle.dump(mixture_keys, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Save MixtureKey objects and prepare file-level tasks
+    file_args_list = []
+    for idx, mixture_key in enumerate(tqdm(mixture_keys, desc="Preparing tasks per mixture key.")):
+        mixture_key_dir = output_dir / f"mixture_key_{idx}"
+        mixture_key_dir.mkdir(parents=True, exist_ok=True)
+        # Save the MixtureKey object
+        with open(mixture_key_dir / "mixture_key.pkl", "wb") as f:
+            pickle.dump(mixture_key, f, protocol=pickle.HIGHEST_PROTOCOL)
+        datasets = chunker_index[mixture_key]
+        # Prepare tasks for each file
+        for dataset_id, files in datasets.items():
+            for file_id, intervals in files.items():
+                args = (mixture_key_dir, dataset_id, file_id, intervals)
+                file_args_list.append(args)
+
+    num_cores = os.cpu_count() or 1
+    num_workers = max(num_cores - 4, 1)  # TODO(create issue): Make this configurable.
+    num_workers = max(min(num_workers, len(file_args_list)), 1)
+
+    # Use a dummy pool for testing, or a multiprocessing pool otherwise
+    in_test = os.environ.get("PYTEST_CURRENT_TEST")
+    pool_c = DummyPool if in_test else mp.Pool
+    core_string = "" if in_test else f" (using {num_workers} cores)"
+
+    with pool_c(num_workers) as pool:
+        list(
+            tqdm(
+                pool.imap_unordered(serialize_file, file_args_list),
+                total=len(file_args_list),
+                desc=f"Serializing Files{core_string}",
+            )
+        )
+
+
+def deserialize_file(args: tuple[Path, int, int, int]) -> tuple[int, int, int, List[List[int]]]:
+    file_path, mixture_key_idx, dataset_id, file_id = args
+    intervals_array = np.load(file_path)
+    intervals = intervals_array.tolist()
+    return (mixture_key_idx, dataset_id, file_id, intervals)
+
+
+def deserialize_chunker_index(input_dir: str | Path) -> ChunkerIndex:
+    input_dir = Path(input_dir)
+    with open(input_dir / "mixture_keys_order.pkl", "rb") as f:
+        mixture_keys_order = pickle.load(f)
+
+    # Prepare mixture_keys_list and mapping from mixture_key_idx to mixture_key
+    mixture_keys_list = []
+    mixture_key_dirs = []
+    for idx in range(len(mixture_keys_order)):
+        mixture_key_dir = input_dir / f"mixture_key_{idx}"
+        mixture_key_dirs.append(mixture_key_dir)
+        with open(mixture_key_dir / "mixture_key.pkl", "rb") as f:
+            mixture_key_loaded = pickle.load(f)
+        mixture_keys_list.append(mixture_key_loaded)
+
+    # Prepare file_args_list for all files across all mixture keys
+    file_args_list = []
+
+    for mixture_key_idx, mixture_key_dir in enumerate(mixture_key_dirs):
+        mixture_key = mixture_keys_list[mixture_key_idx]
+        dataset_dirs = [d for d in mixture_key_dir.iterdir() if d.is_dir() and d.name.startswith("dataset_")]
+        for dataset_dir in dataset_dirs:
+            dataset_id = int(dataset_dir.name.split("_")[1])
+            for file_path in dataset_dir.glob("file_*.npy"):
+                file_id = int(file_path.stem.split("_")[1])
+                args = (file_path, mixture_key_idx, dataset_id, file_id)
+                file_args_list.append(args)
+
+    # Now process all files in parallel
+    num_cores = os.cpu_count() or 1
+    num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
+    num_workers = max(min(num_workers, len(file_args_list)), 1)
+
+    # Use a dummy pool for testing, or a multiprocessing pool otherwise
+    in_test = os.environ.get("PYTEST_CURRENT_TEST")
+    pool_c = DummyPool if in_test else mp.Pool
+    core_string = "" if in_test else f" (using {num_workers} cores)"
+
+    logger.info(f"Deserializing all files in parallel{core_string}.")
+
+    with pool_c(num_workers) as pool:
+        results = list(
+            tqdm(
+                pool.imap_unordered(deserialize_file, file_args_list),
+                total=len(file_args_list),
+                desc=f"Deserializing Files{core_string}",
+            )
+        )
+
+    # Reconstruct the chunker_index
+    chunker_index: ChunkerIndex = {}
+    # Initialize per-mixture key dictionaries
+    chunker_index_per_mixture_key: list[dict] = [{} for _ in range(len(mixture_keys_list))]
+
+    for mixture_key_idx, dataset_id, file_id, intervals in tqdm(results, desc="Merging loaded results"):
+        mixture_key = mixture_keys_list[mixture_key_idx]
+        mixture_key_chunker = chunker_index_per_mixture_key[mixture_key_idx]
+        if mixture_key not in mixture_key_chunker:
+            mixture_key_chunker[mixture_key] = {}
+        datasets = mixture_key_chunker[mixture_key]
+        if dataset_id not in datasets:
+            datasets[dataset_id] = {}
+        datasets[dataset_id][file_id] = intervals
+
+    # Combine chunker_index_per_mixture_key into chunker_index
+    for mixture_key_dict in chunker_index_per_mixture_key:
+        chunker_index.update(mixture_key_dict)
+
+    return chunker_index
