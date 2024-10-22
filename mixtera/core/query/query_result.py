@@ -1,11 +1,14 @@
 import multiprocessing as mp
 import os
+import pickle
 import random
 from collections import defaultdict
 from functools import partial
+from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
 import dill
+import klepto
 import pyarrow as pa
 from loguru import logger
 from mixtera.core.datacollection import MixteraDataCollection
@@ -515,41 +518,103 @@ class QueryResult:
             interval_end = columns["interval_end"][i]
             self._chunker_index[mixture_key][dataset_id][file_id].append([interval_start, interval_end])
 
-    def __getstate__(self) -> dict:
+    def to_cache(self, path: Path) -> None:
+        """
+        Serialize the QueryResult object to a file at the given path.
+        The _chunker_index is stored using klepto.dir_archive for efficient
+        serialization.
+        """
+        if not os.path.isdir(path):
+            raise RuntimeError("QueryResult::to_file is expected to be called with a directory path.")
+
+        logger.info("Starting to cache QueryResult.")
+        # Handle attributes that should not be stored via pickle/dill
         state = self.__dict__.copy()
-
-        # Remove the generator since it is not pickable (and will be recreated on __next__)
-        del state["_generator"]
-
-        # The following attributes are pickled using dill since they are not pickable by
-        # the default pickler (used by torch)
-        dill_pickled_attributes = {}
-        for attrib in ["_meta"]:
-            logger.debug(f"Serializing {attrib}")
-            attrib_pickled = dill.dumps(state[attrib])
+        for attrib in ["_lock", "_index", "_generator", "_chunker_index"]:
             del state[attrib]
-            dill_pickled_attributes[attrib] = attrib_pickled
 
-        logger.debug("Preparing the chunker index for serialization.")
-        chunker_index_table = self.flatten_chunker_index(state["_chunker_index"])
-        logger.debug("Writing the flattened index to bytes.")
-        chunker_index_sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(chunker_index_sink, chunker_index_table.schema) as writer:
-            writer.write_table(chunker_index_table)
-        chunker_index_bytes = chunker_index_sink.getvalue().to_pybytes()
-        logger.debug("Serialized chunker index.")
+        logger.debug("Removed unpickable attributed.")
 
-        del state["_chunker_index"]
+        # Handle attributed that should be dilled (pickle is a bit faster, but pickling lambas needs dill)
+        dilled = {}
+        for attrib in ["_meta"]:
+            dilled[attrib] = state[attrib]
+            del state[attrib]
 
-        return {"other": state, "dilled": dill_pickled_attributes, "chunker_index_bytes": chunker_index_bytes}
+        logger.debug("Removed dillable attributes.")
 
-    def __setstate__(self, state: dict) -> None:
-        self.__dict__ = state["other"]
-        self._generator = None
-        for attrib, attrib_pickled in state["dilled"].items():
-            setattr(self, attrib, dill.loads(attrib_pickled))
+        with open(path / "dilled.pkl", "wb") as f:
+            dill.dump(dilled, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-        chunker_index_buffer = pa.BufferReader(state["chunker_index_bytes"])
-        with pa.ipc.open_stream(chunker_index_buffer) as reader:
-            chunker_index_table = reader.read_all()
-        self._chunker_index = self.rebuild_chunker_index_from_table(chunker_index_table)
+        logger.debug("Stored dillable attributes.")
+
+        with open(path / "pickled.pkl", "wb") as f:
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        logger.debug("Stored pickable attributes.")
+
+        archive = klepto.archives.dir_archive(
+            path / "chunker.index",
+            dict=self._chunker_index,
+            cached=False,
+            serialized=True,
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+
+        logger.debug("Initialized chunker index archive.")
+
+        archive.dump()
+
+        logger.debug("Dumped chunker index archive.")
+
+    @classmethod
+    def from_cache(cls, path: Path) -> "QueryResult":
+        """
+        Deserialize the QueryResult object from a file at the given path.
+        The _chunker_index is loaded using klepto.dir_archive.
+        """
+        if not os.path.isdir(path):
+            raise RuntimeError("QueryResult::from_cache expects a directory path.")
+        logger.info("Loading QueryResult from cache.")
+        # Load the pickled state
+        with open(path / "pickled.pkl", "rb") as f:
+            state = pickle.load(f)
+
+        logger.debug("Loaded pickable attributes.")
+
+        # Load the dilled attributes
+        with open(path / "dilled.pkl", "rb") as f:
+            dilled = dill.load(f)
+
+        logger.debug("Loaded dillable attributes.")
+
+        # Create a new instance without calling __init__
+        query_result = cls.__new__(cls)
+
+        # Set the state
+        query_result.__dict__.update(state)
+
+        # Set the dilled attributes
+        for attrib, value in dilled.items():
+            setattr(query_result, attrib, value)
+
+        logger.debug("Instantiated QueryResult from pickle/dill.")
+
+        # Initialize non-picklable attributes
+        query_result._lock = mp.Lock()
+        query_result._index = mp.Value("i", 0)
+        query_result._generator = None
+
+        logger.debug("Instantiated non-pickable attributes.")
+
+        # Load the _chunker_index using klepto.dir_archive
+        archive = klepto.archives.dir_archive(
+            path / "chunker.index", cached=False, serialized=True, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        logger.debug("Instantiated archive.")
+
+        query_result._chunker_index = archive.__asdict__().copy()
+
+        logger.debug("Copied archive into object.")
+
+        return query_result

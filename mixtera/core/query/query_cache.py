@@ -1,10 +1,9 @@
 import hashlib
-import multiprocessing as mp
 import os
+import pickle
 import shutil
 from pathlib import Path
 
-import dill
 from loguru import logger
 from mixtera.core.datacollection.mixtera_data_collection import MixteraDataCollection
 from mixtera.core.query.query import Query
@@ -31,24 +30,28 @@ class QueryCache:
         hash_dir = self.directory / query_hash
         hash_dir.mkdir(exist_ok=True)
 
-        existing_files = sorted(hash_dir.glob("*.pkl"))
-        if existing_files:
-            last_file = existing_files[-1]
-            file_number = int(last_file.stem) + 1
+        existing_dirs = sorted([int(d.name) for d in hash_dir.iterdir() if d.is_dir() and d.name.isdigit()])
+        if existing_dirs:
+            next_number = existing_dirs[-1] + 1
         else:
-            file_number = 0
+            next_number = 0
 
-        cache_path = hash_dir / f"{file_number}.pkl"
+        query_dir = hash_dir / str(next_number)
+        query_dir.mkdir()
+
+        # Prepare the cache metadata
         db_ver = self._mdc.get_db_version()
-        cache_obj = {"db_version": db_ver, "query": query}
-        logger.debug(f"Caching query with hash {query_hash} and db version {db_ver}")
-        _lock, _index = query.results._lock, query.results._index
-        del query.results._lock
-        del query.results._index
-        with open(cache_path, "wb") as file:
-            dill.dump(cache_obj, file)
-        query.results._lock = _lock
-        query.results._index = _index
+        cache_obj = {"db_version": db_ver, "query_str": str(query)}
+
+        # Save the metadata
+        meta_path = query_dir / "meta.pkl"
+        with meta_path.open("wb") as f:
+            pickle.dump(cache_obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        # Call the to_cache method on query.results to serialize it
+        query.results.to_cache(query_dir)
+
+        logger.debug(f"QueryResult saved to {query_dir}")
 
     def get_queryresults_if_cached(self, query: Query) -> None | QueryResult:
         if not self.enabled:
@@ -69,25 +72,31 @@ class QueryCache:
             shutil.rmtree(hash_dir)
             return None
 
-        for cache_file in hash_dir.glob("*.pkl"):
-            with open(cache_file, "rb") as file:
-                logger.debug(f"Checking file {cache_file} in cache.")
-                cached_query = dill.load(file)
-                if str(cached_query["query"]) == str(query):
-                    logger.debug(f"Found matching query for version {cached_query['db_version']}.")
-                    # Check if cache is still valid
-                    if cached_query["db_version"] != self._mdc.get_db_version():
-                        logger.debug("Database has been updated, removing file.")
-                        # Cache is outdated
-                        os.remove(cache_file)
+        for query_dir in hash_dir.iterdir():
+            if query_dir.is_dir():
+                meta_path = query_dir / "meta.pkl"
+
+                if not meta_path.exists():
+                    logger.warning(f"Meta file missing, invalid query dir? ({query_dir})")
+                    continue
+
+                with meta_path.open("rb") as f:
+                    cache_obj = pickle.load(f)
+                    cached_query_str = cache_obj.get("query_str")
+                    db_ver = cache_obj.get("db_version")
+
+                if cached_query_str == str(query):
+                    if db_ver != self._mdc.get_db_version():
+                        logger.debug(f"Database has been updated, removing cached query at {query_dir}.")
+                        shutil.rmtree(query_dir)
                         if not os.listdir(hash_dir):
-                            logger.debug(f"Directory for {query_hash} is empty after removing the file.")
+                            logger.debug(f"Directory for {query_hash} is empty after removing the cache.")
                             shutil.rmtree(hash_dir)
                         return None
                     logger.debug("Returning results from cache!")
-                    cached_query["query"].results._lock = mp.Lock()
-                    cached_query["query"].results._index = mp.Value("i", 0)
-                    return cached_query["query"].results
-                logger.debug(f"'{cached_query['query']}' does not match '{str(query)}'.")
+                    # Load the QueryResult from the cache
+                    query_result = QueryResult.from_cache(query_dir)
+                    return query_result
 
+                logger.debug(f"Cached query does not match: '{cached_query_str}' != '{str(query)}'.")
         return None
