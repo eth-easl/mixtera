@@ -22,6 +22,7 @@ from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
+from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty
 from mixtera.core.query import ArbitraryMixture, Mixture, Query
 from mixtera.torch import MixteraTorchDataset
 
@@ -43,14 +44,29 @@ def write_jsonl(path: Path) -> None:
 
 
 class TestMetadataParser(MetadataParser):
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="language", dtype="ENUM", multiple=False, nullable=False, enum_options={"JavaScript", "HTML"}
+            ),
+            MetadataProperty(
+                name="license", dtype="STRING", multiple=False, nullable=False, enum_options={"CC", "MIT"}
+            ),  # Could be ENUM but we are using string to test
+            MetadataProperty(
+                name="doublelanguage", dtype="ENUM", multiple=True, nullable=False, enum_options={"JavaScript", "HTML"}
+            ),
+        ]
+
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         metadata = payload["meta"]
         self.add_metadata(
             sample_id=line_number,
             language=metadata["language"],
             license=metadata["license"],
-            doublelanguage=[metadata["language"],metadata["language"]]
+            doublelanguage=[metadata["language"], metadata["language"]],
         )
+
 
 def parsing_func(sample):
     import json
