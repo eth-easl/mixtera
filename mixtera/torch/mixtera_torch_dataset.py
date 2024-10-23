@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import random
 import sys
 import threading
 from multiprocessing import shared_memory
@@ -57,11 +58,12 @@ class MixteraTorchDataset(IterableDataset):
             + f"This process is {mp.current_process().name}"
         )
 
+        _randid = random.randint(0, 99)
         # Initialize status_array, indicating for each worker which sample they are currently handling in the chunk
         status_dtype = np.int64
         array_shape = (self.num_workers,)  # One index per worker
         status_array_size = self.num_workers * status_dtype(0).nbytes
-        status_shm_name = f"mts_{self._query.job_id}"
+        status_shm_name = f"mts_{_randid}_{self._dp_group_id}_{self._node_id}_{self._query.job_id}"
         status_shm_name = status_shm_name[:30] if sys.platform == "darwin" else status_shm_name
         self._status_shm = shared_memory.SharedMemory(name=status_shm_name, create=True, size=status_array_size)
         status_array: NDArray[np.int64] = np.ndarray(array_shape, dtype=status_dtype, buffer=self._status_shm.buf)
@@ -71,7 +73,7 @@ class MixteraTorchDataset(IterableDataset):
         # Used to trigger cleanup at the end
         comp_dtype = np.int8
         comp_array_size = self.num_workers * comp_dtype(0).nbytes
-        comp_shm_name = f"mtc_{self._query.job_id}"
+        comp_shm_name = f"mtc_{_randid}_{self._dp_group_id}_{self._node_id}_{self._query.job_id}"
         comp_shm_name = comp_shm_name[:30] if sys.platform == "darwin" else comp_shm_name
         self._comp_shm = shared_memory.SharedMemory(name=comp_shm_name, create=True, size=comp_array_size)
         completion_array: NDArray[np.int8] = np.ndarray(array_shape, dtype=comp_dtype, buffer=self._comp_shm.buf)
