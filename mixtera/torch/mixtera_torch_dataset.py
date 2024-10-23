@@ -188,8 +188,8 @@ class MixteraTorchDataset(IterableDataset):
             self._res_str_args.worker_id = self.worker_id
 
             for sample_chnk_idx, sample in self._client.stream_results(self._res_str_args):
-                yield sample
                 status_array[self.worker_id] = sample_chnk_idx
+                yield sample
 
             with self.completion_lock:
                 completion_array[self.worker_id] = 1
