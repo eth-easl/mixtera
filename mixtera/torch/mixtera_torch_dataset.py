@@ -4,6 +4,7 @@ import random
 import sys
 import threading
 from multiprocessing import shared_memory
+from multiprocessing.synchronize import Lock as LockT
 from typing import Any, Generator
 
 import numpy as np
@@ -24,6 +25,9 @@ class MixteraTorchDataset(IterableDataset):
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
         execute_query: bool = True,
+        _status_shm: shared_memory.SharedMemory | None = None,
+        _comp_shm: shared_memory.SharedMemory | None = None,
+        completion_lock: LockT | None = None,
     ):
         # TODO(#63): This needs to be passed information on transformation, e.g., tokenization functions etc.
         # Alternative: Let people inherit from this.
@@ -31,13 +35,19 @@ class MixteraTorchDataset(IterableDataset):
         self._query = query
         self._res_str_args = result_streaming_args
         self._query_execution_args = query_execution_args
-        self._status_shm: shared_memory.SharedMemory | None = None
-        self._comp_shm: shared_memory.SharedMemory | None = None
+        self._status_shm = _status_shm
+        self._comp_shm = _comp_shm
 
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
 
-        self._init_status_shm()
+        if self._status_shm is None:
+            # By default, we have to create a shm
+            self._init_status_shm()
+        else:
+            # This is only required for the Huggingface Dataset inheriting from this class.
+            assert completion_lock is not None
+            self.completion_lock = completion_lock
 
         if self._node_id == 0 and self._dp_group_id == 0 and execute_query:
             logger.info(
@@ -185,7 +195,6 @@ class MixteraTorchDataset(IterableDataset):
                 completion_array[self.worker_id] = 1
                 if np.all(completion_array == 1):
                     logger.debug(f"[Worker {self.worker_id}] All data loader workers are done - will unlink.")
-                    logger.debug(self.worker_status)
                     self._cleanup_shared_memory(True)
                 else:
                     logger.debug(

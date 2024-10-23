@@ -1,4 +1,6 @@
 from copy import deepcopy
+from multiprocessing import shared_memory
+from multiprocessing.synchronize import Lock as LockT
 from typing import Any, Generator, Tuple
 
 import datasets
@@ -20,9 +22,20 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
         _shard_call_count: int = 0,
+        _status_shm: shared_memory.SharedMemory | None = None,
+        _comp_shm: shared_memory.SharedMemory | None = None,
+        completion_lock: LockT | None = None,
     ):
         MixteraTorchDataset.__init__(
-            self, client, query, query_execution_args, result_streaming_args, execute_query=_shard_call_count == 0
+            self,
+            client,
+            query,
+            query_execution_args,
+            result_streaming_args,
+            execute_query=_shard_call_count == 0,
+            _status_shm=_status_shm,
+            _comp_shm=_comp_shm,
+            completion_lock=completion_lock,
         )
         datasets.iterable_dataset._BaseExamplesIterable.__init__(self)
         self._shard_call_count = _shard_call_count
@@ -71,6 +84,9 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
             self._query_execution_args,
             res_args,
             _shard_call_count=self._shard_call_count + 1,
+            _status_shm=self._status_shm,
+            _comp_shm=self._comp_shm,
+            completion_lock=self.completion_lock,
         )
 
     def validate_state(self) -> None:
