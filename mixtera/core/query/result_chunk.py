@@ -40,7 +40,6 @@ def allow_daemon_spawn() -> None:
     def patched_start(self, *args, **kwargs) -> None:
         if self.daemon:  # if the child is a daemon
             # Goal: Remove assertion that our parent is not a daemon
-
             # Load source code of original start method
             source = textwrap.dedent(inspect.getsource(original_start))
 
@@ -71,8 +70,9 @@ def allow_daemon_spawn() -> None:
             # For non-daemon processes, use the original start method
             original_start(self, *args, **kwargs)
 
-    # Do the monkey-patch
-    mp.Process.start = patched_start
+    if mp.Process.start == original_start:
+        # Do the monkey-patch
+        mp.Process.start = patched_start
 
 
 class ResultChunk:
@@ -111,6 +111,8 @@ class ResultChunk:
             client: The MixteraClient instance
             args: The ResultStreamingArgs instance
         """
+        allow_daemon_spawn()
+
         self._degree_of_parallelism = args.chunk_reading_degree_of_parallelism
         self._per_window_mixture = args.chunk_reading_per_window_mixture
         self._window_size = args.chunk_reading_window_size
