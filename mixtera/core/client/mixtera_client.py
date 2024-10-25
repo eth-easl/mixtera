@@ -259,6 +259,30 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def checkpoint(
+        self,
+        job_id: str,
+        dp_group_id: int,
+        node_id: int,
+        worker_status: list[int],
+    ) -> str:
+        """
+        Initiates a checkpoint operation in Mixtera.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
+        """
+        Returns True when the `chkpnt_id` has been written successfully and training can continue.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        raise NotImplementedError()
+
+    @abstractmethod
     def is_remote(self) -> bool:
         """
         Checks whether the Mixtera client object at hand uses a server or local MDC.

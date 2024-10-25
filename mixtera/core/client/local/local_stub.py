@@ -25,6 +25,9 @@ class LocalStub(MixteraClient):
         if not self.directory.exists():
             raise RuntimeError(f"Directory {self.directory} does not exist.")
 
+        self.checkpoint_directory = self.directory / "checkpoints"
+        self.checkpoint_directory.mkdir(exist_ok=True)
+
         self._mdc = MixteraDataCollection(self.directory)
         self._training_query_map_lock = mp.Lock()
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
@@ -146,3 +149,34 @@ class LocalStub(MixteraClient):
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
             raise RuntimeError(f"Unknown job {job_id}")
         return self._training_query_map[job_id][0]
+
+    def checkpoint(
+        self,
+        job_id: str,
+        dp_group_id: int,
+        node_id: int,
+        worker_status: list[int],
+    ) -> str:
+        return self._get_query_chunk_distributor(job_id).checkpoint(
+            dp_group_id, node_id, worker_status, self.checkpoint_directory / job_id
+        )
+
+    def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
+        return self._get_query_chunk_distributor(job_id).checkpoint_completed(chkpnt_id, on_disk)
+
+    def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        query = None
+        mixture = None
+        with self._training_query_map_lock:
+            if job_id in self._training_query_map:
+                logger.warning(f"We already have a query for job {job_id}! Overwriting this with checkpoint.")
+                query = self._training_query_map[job_id][1]
+                mixture = self._training_query_map[job_id][2]
+
+            # TODO(MaxiBoether): Can we recover the query itself here?
+            distri = ChunkDistributor.from_checkpoint(self.checkpoint_directory / job_id, chkpnt_id, job_id)
+            self._training_query_map[job_id] = (
+                distri,
+                query,
+                mixture if mixture is not None else distri._query_result._mixture,
+            )
