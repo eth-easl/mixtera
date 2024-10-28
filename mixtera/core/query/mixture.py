@@ -307,7 +307,7 @@ class HierarchicalStaticMixture(Mixture):
             if component.submixture is not None:
                 result = self.convert_to_mixture_key_format(component.submixture)
                 for key, value in result.items():
-                    if component.value is List:
+                    if isinstance(component.value, list):
                         key.add_property(mixture.property_name, component.value)
                     else:
                         key.add_property(mixture.property_name, [component.value])
