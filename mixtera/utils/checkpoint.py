@@ -7,7 +7,7 @@ from loguru import logger
 from mixtera.torch import MixteraTorchDataset
 
 
-def _get_mixtera_hf_dataset_from_iterabledataset(dataset: Any) -> Any:
+def _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset: Any) -> Any:
     """
     Recursively retrieves a `MixteraHFDataset` from a potentially nested `datasets.IterableDataset`.
 
@@ -28,7 +28,10 @@ def _get_mixtera_hf_dataset_from_iterabledataset(dataset: Any) -> Any:
           datasets are wrapped with transformations or other dataset utilities.
     """
     # inline import for people who do not have datasets installed.
-    from mixtera.hf.mixtera_hf_dataset import MixteraHFDataset  # pylint: disable=import-outside-toplevel
+    from mixtera.hf.mixtera_hf_dataset import (  # pylint: disable=import-outside-toplevel
+        MixteraHFDataset,
+        _MixteraHFIterable,
+    )
 
     visited = set()
     to_visit = [dataset]
@@ -39,7 +42,7 @@ def _get_mixtera_hf_dataset_from_iterabledataset(dataset: Any) -> Any:
             continue  # Avoid infinite loops in circular references
         visited.add(id(current))
 
-        if isinstance(current, MixteraHFDataset):
+        if isinstance(current, MixteraHFDataset) or isinstance(current, _MixteraHFIterable):
             return current
 
         # Get both '_ex_iterable' and 'ex_iterable' attributes - it's a bit inconsistent when which is used.
@@ -117,14 +120,26 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
         # Now, it could still be any IterableDataset.
         # Since we can apply arbitrary transformations, we need to recover the mixtera dataset
         og_type = type(dataset)
-        if (dataset := _get_mixtera_hf_dataset_from_iterabledataset(dataset)) is None:
+        if (dataset := _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset)) is None:
             logger.debug(
                 "Dataset is `datasets.IterableDataset`, but could not find `MixteraHFDataset`"
                 + f" (type = {og_type}). No Mixtera Checkpoint."
             )
             return None
 
-    return dataset if isinstance(dataset, MixteraTorchDataset) else dataset._ex_iterable
+        from mixtera.hf.mixtera_hf_dataset import (  # pylint: disable=import-outside-toplevel
+            MixteraHFDataset,
+            _MixteraHFIterable,
+        )
+
+        if isinstance(dataset, MixteraHFDataset):
+            dataset = dataset._ex_iterable
+
+        if not isinstance(dataset, _MixteraHFIterable):
+            logger.debug(f"Unexpected type: {type(dataset)}. No Mixtera Checkpoint.")
+            return None
+
+    return dataset if isinstance(dataset, MixteraTorchDataset) else dataset
 
 
 def handle_mixtera_checkpoint(

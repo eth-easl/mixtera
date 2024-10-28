@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from mixtera.hf import MixteraHFDataset
 from mixtera.torch import MixteraTorchDataset
-from mixtera.utils.checkpoint import _get_mixtera_hf_dataset_from_iterabledataset, handle_mixtera_checkpoint
+from mixtera.utils.checkpoint import _get_mixtera_hf_dataset_or_client_from_iterabledataset, handle_mixtera_checkpoint
 
 
 class TestCheckpointHelpers(unittest.TestCase):
@@ -19,7 +19,7 @@ class TestCheckpointHelpers(unittest.TestCase):
     def test_get_mixtera_hf_dataset_already_mixtera(self):
         """Test when the dataset is already a MixteraHFDataset."""
         mock_dataset_instance = MagicMock(spec=MixteraHFDataset)
-        result = _get_mixtera_hf_dataset_from_iterabledataset(mock_dataset_instance)
+        result = _get_mixtera_hf_dataset_or_client_from_iterabledataset(mock_dataset_instance)
         self.assertEqual(result, mock_dataset_instance)
 
     def test_get_mixtera_hf_dataset_nested(self):
@@ -33,7 +33,7 @@ class TestCheckpointHelpers(unittest.TestCase):
 
         dataset = MockIterableDataset(_ex_iterable=MockIterableDataset(_ex_iterable=mock_mhfd))
 
-        result = _get_mixtera_hf_dataset_from_iterabledataset(dataset)
+        result = _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset)
         self.assertEqual(result, mock_mhfd)
 
     def test_get_mixtera_hf_dataset_not_found(self):
@@ -46,7 +46,7 @@ class TestCheckpointHelpers(unittest.TestCase):
 
         dataset = MockIterableDataset(_ex_iterable=MockIterableDataset())
 
-        result = _get_mixtera_hf_dataset_from_iterabledataset(dataset)
+        result = _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset)
 
         self.assertIsNone(result)
 
