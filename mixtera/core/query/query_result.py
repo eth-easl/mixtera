@@ -488,6 +488,7 @@ class QueryResult:
 
     # SERIALIZATION ##
     def __getstate__(self) -> dict:
+        logger.debug("Starting to pickle a Queryresult.")
         state = self.__dict__.copy()
 
         # Remove the generator since it is not pickable (and will be recreated on __next__)
@@ -515,10 +516,14 @@ class QueryResult:
             )
             del state["_lock"]
 
+        logger.debug("QueryResult pickled.")
+
         # Return a dictionary with the pickled attribute and other picklable attributes
         return {"other": state, "dilled": dill_pickled_attributes}
 
     def __setstate__(self, state: dict) -> None:
+        logger.debug("Starting to unpickle a Queryresult.")
+
         self.__dict__ = state["other"]
         self._generator = None
 
@@ -527,6 +532,7 @@ class QueryResult:
 
         for attrib, attrib_pickled in state["dilled"].items():
             setattr(self, attrib, dill.loads(attrib_pickled))
+        logger.debug("QueryResult unpickled.")
 
     def to_cache(self, path: Path) -> None:
         """

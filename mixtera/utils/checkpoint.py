@@ -42,7 +42,7 @@ def _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset: Any) -> Any:
             continue  # Avoid infinite loops in circular references
         visited.add(id(current))
 
-        if isinstance(current, MixteraHFDataset) or isinstance(current, _MixteraHFIterable):
+        if isinstance(current, (MixteraHFDataset, _MixteraHFIterable)):
             return current
 
         # Get both '_ex_iterable' and 'ex_iterable' attributes - it's a bit inconsistent when which is used.

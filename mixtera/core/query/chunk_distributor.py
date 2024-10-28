@@ -371,11 +371,6 @@ class ChunkDistributor:
         _lock, _index = self._query_result._lock, self._query_result._index
         del self._query_result._lock
         del self._query_result._index
-        query_result_copy = deepcopy(self._query_result)
-        self._query_result._lock = _lock
-        self._query_result._index = _index
-        query_result_copy._lock = _lock
-        query_result_copy._index = _index
 
         logger.debug("Spinning up the persisting process.")
 
@@ -388,12 +383,14 @@ class ChunkDistributor:
                 checkpoint_id,
                 chkpnt_dir,
                 state_to_save,
-                query_result_copy,
+                self._query_result,
                 worker_sample_ids,
             ),
         )
         self._checkpoint_info[checkpoint_id]["process"] = p
         p.start()
+        self._query_result._lock = _lock
+        self._query_result._index = _index
 
     @staticmethod
     def _persist_checkpoint_process(

@@ -613,7 +613,7 @@ class ServerConnection:
             await write_int(status, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Read checkpoint ID from the server
-        chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_SIZES, reader)
+        chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_SIZES, reader, timeout=60 * 15)
         return chkpnt_id
 
     def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
