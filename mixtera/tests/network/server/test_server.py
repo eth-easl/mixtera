@@ -142,3 +142,96 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
         mock_server.serve_forever.assert_awaited_once()
         mock_server.wait_closed.assert_awaited_once()
         mock_dispatch_client.assert_not_awaited()
+
+    @patch("mixtera.network.server.server.write_utf8_string")
+    @patch("mixtera.network.server.server.write_int")
+    @patch("mixtera.network.server.server.read_int")
+    @patch("mixtera.network.server.server.read_utf8_string")
+    async def test_checkpoint(self, mock_read_utf8_string, mock_read_int, mock_write_int, mock_write_utf8_string):
+        """Test the _checkpoint method of MixteraServer."""
+        del mock_write_int
+        # Setup mocks
+        job_id = "test_job_id"
+        dp_group_id = 0
+        node_id = 0
+        worker_status = [1, 2, 3]
+        chkpnt_id = "test_checkpoint_id"
+
+        mock_read_utf8_string.return_value = job_id
+        mock_read_int.side_effect = [dp_group_id, node_id, len(worker_status)] + worker_status
+
+        # Mock the checkpoint method
+        self.server._local_stub.checkpoint = MagicMock(return_value=chkpnt_id)
+
+        mock_reader = MagicMock()
+        mock_writer = create_mock_writer()
+
+        # Call the method
+        await self.server._checkpoint(mock_reader, mock_writer)
+
+        # Assertions
+        self.server._local_stub.checkpoint.assert_called_once_with(
+            job_id, dp_group_id, node_id, worker_status, server=True
+        )
+        mock_write_utf8_string.assert_awaited_once_with(chkpnt_id, NUM_BYTES_FOR_SIZES, mock_writer)
+
+    @patch("mixtera.network.server.server.write_int")
+    @patch("mixtera.network.server.server.read_int")
+    @patch("mixtera.network.server.server.read_utf8_string")
+    async def test_checkpoint_completed(self, mock_read_utf8_string, mock_read_int, mock_write_int):
+        """Test the _checkpoint_completed method of MixteraServer."""
+        # Setup mocks
+        job_id = "test_job_id"
+        chkpnt_id = "test_checkpoint_id"
+        on_disk_flag = 1  # True
+        is_completed = True
+
+        mock_read_utf8_string.side_effect = [job_id, chkpnt_id]
+        mock_read_int.return_value = on_disk_flag
+
+        # Mock the checkpoint_completed method
+        self.server._local_stub.checkpoint_completed = MagicMock(return_value=is_completed)
+
+        mock_reader = MagicMock()
+        mock_writer = create_mock_writer()
+
+        # Call the method
+        await self.server._checkpoint_completed(mock_reader, mock_writer)
+
+        # Assertions
+        self.server._local_stub.checkpoint_completed.assert_called_once_with(job_id, chkpnt_id, bool(on_disk_flag))
+        mock_write_int.assert_awaited_once_with(int(is_completed), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+
+    @patch("mixtera.network.server.server.write_int")
+    @patch("mixtera.network.server.server.read_utf8_string")
+    async def test_restore_checkpoint(self, mock_read_utf8_string, mock_write_int):
+        """Test the _restore_checkpoint method of MixteraServer."""
+        # Setup mocks
+        job_id = "test_job_id"
+        chkpnt_id = "test_checkpoint_id"
+        success = True
+
+        mock_read_utf8_string.side_effect = [job_id, chkpnt_id]
+
+        # Mock the restore_checkpoint method
+        self.server._local_stub.restore_checkpoint = MagicMock()
+
+        # Mock the _get_query_chunk_distributor method
+        self.server._local_stub._get_query_chunk_distributor = MagicMock(return_value=MagicMock())
+
+        mock_reader = MagicMock()
+        mock_writer = create_mock_writer()
+
+        # Mock the lock
+        self.server._chunk_distributor_map_lock = AsyncMock()
+        async with self.server._chunk_distributor_map_lock:
+            pass  # Just to ensure the lock can be awaited
+
+        # Call the method
+        await self.server._restore_checkpoint(mock_reader, mock_writer)
+
+        # Assertions
+        self.server._local_stub.restore_checkpoint.assert_called_once_with(job_id, chkpnt_id)
+        self.server._local_stub._get_query_chunk_distributor.assert_called_once_with(job_id)
+        self.assertIn(job_id, self.server._chunk_distributor_map)
+        mock_write_int.assert_awaited_once_with(int(success), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)

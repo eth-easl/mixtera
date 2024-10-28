@@ -372,3 +372,116 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_int.assert_has_calls([call(int(data_only_on_primary), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_write_pickeled_object.assert_has_calls([call(setup_func, NUM_BYTES_FOR_SIZES, mock_writer)])
         mock_write_pickeled_object.assert_has_calls([call(calc_func, NUM_BYTES_FOR_SIZES, mock_writer)])
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.read_utf8_string")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    async def test_checkpoint(
+        self, mock_write_utf8_string, mock_write_int, mock_read_utf8_string, mock_connect_to_server
+    ):
+        """Test the _checkpoint method of ServerConnection."""
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+
+        job_id = "job_id"
+        dp_group_id = 0
+        node_id = 0
+        worker_status = [1, 2, 3]
+        chkpnt_id = "test_checkpoint_id"
+        mock_read_utf8_string.return_value = chkpnt_id
+
+        result = await self.server_connection._checkpoint(job_id, dp_group_id, node_id, worker_status)
+
+        self.assertEqual(result, chkpnt_id)
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls(
+            [
+                call(int(ServerTask.CHECKPOINT), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(dp_group_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(node_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(len(worker_status), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(1, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(2, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(3, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ],
+            any_order=False,
+        )
+        mock_write_utf8_string.assert_has_calls(
+            [
+                call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ]
+        )
+        mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.read_int")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    async def test_checkpoint_completed(
+        self, mock_write_utf8_string, mock_write_int, mock_read_int, mock_connect_to_server
+    ):
+        """Test the _checkpoint_completed method of ServerConnection."""
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+
+        job_id = "job_id"
+        chkpnt_id = "checkpoint_id"
+        on_disk = True
+        mock_read_int.return_value = 1  # Simulate server returning success = True
+
+        result = await self.server_connection._checkpoint_completed(job_id, chkpnt_id, on_disk)
+
+        self.assertTrue(result)
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls(
+            [
+                call(int(ServerTask.CHECKPOINT_COMPLETED), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(int(on_disk), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ],
+            any_order=False,
+        )
+        mock_write_utf8_string.assert_has_calls(
+            [
+                call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(chkpnt_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ],
+            any_order=False,
+        )
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
+    @patch("mixtera.network.connection.server_connection.read_int")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    async def test_restore_checkpoint(
+        self, mock_write_utf8_string, mock_write_int, mock_read_int, mock_connect_to_server
+    ):
+        """Test the _restore_checkpoint method of ServerConnection."""
+        mock_reader = create_mock_reader()
+        mock_writer = create_mock_writer()
+        mock_connect_to_server.return_value = mock_reader, mock_writer
+
+        job_id = "job_id"
+        chkpnt_id = "checkpoint_id"
+        mock_read_int.return_value = 1  # Simulate server returning success = True
+
+        await self.server_connection._restore_checkpoint(job_id, chkpnt_id)
+
+        mock_connect_to_server.assert_awaited_once()
+        mock_write_int.assert_has_calls(
+            [
+                call(int(ServerTask.RESTORE_CHECKPOINT), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ],
+            any_order=False,
+        )
+        mock_write_utf8_string.assert_has_calls(
+            [
+                call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(chkpnt_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ],
+            any_order=False,
+        )
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)

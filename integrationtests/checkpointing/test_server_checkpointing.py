@@ -185,7 +185,11 @@ def main() -> None:
 
     assert client.register_metadata_parser("TEST_PARSER_SERVER_CHKPNT", TestMetadataParser)
     assert client.register_dataset(
-        "server_integrationtest_checkpointing_dataset", server_dir, JSONLDataset, parsing_func, "TEST_PARSER_SERVER_CHKPNT"
+        "server_integrationtest_checkpointing_dataset",
+        server_dir,
+        JSONLDataset,
+        parsing_func,
+        "TEST_PARSER_SERVER_CHKPNT",
     )
     logger.info("Registered dataset on server.")
 
