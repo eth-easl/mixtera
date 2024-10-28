@@ -25,6 +25,7 @@ class MixtureKey:
 
     def add_property(self, property_name: str, property_value: list[str | int | float]) -> None:
         self.properties[property_name] = property_value
+        self._hash = None
 
     def __eq__(self, other: object) -> bool:
         #  TODO(#112): This is currently not commutative, i.e., a == b does not imply b == a
@@ -253,25 +254,25 @@ class StaticMixture(Mixture):
 
 
 @dataclass
-class HierarchicalMixture:
+class MixtureNode:
     property_name: str
     components: List["Component"]
 
 
 @dataclass
 class Component:
-    value: str
+    value: str | List[str]
     weight: float
-    submixture: None | HierarchicalMixture = None
+    submixture: None | MixtureNode = None
 
 
 class HierarchicalStaticMixture(Mixture):
     """Mixture class that simply stores a predefined mixture.
     Different from StaticMixture it receives the mixture combinations in a hierarchical manner."""
 
-    def __init__(self, chunk_size: int, mixture: HierarchicalMixture) -> None:
+    def __init__(self, chunk_size: int, mixture: MixtureNode) -> None:
         """
-        Initializer for HierarchicalStaticMixture.
+        Initializer for HierarchicalStaticMixture. The portions of the components should add up to 1.
 
         Args:
             chunk_size: the size of a chunk in number of instances
@@ -280,13 +281,13 @@ class HierarchicalStaticMixture(Mixture):
             Component(value="medicine", weight=0.5)])
         """
         super().__init__(chunk_size)
-        self._mixture = self.parse_user_mixture(chunk_size, mixture)
+        self._mixture = self.parse_mixture_node(chunk_size, mixture)
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
         return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
 
-    def parse_user_mixture(self, chunk_size: int, user_mixture: HierarchicalMixture) -> dict[MixtureKey, int]:
+    def parse_mixture_node(self, chunk_size: int, user_mixture: MixtureNode) -> dict[MixtureKey, int]:
         formatted_user_mixture = self.convert_to_mixture_key_format(user_mixture)
         for key, val in formatted_user_mixture.items():
             assert val >= 0, "Mixture values must be non-negative."
@@ -300,16 +301,22 @@ class HierarchicalStaticMixture(Mixture):
 
         return mixture
 
-    def convert_to_mixture_key_format(self, mixture: HierarchicalMixture) -> dict[MixtureKey, float]:
+    def convert_to_mixture_key_format(self, mixture: MixtureNode) -> dict[MixtureKey, float]:
         mixture_keys = {}
         for component in mixture.components:
             if component.submixture is not None:
                 result = self.convert_to_mixture_key_format(component.submixture)
                 for key, value in result.items():
-                    key.add_property(mixture.property_name, [component.value])
+                    if component.value is List:
+                        key.add_property(mixture.property_name, component.value)
+                    else:
+                        key.add_property(mixture.property_name, [component.value])
                     mixture_keys[key] = value * component.weight
             else:
-                mixture_keys[MixtureKey({mixture.property_name: [component.value]})] = component.weight
+                if isinstance(component.value, List):
+                    mixture_keys[MixtureKey({mixture.property_name: component.value})] = component.weight
+                else:
+                    mixture_keys[MixtureKey({mixture.property_name: [component.value]})] = component.weight
         return mixture_keys
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:

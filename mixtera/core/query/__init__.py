@@ -3,10 +3,10 @@ from mixtera.core.query.operators.select import Select
 from .mixture import (
     ArbitraryMixture,
     Component,
-    HierarchicalMixture,
     HierarchicalStaticMixture,
     Mixture,
     MixtureKey,
+    MixtureNode,
     StaticMixture,
 )
 from .operators._base import Operator
@@ -29,7 +29,7 @@ __all__ = [
     "MixtureKey",
     "StaticMixture",
     "HierarchicalStaticMixture",
-    "HierarchicalMixture",
+    "MixtureNode",
     "Component",
     "ArbitraryMixture",
     "ResultChunk",
