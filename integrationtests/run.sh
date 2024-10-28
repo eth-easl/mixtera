@@ -131,4 +131,11 @@ empty_work_dir
 echo "Running mixtera huggingface dataset tests"
 python $SCRIPT_DIR/mixtera_hf_dataset/test_hf_dataset.py $WORK_DIR || script_exit_status=$?
 
+empty_work_dir
+echo "Running local checkpointing tests"
+
+python $SCRIPT_DIR/checkpointing/test_local_checkpointing.py || script_exit_status=$?
+echo "Running server checkpointing tests"
+python $SCRIPT_DIR/checkpointing/test_server_checkpointing.py $WORK_DIR || script_exit_status=$?
+
 echo "Ran all integration tests."

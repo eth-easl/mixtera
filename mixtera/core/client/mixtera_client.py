@@ -260,11 +260,7 @@ class MixteraClient(ABC):
 
     @abstractmethod
     def checkpoint(
-        self,
-        job_id: str,
-        dp_group_id: int,
-        node_id: int,
-        worker_status: list[int],
+        self, job_id: str, dp_group_id: int, node_id: int, worker_status: list[int], server: bool = False
     ) -> str:
         """
         Initiates a checkpoint operation in Mixtera.

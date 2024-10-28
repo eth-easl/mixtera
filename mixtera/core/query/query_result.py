@@ -65,8 +65,9 @@ class QueryResult:
         #  The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
-        self._restored_from_checkpoint = False
         logger.debug("QueryResult instantiated.")
+
+        self._mixture_log: list[tuple[int, Mixture]] = []
 
     def _parse_meta(self, mdc: MixteraDataCollection, results: pa.Table) -> dict:
         dataset_ids = set(pc.unique(results["dataset_id"]).to_pylist())
@@ -321,12 +322,14 @@ class QueryResult:
 
         previous_mixture = None
         base_mixture, target_chunk_index = yield
+
         while True:
             mixture = base_mixture.mixture_in_rows()
             if mixture:
                 if previous_mixture != mixture:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     previous_mixture = mixture
+                    self._mixture_log.append((current_chunk_index, base_mixture))
 
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
@@ -412,6 +415,11 @@ class QueryResult:
                     logger.debug("Not enough data, ending chunk generation")
                     return
             else:
+                if previous_mixture is not None or current_chunk_index == 0:
+                    logger.debug("Obtained new None mixture.")
+                    previous_mixture = None
+                    self._mixture_log.append((current_chunk_index, base_mixture))
+
                 chunk = None
                 while len(empty_key_idx) < len(chunker_index_keys) and chunk is None:
                     chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
@@ -472,7 +480,7 @@ class QueryResult:
                 next(self._generator)
 
                 assert (
-                    self._num_returns_gen == 0 or self._restored_from_checkpoint
+                    self._num_returns_gen == 0
                 ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
 
             self._num_returns_gen += 1
@@ -488,10 +496,24 @@ class QueryResult:
         # The following attributes are pickled using dill since they are not pickable by
         # the default pickler (used by torch)
         dill_pickled_attributes = {}
-        for attrib in ["_meta", "_chunker_index"]:
+        for attrib in ["_meta", "_chunker_index", "_mixture_log"]:
             attrib_pickled = dill.dumps(state[attrib])
             del state[attrib]
             dill_pickled_attributes[attrib] = attrib_pickled
+
+        if "_index" in state:
+            logger.warning(
+                "You're pickling a QueryResult without handling _index."
+                + "We're deleting the _index attribute, but this might lead to unexpected behavior!"
+            )
+            del state["_index"]
+
+        if "_lock" in state:
+            logger.warning(
+                "You're pickling a QueryResult without handling _lock."
+                + "We're deleting the _lock attribute, but this might lead to unexpected behavior!"
+            )
+            del state["_lock"]
 
         # Return a dictionary with the pickled attribute and other picklable attributes
         return {"other": state, "dilled": dill_pickled_attributes}
@@ -499,6 +521,10 @@ class QueryResult:
     def __setstate__(self, state: dict) -> None:
         self.__dict__ = state["other"]
         self._generator = None
+
+        self._lock = mp.Lock()
+        self._index = mp.Value("i", 0)
+
         for attrib, attrib_pickled in state["dilled"].items():
             setattr(self, attrib, dill.loads(attrib_pickled))
 
@@ -550,6 +576,7 @@ class QueryResult:
         if not os.path.isdir(path):
             raise RuntimeError("QueryResult::from_cache expects a directory path.")
         logger.info("Loading QueryResult from cache.")
+
         # Load the pickled state
         with open(path / "pickled.pkl", "rb") as f:
             state = pickle.load(f)
@@ -577,6 +604,10 @@ class QueryResult:
         # Initialize non-picklable attributes
         query_result._lock = mp.Lock()
         query_result._index = mp.Value("i", 0)
+
+        num_chunks_replay = query_result._num_returns_gen
+
+        query_result._num_returns_gen = 0  # reset for now, replay afterwards
         query_result._generator = None
 
         logger.debug("Instantiated non-pickable attributes.")
@@ -584,5 +615,51 @@ class QueryResult:
         query_result._chunker_index = deserialize_chunker_index(path / "chunker_index")
 
         logger.debug("Loaded chunker index.")
+
+        if num_chunks_replay > 0:
+            logger.debug(f"Starting to replay {num_chunks_replay} chunks.")
+            mixture_log = query_result._mixture_log
+            mixture_log_index = 0
+            num_mixture_changes = len(mixture_log)
+
+            # Since there's always an entry at chunk index 0, set the initial mixture
+            initial_mixture = mixture_log[0][1]
+            assert initial_mixture is not None
+
+            query_result.update_mixture(initial_mixture)
+
+            mixture_log_index += 1
+
+            # Initialize next mixture change, if any
+            if mixture_log_index < num_mixture_changes:
+                next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
+                next_mixture = mixture_log[mixture_log_index][1]
+            else:
+                next_mixture_change_chunk_index = None
+                next_mixture = None
+
+            # Replay the chunks
+            for i in range(num_chunks_replay):
+                # Update mixture if the current chunk index matches a mixture change point
+                if next_mixture_change_chunk_index is not None and i == next_mixture_change_chunk_index:
+                    assert next_mixture is not None
+                    query_result.update_mixture(next_mixture)
+                    mixture_log_index += 1
+                    if mixture_log_index < num_mixture_changes:
+                        next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
+                        next_mixture = mixture_log[mixture_log_index][1]
+                    else:
+                        next_mixture_change_chunk_index = None
+
+                try:
+                    _ = next(query_result)
+                except StopIteration as e:
+                    raise RuntimeError(
+                        f"Generator exhausted during replay at chunk index {i} - should not happen!"
+                    ) from e
+
+            logger.debug("Finished chunk replay.")
+            assert query_result._num_returns_gen == num_chunks_replay
+            assert query_result._index.get_obj().value == num_chunks_replay
 
         return query_result

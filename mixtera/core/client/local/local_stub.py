@@ -151,14 +151,10 @@ class LocalStub(MixteraClient):
         return self._training_query_map[job_id][0]
 
     def checkpoint(
-        self,
-        job_id: str,
-        dp_group_id: int,
-        node_id: int,
-        worker_status: list[int],
+        self, job_id: str, dp_group_id: int, node_id: int, worker_status: list[int], server: bool = False
     ) -> str:
         return self._get_query_chunk_distributor(job_id).checkpoint(
-            dp_group_id, node_id, worker_status, self.checkpoint_directory / job_id
+            dp_group_id, node_id, worker_status, self.checkpoint_directory / job_id, server
         )
 
     def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
