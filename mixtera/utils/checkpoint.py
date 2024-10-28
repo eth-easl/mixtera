@@ -74,11 +74,32 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
         - It then uses `_get_mixtera_hf_dataset_from_iterabledataset` to search for a `MixteraHFDataset`.
         - If a `MixteraHFDataset` is found, it returns it; otherwise, the function returns `None`.
     """
-
+    logger.debug(f"Type of received object is {type(dataloader_or_dataset)}")
     if isinstance(dataloader_or_dataset, torch.utils.data.DataLoader):  # type: ignore
         dataset = dataloader_or_dataset.dataset
-    else:
+    elif isinstance(dataloader_or_dataset, torch.utils.data.Dataset):  # type: ignore
         dataset = dataloader_or_dataset
+    else:
+        # Perhaps a generator from sanity_check_dataloader in Nanotron.
+        iterator = dataloader_or_dataset
+        dataset = dataloader_or_dataset
+        try:
+            iterator_frame = getattr(iterator, "gi_frame", None)
+            if iterator_frame is not None:
+                f_locals = iterator_frame.f_locals
+                if "dataloader" in f_locals:
+                    dataloader = f_locals["dataloader"]
+                    if isinstance(dataloader, torch.utils.data.DataLoader):  # type: ignore
+                        logger.debug("Recovered DataLoader from generator frame!")
+                        dataset = dataloader.dataset
+                    else:
+                        logger.debug("The 'dataloader' in generator locals is not a DataLoader.")
+                else:
+                    logger.debug("Could not find 'dataloader' in generator frame locals.")
+            else:
+                logger.debug("The generator does not have a 'gi_frame' attribute.")
+        except AttributeError as e:
+            logger.debug(f"Could not access generator frame: {e}")
 
     if not isinstance(dataset, MixteraTorchDataset):
         try:
