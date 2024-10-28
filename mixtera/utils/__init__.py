@@ -5,6 +5,7 @@ This submodule contains general utility functions
 from .utils import (  # noqa: F401
     DummyPool,
     defaultdict_to_dict,
+    deserialize_chunker_index,
     flatten,
     hash_dict,
     is_on_github_actions,
@@ -13,6 +14,7 @@ from .utils import (  # noqa: F401
     numpy_to_native_type,
     run_async_until_complete,
     seed_everything_from_list,
+    serialize_chunker_index,
     wait_for_key_in_dict,
 )
 
@@ -28,4 +30,6 @@ __all__ = [
     "merge_sorted_lists",
     "numpy_to_native",
     "DummyPool",
+    "serialize_chunker_index",
+    "deserialize_chunker_index",
 ]

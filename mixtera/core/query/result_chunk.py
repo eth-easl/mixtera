@@ -5,6 +5,7 @@ import os
 import random
 import textwrap
 import typing
+from itertools import islice
 from queue import Empty
 from typing import TYPE_CHECKING, Callable, Iterator, Optional, Type
 
@@ -39,7 +40,6 @@ def allow_daemon_spawn() -> None:
     def patched_start(self, *args, **kwargs) -> None:
         if self.daemon:  # if the child is a daemon
             # Goal: Remove assertion that our parent is not a daemon
-
             # Load source code of original start method
             source = textwrap.dedent(inspect.getsource(original_start))
 
@@ -70,8 +70,9 @@ def allow_daemon_spawn() -> None:
             # For non-daemon processes, use the original start method
             original_start(self, *args, **kwargs)
 
-    # Do the monkey-patch
-    mp.Process.start = patched_start
+    if mp.Process.start == original_start:
+        # Do the monkey-patch
+        mp.Process.start = patched_start
 
 
 class ResultChunk:
@@ -92,13 +93,14 @@ class ResultChunk:
         self._parsing_func_dict = parsing_func_dict
         self._chunk_size = chunk_size
         self._mixture = mixture
+        self._samples_to_skip = 0  # TODO(#87): Supply this from server to skip first samples to support interruptions.
 
-        self._server_connection: Optional[ServerConnection] = None
+        self._server_connection: ServerConnection | None = None
         self._degree_of_parallelism: int = 1
         self._per_window_mixture: bool = False
         self._window_size: int = 128
 
-        self._iterator: Optional[Iterator[str]] = None
+        self._iterator: Iterator[tuple[int, str]] | None = None
 
     def configure_result_streaming(self, client: "MixteraClient", args: "ResultStreamingArgs") -> None:
         """
@@ -109,6 +111,8 @@ class ResultChunk:
             client: The MixteraClient instance
             args: The ResultStreamingArgs instance
         """
+        allow_daemon_spawn()
+
         self._degree_of_parallelism = args.chunk_reading_degree_of_parallelism
         self._per_window_mixture = args.chunk_reading_per_window_mixture
         self._window_size = args.chunk_reading_window_size
@@ -167,7 +171,7 @@ class ResultChunk:
     def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
 
-    def _iterate_samples(self) -> Iterator[str]:
+    def _iterate_samples(self) -> Iterator[tuple[int, str]]:
         """
         Iterate over the samples in the result index. This function yields the samples in the correct mixture
         and window size.
@@ -180,7 +184,9 @@ class ResultChunk:
             yield_source = self._iterate_window_mixture(active_iterators)
         else:
             yield_source = self._iterate_overall_mixture(active_iterators)
-        yield from yield_source
+
+        for idx, sample in enumerate(islice(yield_source, self._samples_to_skip, None)):
+            yield idx + self._samples_to_skip, sample
 
     def _init_active_iterators(self) -> dict[MixtureKey, Iterator[str]]:
         """
