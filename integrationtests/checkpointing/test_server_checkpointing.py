@@ -183,9 +183,9 @@ def main() -> None:
     setup_test_dataset(server_dir, TEST_SERVER_INSTANCE_COUNT, TEST_SERVER_FILE_COUNT, TEST_SERVER_FRACTION_MULTIPLIER)
     client = MixteraClient.from_remote("127.0.0.1", 6666)
 
-    assert client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
+    assert client.register_metadata_parser("TEST_PARSER_SERVER_CHKPNT", TestMetadataParser)
     assert client.register_dataset(
-        "server_integrationtest_checkpointing_dataset", server_dir, JSONLDataset, parsing_func, "TEST_PARSER"
+        "server_integrationtest_checkpointing_dataset", server_dir, JSONLDataset, parsing_func, "TEST_PARSER_SERVER_CHKPNT"
     )
     logger.info("Registered dataset on server.")
 

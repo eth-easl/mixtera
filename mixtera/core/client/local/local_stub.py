@@ -169,7 +169,6 @@ class LocalStub(MixteraClient):
                 query = self._training_query_map[job_id][1]
                 mixture = self._training_query_map[job_id][2]
 
-            # TODO(MaxiBoether): Can we recover the query itself here?
             distri = ChunkDistributor.from_checkpoint(self.checkpoint_directory / job_id, chkpnt_id, job_id)
             self._training_query_map[job_id] = (
                 distri,

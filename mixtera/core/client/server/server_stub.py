@@ -118,9 +118,6 @@ class ServerStub(MixteraClient):
         return self.server_connection.checkpoint(job_id, dp_group_id, node_id, worker_status)
 
     def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
-        """
-        Returns True when the `chkpnt_id` has been written successfully and training can continue.
-        """
         return self.server_connection.checkpoint_completed(job_id, chkpnt_id, on_disk)
 
     def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:

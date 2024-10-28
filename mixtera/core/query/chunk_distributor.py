@@ -214,19 +214,27 @@ class ChunkDistributor:
         self, dp_group_id: int, node_id: int, worker_status: list[int], chkpnt_dir: Path, server: bool
     ) -> None | str:
         """
-        Collect worker statuses from all nodes and initiate checkpointing once all have reported.
+        Initiate a checkpoint operation for the specified data parallel group and node.
+
+        This method collects worker statuses from all nodes and initiates checkpointing once all have reported.
+        Checkpointing involves saving the current state of the data loaders and the chunk distributor
+        so that training can be resumed later from the same point.
 
         Args:
-            dp_group_id: Data parallel group ID.
-            node_id: Node ID within the group.
-            worker_status: Status of each worker on the node.
-            chkpnt_dir: Directory where the checkpoint will be saved.
+            dp_group_id (int): Data parallel group ID.
+            node_id (int): Node ID within the group.
+            worker_status (list[int]): List containing the current status (sample indices) of each data loader worker.
+            chkpnt_dir (Path): Directory where the checkpoint will be saved.
+            server (bool): Indicates whether the checkpoint is being called from a Mixtera server or in local mode
 
         Returns:
-            str: The checkpoint ID assigned to this checkpoint.
+            str or None: The checkpoint ID assigned to this checkpoint if checkpointing has started,
+                         None otherwise.
 
         Raises:
-            RuntimeError: If the node reports its status more than once.
+            RuntimeError: If the node reports its status more than once or if checkpointing is not supported
+                          in the current configuration.
+            NotImplementedError: If checkpointing is not supported for the current setup.
         """
         if self._dp_groups == 1 and self._nodes_per_group == 1 and self._og_num_workers > 0 and not server:
             raise NotImplementedError(
@@ -280,14 +288,18 @@ class ChunkDistributor:
 
     def _validate_checkpoint_state(self) -> dict[tuple[int, int], int]:
         """
-        Validates the state in the system before a checkpoint.
+        Validate the system state before performing a checkpoint.
+
+        This method checks whether within each data parallel group, all workers are at the same chunk
+        and roughly at the same sample index. It returns a mapping indicating the sample index
+        each worker should start from upon resuming.
 
         Raises:
-            RuntimeError: If validation fails.
+            RuntimeError: If workers within the same data parallel group are at inconsistent states.
 
         Returns:
-            Dictionary with potentially fixed inconsistent worker state:
-                For each (dp_group, worker_id), tells at which sample to continue.
+            dict[tuple[int, int], int]: A dictionary mapping (dp_group_id, worker_id) to the sample index
+                                        at which to continue.
         """
         # First check whether within each dp_group, all workers are at the same chunk
         chunk_per_worker: dict[tuple[int, int], list[int]] = {}
@@ -337,9 +349,11 @@ class ChunkDistributor:
         The checkpointing process will create a deepcopy of the current state and persist it to disk.
 
         Args:
-            checkpoint_id: Identifier for the checkpoint.
-            chkpnt_dir: Directory where the checkpoint will be saved.
+            checkpoint_id (str): Identifier for the checkpoint.
+            worker_sample_ids (dict[tuple[int, int], int]): Mapping of worker sample indices to use.
+            chkpnt_dir (Path): Directory where the checkpoint will be saved.
         """
+
         logger.debug("Copying the ChunkDistributor state.")
 
         state_to_save = {
@@ -390,14 +404,22 @@ class ChunkDistributor:
         worker_sample_ids: dict[tuple[int, int], int],
     ) -> None:
         """
-        Runs in a separate process to persist the checkpoint.
+        Persist the checkpoint to disk in a separate process.
+
+        This method adjusts the state as needed, serializes it, and saves it to the specified directory.
+        It also saves the QueryResult state for resuming.
 
         Args:
-            checkpoint_id: Identifier for the checkpoint.
-            chkpnt_dir: Directory where the checkpoint will be saved.
-            state_to_save: The state to save.
-            query_result_copy: The QueryResult to save.
+            checkpoint_id (str): Identifier for the checkpoint.
+            chkpnt_dir (Path): Directory where the checkpoint will be saved.
+            state_to_save (dict[str, Any]): The state dictionary to save.
+            query_result_copy (QueryResult): The QueryResult to save.
+            worker_sample_ids (dict[tuple[int, int], int]): Mapping of worker sample indices per worker.
+
+        Raises:
+            Exception: If an error occurs during checkpointing.
         """
+
         try:
             checkpoint_path = chkpnt_dir / checkpoint_id
             checkpoint_path.mkdir(parents=True, exist_ok=False)
@@ -445,11 +467,16 @@ class ChunkDistributor:
 
     def checkpoint_completed(self, checkpoint_id: str, on_disk: bool) -> bool:
         """
-        Check if the checkpoint has been completed.
+        Check if the checkpoint operation has been completed.
+
+        Depending on the `on_disk` parameter, this method checks whether the checkpointing process
+        has started (if `on_disk` is False) or whether it has finished and the data is fully written to disk
+        (if `on_disk` is True).
 
         Args:
-            checkpoint_id: Identifier for the checkpoint.
-            on_disk: If True, returns True only if the checkpoint has been fully written to disk.
+            checkpoint_id (str): Identifier for the checkpoint.
+            on_disk (bool): If True, returns True only if the checkpoint has been fully written to disk.
+                            If False, returns True as soon as the checkpoint is stored in memory.
 
         Returns:
             bool: True if checkpoint is completed based on the `on_disk` parameter, False otherwise.
@@ -488,11 +515,15 @@ class ChunkDistributor:
         job_id: str,
     ) -> "ChunkDistributor":
         """
-        Create a ChunkDistributor instance from a checkpoint directory.
+        Create a ChunkDistributor instance from a saved checkpoint.
+
+        This method restores the state of the ChunkDistributor and the associated QueryResult
+        from the specified checkpoint directory, allowing for resuming operations from where they left off.
 
         Args:
-            chkpnt_dir: Directory where the checkpoint is stored.
-            job_id: Unique identifier for the job.
+            chkpnt_dir (Path): Directory where the checkpoint is stored.
+            checkpoint_id (str): Identifier for the checkpoint.
+            job_id (str): Unique identifier for the job.
 
         Returns:
             ChunkDistributor: A new ChunkDistributor instance with state restored from the checkpoint.
