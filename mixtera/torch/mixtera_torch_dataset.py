@@ -5,6 +5,7 @@ import sys
 import threading
 from multiprocessing import shared_memory
 from multiprocessing.synchronize import Lock as LockT
+from pathlib import Path
 from typing import Any, Generator
 
 import numpy as np
@@ -24,6 +25,7 @@ class MixteraTorchDataset(IterableDataset):
         query: Query,
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
+        checkpoint_path: Path | None = None,
         execute_query: bool = True,
         _status_shm: shared_memory.SharedMemory | None = None,
         _comp_shm: shared_memory.SharedMemory | None = None,
@@ -37,6 +39,7 @@ class MixteraTorchDataset(IterableDataset):
         self._query_execution_args = query_execution_args
         self._status_shm = _status_shm
         self._comp_shm = _comp_shm
+        self._checkpoint_path = checkpoint_path
 
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
@@ -50,12 +53,23 @@ class MixteraTorchDataset(IterableDataset):
             self.completion_lock = completion_lock
 
         if self._node_id == 0 and self._dp_group_id == 0 and execute_query:
-            logger.info(
-                f"[{os.getpid()}/{threading.get_native_id()}] "
-                + "Since this is node 0 in data parallel group 0, executing query!"
-            )
-            # Execute query on primary node pre-fork, to share the results among all forked workers
-            self._client.execute_query(query, self._query_execution_args)
+            if self._checkpoint_path is None:
+                logger.info(
+                    f"[{os.getpid()}/{threading.get_native_id()}] "
+                    + "Since this is node 0 in data parallel group 0, executing query!"
+                )
+                # Execute query on primary node pre-fork, to share the results among all forked workers
+                self._client.execute_query(query, self._query_execution_args)
+            else:
+                logger.info(f"[{os.getpid()}/{threading.get_native_id()}] " + "Initiating checkpoint restore!")
+                with open(self._checkpoint_path / "mixtera.id", "r", encoding="utf-8") as fp:
+                    checkpoint_id = fp.read().strip()
+
+                logger.info(
+                    f"[{os.getpid()}/{threading.get_native_id()}] "
+                    + f"Restoring checkpoint {checkpoint_id} for job {query.job_id}!"
+                )
+                self._client.restore_checkpoint(query.job_id, checkpoint_id)
 
     def _init_status_shm(self) -> None:
         # This function intiailizes a shared memory segment

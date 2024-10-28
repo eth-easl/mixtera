@@ -151,7 +151,7 @@ def handle_mixtera_checkpoint(
 
     # Send worker status for this dp_group to server
     # Receive back from server checkpoint id, store that in checkpoint_path / mixtera.id
-
+    logger.debug(f"[DP Group {dp_group_id}][Node {node_id}] Reporting worker status {worker_status}")
     checkpoint_id = torch_dataset._client.checkpoint(job_id, dp_group_id, node_id, worker_status)
     logger.debug(f"[DP Group {dp_group_id}][Node {node_id}] Checkpoint ID is {checkpoint_id}")
 
