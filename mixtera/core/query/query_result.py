@@ -65,6 +65,7 @@ class QueryResult:
         #  The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
+        self._restored_from_checkpoint = False
         logger.debug("QueryResult instantiated.")
 
     def _parse_meta(self, mdc: MixteraDataCollection, results: pa.Table) -> dict:
@@ -471,7 +472,7 @@ class QueryResult:
                 next(self._generator)
 
                 assert (
-                    self._num_returns_gen == 0
+                    self._num_returns_gen == 0 or self._restored_from_checkpoint
                 ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
 
             self._num_returns_gen += 1

@@ -146,10 +146,12 @@ class ChunkDistributor:
             assert self._worker_queues is not None
             queue = self._worker_queues[worker_id]
             if not self._return_from_queue[worker_id]:
+                logger.debug("Returning from QueryR>esult.")
                 chunk_to_return = next(self._query_result)
             else:
+                logger.debug(f"Returning from queue for worker {worker_id}")
                 try:
-                    chunk_to_return = queue.get(timeout=2)
+                    chunk_to_return = dill.loads(queue.get(timeout=2))
                 except Empty as e:
                     raise RuntimeError(f"self._return_from_queue = True but empty queue for worker {worker_id}") from e
 
@@ -157,16 +159,17 @@ class ChunkDistributor:
 
             # Put last_chunk into the queue, ensuring the queue length remains 1
             try:
-                queue.get_nowait()  # Remove existing item if any
+                while True:
+                    queue.get(timeout=0.1)
             except Empty:
                 pass
+            assert queue.empty()
             # Put the new chunk into the queue
+            serialized_chunk = dill.dumps(chunk_to_return)
+            queue.put(serialized_chunk, timeout=1)
             if not deserialize:
-                serialized_chunk = dill.dumps(chunk_to_return)
-                queue.put(serialized_chunk)
                 return serialized_chunk
             else:
-                queue.put(chunk_to_return)
                 return chunk_to_return
 
         # Server mode logic (or local with 0 workers)
@@ -353,7 +356,7 @@ class ChunkDistributor:
         checkpoint_path = chkpnt_dir / checkpoint_id
         checkpoint_path.mkdir(parents=True, exist_ok=False)
         logger.debug(f"Saving checkpoint to {checkpoint_path}")
-
+        logger.debug(f"handling worker status = {worker_status} ")
         for worker_id, status in enumerate(worker_status):
             chunk: SerializedResultChunk | ResultChunk
             chunk = last_chunks[worker_id]
@@ -362,15 +365,18 @@ class ChunkDistributor:
                 if is_serialized:
                     chunk = dill.loads(chunk)
                 chunk._samples_to_skip = worker_status[worker_id]
+                logger.debug(f"for {worker_id} skipping {worker_status[worker_id]} samples")
                 chunk = dill.dumps(chunk) if is_serialized else chunk
             last_chunks[worker_id] = chunk
 
         logger.debug("Writing last chunks to disk.")
         with open(checkpoint_path / "last_chunks.pkl", "wb") as f:
-            dill.dump({"_checkpoint_id_counter": self._checkpoint_id_counter.value, "last_chunks": last_chunks}, f)
+            dill.dump({"_checkpoint_id_counter": self._checkpoint_id_counter.value, "last_chunks": last_chunks, "_og_num_workers": self._og_num_workers}, f)
 
         logger.debug("Writing QueryResult to disk.")
-        self._query_result.to_cache(checkpoint_path / "query_result")
+        qr_path = checkpoint_path / "query_result"
+        qr_path.mkdir(exist_ok=False)
+        self._query_result.to_cache(qr_path)
         logger.debug("Wrote local checkpoint.")
         self._checkpoint_info[checkpoint_id]["local"] = True
 
@@ -641,6 +647,7 @@ class ChunkDistributor:
             raise FileNotFoundError(f"QueryResult checkpoint not found at {query_result_path}")
 
         query_result = QueryResult.from_cache(query_result_path)
+        query_result._restored_from_checkpoint = True
 
         logger.debug("Instantiating class.")
 
@@ -693,6 +700,7 @@ class ChunkDistributor:
         with open(last_chunks_path, "rb") as f:
             state = dill.load(f)
             last_chunks = state["last_chunks"]
+            logger.debug(f"lol: {dill.loads(last_chunks[0])._samples_to_skip}")
 
         logger.debug("Loading QueryResult.")
 
@@ -701,13 +709,17 @@ class ChunkDistributor:
             raise FileNotFoundError(f"QueryResult checkpoint not found at {query_result_path}")
 
         query_result = QueryResult.from_cache(query_result_path)
+        query_result._restored_from_checkpoint = True
+
+        logger.debug(f"andreas: {query_result._num_returns_gen}")
+
         logger.debug("Instantiating class..")
 
         num_workers = len(last_chunks)
         chunk_distributor = cls(
             dp_groups=1,
             nodes_per_group=1,
-            num_workers=num_workers,
+            num_workers=state["_og_num_workers"],
             query_result=query_result,
             job_id=job_id,
         )
