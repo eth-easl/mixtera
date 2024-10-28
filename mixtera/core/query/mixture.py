@@ -261,7 +261,7 @@ class MixtureNode:
 
 @dataclass
 class Component:
-    value: str | List[str]
+    value: List[str | int | float]
     weight: float
     submixture: None | MixtureNode = None
 
@@ -307,24 +307,10 @@ class HierarchicalStaticMixture(Mixture):
             if component.submixture is not None:
                 result = self.convert_to_mixture_key_format(component.submixture)
                 for key, value in result.items():
-                    if (
-                        isinstance(component.value, (list[float]))
-                        or isinstance(component.value, (list[str]))
-                        or isinstance(component.value, (list[int]))
-                    ):
-                        key.add_property(mixture.property_name, component.value)
-                    else:
-                        key.add_property(mixture.property_name, [component.value])
+                    key.add_property(mixture.property_name, component.value)
                     mixture_keys[key] = value * component.weight
             else:
-                if (
-                    isinstance(component.value, (list[float]))
-                    or isinstance(component.value, (list[str]))
-                    or isinstance(component.value, (list[int]))
-                ):
-                    mixture_keys[MixtureKey({mixture.property_name: component.value})] = component.weight
-                else:
-                    mixture_keys[MixtureKey({mixture.property_name: [component.value]})] = component.weight
+                mixture_keys[MixtureKey({mixture.property_name: component.value})] = component.weight
         return mixture_keys
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:

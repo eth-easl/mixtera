@@ -8,23 +8,24 @@ class TestMixture(unittest.TestCase):
         # Submixtures for English and German
         english_submixture = MixtureNode(
             property_name="topic",
-            components=[Component(value="law", weight=0.5), Component(value="medicine", weight=0.5)],
+            components=[Component(value=["law"], weight=0.5), Component(value=["medicine"], weight=0.5)],
         )
         german_submixture = MixtureNode(
-            property_name="license", components=[Component(value="CC", weight=0.5), Component(value="MIT", weight=0.5)]
+            property_name="license",
+            components=[Component(value=["CC"], weight=0.5), Component(value=["MIT"], weight=0.5)],
         )
 
         turkish_submixture = MixtureNode(
             property_name="topic",
-            components=[Component(value=["law", "medicine"], weight=0.5), Component(value="physics", weight=0.5)],
+            components=[Component(value=["law", "medicine"], weight=0.5), Component(value=["physics"], weight=0.5)],
         )
 
         # Top-level mixture for language
         language_mixture = MixtureNode(
             property_name="language",
             components=[
-                Component(value="English", weight=0.6, submixture=english_submixture),
-                Component(value="German", weight=0.4, submixture=german_submixture),
+                Component(value=["English"], weight=0.6, submixture=english_submixture),
+                Component(value=["German"], weight=0.4, submixture=german_submixture),
             ],
         )
 
@@ -48,7 +49,7 @@ class TestMixture(unittest.TestCase):
 
         # Testing a single component with a submixture with list of values.
         language_mixture = MixtureNode(
-            property_name="language", components=[Component(value="Turkish", weight=1, submixture=turkish_submixture)]
+            property_name="language", components=[Component(value=["Turkish"], weight=1, submixture=turkish_submixture)]
         )
 
         mixture = HierarchicalStaticMixture(
