@@ -110,7 +110,7 @@ class TestResultChunk(unittest.TestCase):
         results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_window_mixture.assert_called_once_with(mock_iterators)
-        self.assertEqual(results, ["sample1", "sample2"])
+        self.assertEqual(results, [(0, "sample1"), (1, "sample2")])
 
     def test_iterate_samples_per_window_mixture_false(self):
         result_chunk = ResultChunk(
@@ -132,7 +132,7 @@ class TestResultChunk(unittest.TestCase):
         results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_overall_mixture.assert_called_once_with(mock_iterators)
-        self.assertEqual(results, ["sample3", "sample4"])
+        self.assertEqual(results, [(0, "sample3"), (1, "sample4")])
 
     def test_get_active_iterators_st(self):
         result_chunk = ResultChunk(
@@ -429,6 +429,29 @@ class TestResultChunk(unittest.TestCase):
 
         # Asserting that the method returns the expected result
         self.assertEqual(element_counts, expected_element_counts)
+
+    def test_iterate_samples_with_samples_to_skip(self):
+        # Test that samples are skipped correctly
+        result_chunk = ResultChunk(
+            self.chunker_index,
+            self.dataset_type_dict,
+            self.file_path_dict,
+            self.parsing_func_dict,
+            self.chunk_size,
+            None,
+        )
+
+        result_chunk._samples_to_skip = 2
+        result_chunk._per_window_mixture = False
+        mock_iterators = [("property2", iter(["sample1", "sample2", "sample3", "sample4"]))]
+        result_chunk._init_active_iterators = MagicMock(return_value=mock_iterators)
+        result_chunk._iterate_overall_mixture = MagicMock()
+        result_chunk._iterate_overall_mixture.return_value = iter(["sample1", "sample2", "sample3", "sample4"])
+
+        results = list(result_chunk._iterate_samples())
+
+        result_chunk._iterate_overall_mixture.assert_called_once_with(mock_iterators)
+        self.assertEqual(results, [(2, "sample3"), (3, "sample4")])
 
 
 if __name__ == "__main__":
