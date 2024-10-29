@@ -64,6 +64,13 @@ class LocalStub(MixteraClient):
 
     def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
         assert args.dp_groups > 0 and args.nodes_per_group > 0 and args.num_workers >= 0
+
+        if query.job_id in self._training_query_map:
+            # Early return to fail
+            # If you want to run a job again, use `restore_checkpoint`.`
+            logger.warning(f"We already have a query for job {query.job_id}!")
+            return False
+
         cache_path = None
         if (cached_results := self._query_cache.get_queryresults_if_cached(query)) is not None:
             query.results = cached_results[0]

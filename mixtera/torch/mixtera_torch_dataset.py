@@ -79,7 +79,11 @@ class MixteraTorchDataset(IterableDataset):
                     + "Since this is node 0 in data parallel group 0, executing query!"
                 )
                 # Execute query on primary node pre-fork, to share the results among all forked workers
-                self._client.execute_query(query, self._query_execution_args)
+                if not self._client.execute_query(query, self._query_execution_args):
+                    raise RuntimeError(
+                        f"[{os.getpid()}/{threading.get_native_id()}]"
+                        + "[Node0/DP0]Query execution at server not successful."
+                    )
             else:
                 logger.info(f"[{os.getpid()}/{threading.get_native_id()}] " + "Initiating checkpoint restore!")
                 with open(self._checkpoint_path / "mixtera.id", "r", encoding="utf-8") as fp:
@@ -177,12 +181,12 @@ class MixteraTorchDataset(IterableDataset):
                     self._status_shm.unlink()
                 self._status_shm = None
         except FileNotFoundError as e:
-            logger.error(
+            logger.warning(
                 f"FileNotFoundError during shared memory cleanup: {e}\n"
                 + "This indicates multiple workers cleaned up the shm, which should not happen."
             )
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Error during shared memory cleanup: {e}")
+            logger.warning(f"Error during shared memory cleanup: {e}")
 
         try:
             if self._comp_shm is not None:
@@ -192,12 +196,12 @@ class MixteraTorchDataset(IterableDataset):
                     self._comp_shm.unlink()
                 self._comp_shm = None
         except FileNotFoundError as e:
-            logger.error(
+            logger.warning(
                 f"FileNotFoundError during shared memory cleanup: {e}\n"
                 + "This indicates multiple workers cleaned up the shm, which should not happen."
             )
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Error during shared memory cleanup: {e}")
+            logger.warning(f"Error during shared memory cleanup: {e}")
 
         if any_close:
             logger.info(f"[Worker {self.worker_id}] Shared memory closed.")
