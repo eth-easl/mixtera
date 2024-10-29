@@ -484,4 +484,4 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
             ],
             any_order=False,
         )
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=900)

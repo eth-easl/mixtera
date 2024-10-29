@@ -654,7 +654,7 @@ class ServerConnection:
         await write_utf8_string(chkpnt_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Read success flag from the server (if needed)
-        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 15)
         if not bool(success):
             logger.error(f"Failed to restore checkpoint {chkpnt_id} for job {job_id}")
         else:
