@@ -547,7 +547,8 @@ class QueryResult:
         # Handle attributes that should not be stored via pickle/dill
         state = self.__dict__.copy()
         for attrib in ["_lock", "_index", "_generator", "_chunker_index"]:
-            del state[attrib]
+            if attrib in state:
+                del state[attrib]
 
         logger.debug("Removed unpickable attributed.")
 
@@ -573,8 +574,56 @@ class QueryResult:
 
         logger.debug("Stored chunker index.")
 
+    def replay(self, num_chunks_replay: int) -> None:
+        if num_chunks_replay < 1:
+            return
+
+        logger.debug(f"Starting to replay {num_chunks_replay} chunks.")
+        mixture_log = self._mixture_log
+
+        mixture_log_index = 0
+        num_mixture_changes = len(mixture_log)
+
+        # Since there's always an entry at chunk index 0, set the initial mixture
+        initial_mixture = mixture_log[0][1]
+        assert initial_mixture is not None
+
+        self.update_mixture(initial_mixture)
+
+        mixture_log_index += 1
+
+        # Initialize next mixture change, if any
+        if mixture_log_index < num_mixture_changes:
+            next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
+            next_mixture = mixture_log[mixture_log_index][1]
+        else:
+            next_mixture_change_chunk_index = None
+            next_mixture = None
+
+        # Replay the chunks
+        for i in range(num_chunks_replay):
+            # Update mixture if the current chunk index matches a mixture change point
+            if next_mixture_change_chunk_index is not None and i == next_mixture_change_chunk_index:
+                assert next_mixture is not None
+                self.update_mixture(next_mixture)
+                mixture_log_index += 1
+                if mixture_log_index < num_mixture_changes:
+                    next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
+                    next_mixture = mixture_log[mixture_log_index][1]
+                else:
+                    next_mixture_change_chunk_index = None
+
+            try:
+                _ = next(self)
+            except StopIteration as e:
+                raise RuntimeError(f"Generator exhausted during replay at chunk index {i} - should not happen!") from e
+
+        logger.debug("Finished chunk replay.")
+        assert self._num_returns_gen == num_chunks_replay
+        assert self._index.get_obj().value == num_chunks_replay
+
     @classmethod
-    def from_cache(cls, path: Path) -> "QueryResult":
+    def from_cache(cls, path: Path, replay: bool = True) -> "QueryResult":
         """
         Deserialize the QueryResult object from a file at the given path.
         The _chunker_index is loaded using klepto.dir_archive.
@@ -622,50 +671,7 @@ class QueryResult:
 
         logger.debug("Loaded chunker index.")
 
-        if num_chunks_replay > 0:
-            logger.debug(f"Starting to replay {num_chunks_replay} chunks.")
-            mixture_log = query_result._mixture_log
-            mixture_log_index = 0
-            num_mixture_changes = len(mixture_log)
-
-            # Since there's always an entry at chunk index 0, set the initial mixture
-            initial_mixture = mixture_log[0][1]
-            assert initial_mixture is not None
-
-            query_result.update_mixture(initial_mixture)
-
-            mixture_log_index += 1
-
-            # Initialize next mixture change, if any
-            if mixture_log_index < num_mixture_changes:
-                next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
-                next_mixture = mixture_log[mixture_log_index][1]
-            else:
-                next_mixture_change_chunk_index = None
-                next_mixture = None
-
-            # Replay the chunks
-            for i in range(num_chunks_replay):
-                # Update mixture if the current chunk index matches a mixture change point
-                if next_mixture_change_chunk_index is not None and i == next_mixture_change_chunk_index:
-                    assert next_mixture is not None
-                    query_result.update_mixture(next_mixture)
-                    mixture_log_index += 1
-                    if mixture_log_index < num_mixture_changes:
-                        next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
-                        next_mixture = mixture_log[mixture_log_index][1]
-                    else:
-                        next_mixture_change_chunk_index = None
-
-                try:
-                    _ = next(query_result)
-                except StopIteration as e:
-                    raise RuntimeError(
-                        f"Generator exhausted during replay at chunk index {i} - should not happen!"
-                    ) from e
-
-            logger.debug("Finished chunk replay.")
-            assert query_result._num_returns_gen == num_chunks_replay
-            assert query_result._index.get_obj().value == num_chunks_replay
+        if num_chunks_replay > 0 and replay:
+            query_result.replay(num_chunks_replay)
 
         return query_result

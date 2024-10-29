@@ -82,7 +82,7 @@ class TestLocalStub(unittest.TestCase):
         args = QueryExecutionArgs(mixture=mixture)
         result = self.local_stub.execute_query(query, args)
         query.execute.assert_called_once_with(mock_mdc, mixture)
-        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)
+        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1, None)
         self.assertTrue(result)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection")
@@ -99,7 +99,7 @@ class TestLocalStub(unittest.TestCase):
         result = self.local_stub.execute_query(query, args)
 
         query.execute.assert_called_once_with(mock_mdc, mixture)
-        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)
+        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1, None)
         self.assertFalse(result)
 
     def test_is_remote(self):

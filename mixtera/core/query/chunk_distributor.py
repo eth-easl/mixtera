@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import shutil
 import threading
 from copy import deepcopy
 from pathlib import Path
@@ -30,6 +31,7 @@ class ChunkDistributor:
         num_workers: int,
         query_result: QueryResult,
         job_id: str,
+        cached_query: Path | None = None,
     ) -> None:
         """
         Initialize the ChunkDistributor.
@@ -82,6 +84,7 @@ class ChunkDistributor:
         self._checkpoint_id_counter = mp.Value("i", 0)  # Counter to assign unique checkpoint IDs
         self._checkpoint_info: dict[str, dict[str, Any]] = {}  # Info for each checkpoint process on its status
         self._current_checkpoint_id: str | None = None
+        self._cached_query = cached_query
 
     def next_chunk_for(
         self, dp_group: int, node_id: int, worker_id: int, deserialize: bool
@@ -366,11 +369,24 @@ class ChunkDistributor:
             "_checkpoint_id_counter": self._checkpoint_id_counter.value,
         }
 
-        logger.debug("Copying the QueryResult.")
+        # The fundamental issue is that with multiprocessing.Spawn,
+        # the QueryResult will be pickled when we start another process.
+        # This means we cannot store the result in another process - the expensive operation is the pickling.
+        directory_to_copy = None
+        if self._checkpoint_id_counter.value == 1:
+            logger.debug("This is the first checkpoint.")
+            if self._cached_query is not None:
+                logger.debug("Copying cached QueryResult to setup initial checkpoint in subprocess.")
+                directory_to_copy = self._cached_query
+            else:
+                logger.debug("Query has not been cached - pickling now. This may take some time.")
+                self._query_result.to_cache(chkpnt_dir / "queryresult")
+            logger.debug("Handled pickling of QueryResult.")
 
-        _lock, _index = self._query_result._lock, self._query_result._index
-        del self._query_result._lock
-        del self._query_result._index
+        logger.debug("Preparing the QueryResult properties.")
+
+        mixture_log = deepcopy(self._query_result._mixture_log)
+        returns_gen = self._query_result._num_returns_gen
 
         logger.debug("Spinning up the persisting process.")
 
@@ -383,22 +399,24 @@ class ChunkDistributor:
                 checkpoint_id,
                 chkpnt_dir,
                 state_to_save,
-                self._query_result,
+                mixture_log,
+                returns_gen,
                 worker_sample_ids,
+                directory_to_copy,
             ),
         )
         self._checkpoint_info[checkpoint_id]["process"] = p
         p.start()
-        self._query_result._lock = _lock
-        self._query_result._index = _index
 
     @staticmethod
     def _persist_checkpoint_process(
         checkpoint_id: str,
         chkpnt_dir: Path,
         state_to_save: dict[str, Any],
-        query_result_copy: QueryResult,
+        mixture_log: list[tuple[int, Any]],
+        num_returns_gen: int,
         worker_sample_ids: dict[tuple[int, int], int],
+        directory_to_copy: Path | None,
     ) -> None:
         """
         Persist the checkpoint to disk in a separate process.
@@ -418,6 +436,11 @@ class ChunkDistributor:
         """
 
         try:
+            if directory_to_copy is not None:
+                logger.debug("Starting to copy directory in process.")
+                shutil.copytree(directory_to_copy, chkpnt_dir / "queryresult")
+                logger.debug("Directory copied..")
+
             checkpoint_path = chkpnt_dir / checkpoint_id
             checkpoint_path.mkdir(parents=True, exist_ok=False)
 
@@ -453,11 +476,13 @@ class ChunkDistributor:
             with open(checkpoint_path / "chunk_distributor_state.pkl", "wb") as f:
                 dill.dump(state_to_save, f, protocol=dill.HIGHEST_PROTOCOL)
 
-            logger.info(f"Checkpointing the QueryResult with num returns = {query_result_copy._num_returns_gen}")
-            qr_path = checkpoint_path / "query_result"
-            qr_path.mkdir(exist_ok=False)
-            query_result_copy.to_cache(qr_path)
+            logger.info(f"Checkpointing the mixture log and num returns with num returns = {num_returns_gen}")
+            with open(checkpoint_path / "query_result_state.pkl", "wb") as f:
+                dill.dump(
+                    {"num_returns_gen": num_returns_gen, "mixture_log": mixture_log}, f, protocol=dill.HIGHEST_PROTOCOL
+                )
 
+            logger.debug("Wrote checkpoint.")
         except Exception as e:
             logger.error(f"Error during checkpointing: {e}")
             raise e
@@ -531,24 +556,30 @@ class ChunkDistributor:
         """
         # Determine whether the checkpoint is from local mode or server mode
         chkpnt_dir = chkpnt_dir / checkpoint_id
-        logger.debug(f"Loading checkpoint from {chkpnt_dir}")
+        query_dir = chkpnt_dir.parent / "queryresult"
 
+        logger.debug(f"Loading checkpoint from {chkpnt_dir}")
         logger.debug("Loading ChunkDistributor state.")
         checkpoint_state_path = chkpnt_dir / "chunk_distributor_state.pkl"
+        query_result_state_path = chkpnt_dir / "query_result_state.pkl"
 
         if not checkpoint_state_path.exists():
             raise FileNotFoundError(f"Checkpoint state file not found at {checkpoint_state_path}")
+        if not query_result_state_path.exists():
+            raise FileNotFoundError(f"QueryResult state file not found at {query_result_state_path}")
+        if not query_dir.exists():
+            raise FileNotFoundError(f"QueryResult directory not found at {query_dir}")
 
+        logger.debug("Loading states.")
         with open(checkpoint_state_path, "rb") as f:
             state = dill.load(f)
+        with open(query_result_state_path, "rb") as f:
+            query_result_state = dill.load(f)
 
         logger.debug("Loading QueryResult.")
-        # Load the QueryResult
-        query_result_path = chkpnt_dir / "query_result"
-        if not query_result_path.exists():
-            raise FileNotFoundError(f"QueryResult checkpoint not found at {query_result_path}")
-
-        query_result = QueryResult.from_cache(query_result_path)
+        query_result = QueryResult.from_cache(query_dir, replay=False)
+        query_result._mixture_log = query_result_state["mixture_log"]
+        query_result.replay(query_result_state["num_returns_gen"])
 
         logger.debug("Instantiating class.")
 
@@ -571,5 +602,7 @@ class ChunkDistributor:
         chunk_distributor._worker_statuses = {}
         chunk_distributor._nodes_reported = set()
         chunk_distributor._checkpoint_id_counter.value = state["_checkpoint_id_counter"]
+
+        logger.debug("Loaded Distributor from checkpoint.")
 
         return chunk_distributor
