@@ -307,10 +307,10 @@ class HierarchicalStaticMixture(Mixture):
             if component.submixture is not None:
                 result = self.convert_to_mixture_key_format(component.submixture)
                 for key, value in result.items():
-                    key.add_property(mixture.property_name, component.value)
+                    key.add_property(mixture.property_name, component.values)
                     mixture_keys[key] = value * component.weight
             else:
-                mixture_keys[MixtureKey({mixture.property_name: component.value})] = component.weight
+                mixture_keys[MixtureKey({mixture.property_name: component.values})] = component.weight
         return mixture_keys
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
