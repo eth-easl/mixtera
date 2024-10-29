@@ -1,3 +1,3 @@
-from .server_connection import ServerConnection  # noqa: F401
+from .server_connection import ClientFeedback, ServerConnection  # noqa: F401
 
-__all__ = ["ServerConnection"]
+__all__ = ["ServerConnection", "ClientFeedback"]

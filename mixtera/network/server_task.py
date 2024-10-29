@@ -13,3 +13,4 @@ class ServerTask(IntEnum):
     LIST_DATASETS = auto()
     REMOVE_DATASET = auto()
     ADD_PROPERTY = auto()
+    RECEIVE_FEEDBACK = auto()
