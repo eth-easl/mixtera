@@ -23,8 +23,8 @@ class MixtureKey:
         self.properties = properties
         self._hash: int | None = None
 
-    def add_property(self, property_name: str, property_value: list[str | int | float]) -> None:
-        self.properties[property_name] = property_value
+    def add_property(self, property_name: str, property_values: list[str | int | float]) -> None:
+        self.properties[property_name] = property_values
         self._hash = None
 
     def __eq__(self, other: object) -> bool:
@@ -256,12 +256,12 @@ class StaticMixture(Mixture):
 @dataclass
 class MixtureNode:
     property_name: str
-    components: List["Component"]
+    components: list["Component"]
 
 
 @dataclass
 class Component:
-    value: List[str | int | float]
+    values: List[str | int | float]
     weight: float
     submixture: None | MixtureNode = None
 
