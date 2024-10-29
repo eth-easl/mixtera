@@ -259,6 +259,69 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def checkpoint(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_status: list[int], server: bool = False
+    ) -> str:
+        """
+        Initiates a checkpoint operation for the specified `job_id`. All nodes need to inform Mixtera
+        about their current status via `worker_status`, which typically contains the indices of the samples
+        each data loader worker is processing. The `MixteraTorchDataset` has the `worker_status` property
+        for this purpose. You can use helper functions in `mixtera.utils.checkpointing` from your training loop.
+
+        Args:
+            job_id (str): The identifier of the job to checkpoint.
+            dp_group_id (int): The data parallel group ID performing the checkpoint.
+            node_id (int): The node ID where the checkpoint is being initiated.
+            worker_status (list[int]): A list containing the current status of each data loader worker.
+            server (bool, optional): If `True`, the checkpoint is being performed on the server side.
+                                    Defaults to `False`.
+
+        Returns:
+            str: The identifier of the created checkpoint.
+
+        Raises:
+            RuntimeError: If the checkpoint operation fails.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
+        """
+        Checks whether the checkpoint `chkpnt_id` for `job_id` has been fully written.
+
+        Args:
+            job_id (str): The identifier of the job to check.
+            chkpnt_id (str): The identifier of the checkpoint to verify.
+            on_disk (bool): If `True`, returns `True` only if the checkpoint has been persisted to disk.
+                            If `False`, returns `True` as soon as the checkpoint is stored in memory.
+
+        Returns:
+            bool: `True` if the checkpoint is complete (and written to disk if `on_disk` is `True`), `False` otherwise.
+
+        Raises:
+            RuntimeError: If there is an error checking the checkpoint status.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        """
+        Restores the checkpoint `chkpnt_id` for `job_id`. After restoration, functions like
+        `stream_results` can be called for this job to resume processing from the checkpoint.
+
+        Args:
+            job_id (str): The identifier of the job to restore.
+            chkpnt_id (str): The identifier of the checkpoint to restore.
+
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If the checkpoint restoration fails.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
     def is_remote(self) -> bool:
         """
         Checks whether the Mixtera client object at hand uses a server or local MDC.

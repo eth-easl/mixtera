@@ -1,6 +1,7 @@
 from copy import deepcopy
 from multiprocessing import shared_memory
 from multiprocessing.synchronize import Lock as LockT
+from pathlib import Path
 from typing import Any, Generator, Tuple
 
 import datasets
@@ -21,6 +22,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         query: Query,
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
+        checkpoint_path: Path | None = None,
         _shard_call_count: int = 0,
         _status_shm: shared_memory.SharedMemory | None = None,
         _comp_shm: shared_memory.SharedMemory | None = None,
@@ -32,6 +34,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
             query,
             query_execution_args,
             result_streaming_args,
+            checkpoint_path=checkpoint_path,
             execute_query=_shard_call_count == 0,
             _status_shm=_status_shm,
             _comp_shm=_comp_shm,
@@ -128,8 +131,13 @@ class MixteraHFDataset(datasets.IterableDataset):
         query: Query,
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
+        checkpoint_path: Path | None = None,
     ):
-        super().__init__(_MixteraHFIterable(client, query, query_execution_args, result_streaming_args))
+        super().__init__(
+            _MixteraHFIterable(
+                client, query, query_execution_args, result_streaming_args, checkpoint_path=checkpoint_path
+            )
+        )
         self.info.features = datasets.Features({"text": datasets.Value(dtype="string")})
         self._ex_iterable: _MixteraHFIterable
 

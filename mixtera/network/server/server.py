@@ -249,6 +249,46 @@ class MixteraServer:
         )
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
+    async def _checkpoint(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        dp_group_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        node_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+
+        worker_status_length = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        worker_status = []
+        for _ in range(worker_status_length):
+            status = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+            worker_status.append(status)
+
+        chkpnt_id = self._local_stub.checkpoint(job_id, dp_group_id, node_id, worker_status, server=True)
+
+        await write_utf8_string(chkpnt_id, NUM_BYTES_FOR_SIZES, writer)
+
+    async def _checkpoint_completed(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+
+        on_disk_flag = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        on_disk = bool(on_disk_flag)
+
+        is_completed = self._local_stub.checkpoint_completed(job_id, chkpnt_id, on_disk)
+
+        await write_int(int(is_completed), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+    async def _restore_checkpoint(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+
+        self._local_stub.restore_checkpoint(job_id, chkpnt_id)
+
+        async with self._chunk_distributor_map_lock:
+            # We have a new distributor object.
+            self._chunk_distributor_map[job_id] = self._local_stub._get_query_chunk_distributor(job_id)
+
+        success = True
+        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
         Dispatches client requests to the appropriate handlers based on the task ID.
@@ -286,6 +326,12 @@ class MixteraServer:
                 await self._remove_dataset(reader, writer)
             elif task == ServerTask.ADD_PROPERTY:
                 await self._add_property(reader, writer)
+            elif task == ServerTask.CHECKPOINT:
+                await self._checkpoint(reader, writer)
+            elif task == ServerTask.CHECKPOINT_COMPLETED:
+                await self._checkpoint_completed(reader, writer)
+            elif task == ServerTask.RESTORE_CHECKPOINT:
+                await self._restore_checkpoint(reader, writer)
             else:
                 logger.error(f"Client sent unsupport task {task}")
 

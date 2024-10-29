@@ -22,9 +22,9 @@ class QueryCache:
         query_string = str(query)
         return hashlib.sha256(query_string.encode()).hexdigest()
 
-    def cache_query(self, query: Query) -> None:
+    def cache_query(self, query: Query) -> None | Path:
         if not self.enabled:
-            return
+            return None
 
         query_hash = self._get_query_hash(query)
         hash_dir = self.directory / query_hash
@@ -52,8 +52,9 @@ class QueryCache:
         query.results.to_cache(query_dir)
 
         logger.debug(f"QueryResult saved to {query_dir}")
+        return query_dir
 
-    def get_queryresults_if_cached(self, query: Query) -> None | QueryResult:
+    def get_queryresults_if_cached(self, query: Query) -> None | tuple[QueryResult, Path]:
         if not self.enabled:
             return None
 
@@ -96,7 +97,7 @@ class QueryCache:
                     logger.debug("Returning results from cache!")
                     # Load the QueryResult from the cache
                     query_result = QueryResult.from_cache(query_dir)
-                    return query_result
+                    return query_result, query_dir
 
                 logger.debug(f"Cached query does not match: '{cached_query_str}' != '{str(query)}'.")
         return None

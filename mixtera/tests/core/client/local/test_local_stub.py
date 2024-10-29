@@ -18,6 +18,7 @@ class TestLocalStub(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint:disable=consider-using-with
         self.directory = Path(self.temp_dir.name)
         self.local_stub = MixteraClient.from_directory(self.directory)
+        self.job_id = "test_job_id"
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -81,7 +82,7 @@ class TestLocalStub(unittest.TestCase):
         args = QueryExecutionArgs(mixture=mixture)
         result = self.local_stub.execute_query(query, args)
         query.execute.assert_called_once_with(mock_mdc, mixture)
-        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)
+        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1, None)
         self.assertTrue(result)
 
     @patch("mixtera.core.datacollection.MixteraDataCollection")
@@ -98,7 +99,7 @@ class TestLocalStub(unittest.TestCase):
         result = self.local_stub.execute_query(query, args)
 
         query.execute.assert_called_once_with(mock_mdc, mixture)
-        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1)
+        self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1, None)
         self.assertFalse(result)
 
     def test_is_remote(self):
@@ -191,6 +192,55 @@ class TestLocalStub(unittest.TestCase):
         result = self.local_stub._get_query_result(job_id)
         mock_wait_for_key.assert_called_once_with(self.local_stub._training_query_map, job_id, 60.0)
         self.assertEqual(result, query.results)
+
+    def test_checkpoint(self):
+        dp_group_id = 0
+        node_id = 0
+        worker_status = [1, 2, 3]
+        expected_checkpoint_id = "test_checkpoint_id"
+
+        mock_chunk_distributor = MagicMock()
+        mock_chunk_distributor.checkpoint.return_value = expected_checkpoint_id
+
+        self.local_stub._get_query_chunk_distributor = MagicMock(return_value=mock_chunk_distributor)
+
+        result = self.local_stub.checkpoint(self.job_id, dp_group_id, node_id, worker_status)
+
+        self.local_stub._get_query_chunk_distributor.assert_called_once_with(self.job_id)
+        mock_chunk_distributor.checkpoint.assert_called_once_with(
+            dp_group_id, node_id, worker_status, self.local_stub.checkpoint_directory / self.job_id, False
+        )
+        self.assertEqual(result, expected_checkpoint_id)
+
+    def test_checkpoint_completed(self):
+        chkpnt_id = "test_checkpoint_id"
+        on_disk = True
+
+        mock_chunk_distributor = MagicMock()
+        mock_chunk_distributor.checkpoint_completed.return_value = True
+
+        self.local_stub._get_query_chunk_distributor = MagicMock(return_value=mock_chunk_distributor)
+
+        result = self.local_stub.checkpoint_completed(self.job_id, chkpnt_id, on_disk)
+
+        self.local_stub._get_query_chunk_distributor.assert_called_once_with(self.job_id)
+        mock_chunk_distributor.checkpoint_completed.assert_called_once_with(chkpnt_id, on_disk)
+        self.assertTrue(result)
+
+    @patch("mixtera.core.client.local.local_stub.ChunkDistributor")
+    def test_restore_checkpoint(self, mock_chunk_distributor_class):
+        chkpnt_id = "test_checkpoint_id"
+        mock_chunk_distributor = MagicMock()
+        mock_chunk_distributor_class.from_checkpoint.return_value = mock_chunk_distributor
+
+        with patch.object(self.local_stub, "_training_query_map_lock"):
+            self.local_stub.restore_checkpoint(self.job_id, chkpnt_id)
+
+        mock_chunk_distributor_class.from_checkpoint.assert_called_once_with(
+            self.local_stub.checkpoint_directory / self.job_id, chkpnt_id, self.job_id
+        )
+        self.assertIn(self.job_id, self.local_stub._training_query_map)
+        self.assertEqual(self.local_stub._training_query_map[self.job_id][0], mock_chunk_distributor)
 
 
 if __name__ == "__main__":

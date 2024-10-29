@@ -1,3 +1,4 @@
+import atexit
 import multiprocessing as mp
 import os
 import random
@@ -5,6 +6,7 @@ import sys
 import threading
 from multiprocessing import shared_memory
 from multiprocessing.synchronize import Lock as LockT
+from pathlib import Path
 from typing import Any, Generator
 
 import numpy as np
@@ -16,6 +18,25 @@ from mixtera.core.query.mixture import Mixture
 from numpy.typing import NDArray
 from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable=import-error,no-name-in-module
 
+_shared_memory_names: set[str] = set()
+
+
+def _cleanup_all_shared_memory() -> None:
+    """Atexit handler to clean up all shared memory segments."""
+    for shm_name in _shared_memory_names:
+        try:
+            shm = shared_memory.SharedMemory(name=shm_name)
+            shm.close()
+            shm.unlink()
+            logger.info(f"Shared memory {shm_name} cleaned up in atexit handler.")
+        except FileNotFoundError:
+            logger.debug(f"Shared memory {shm_name} already unlinked.")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning(f"Error cleaning up shared memory {shm_name} in atexit handler: {e}")
+
+
+atexit.register(_cleanup_all_shared_memory)
+
 
 class MixteraTorchDataset(IterableDataset):
     def __init__(
@@ -24,6 +45,7 @@ class MixteraTorchDataset(IterableDataset):
         query: Query,
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
+        checkpoint_path: Path | None = None,
         execute_query: bool = True,
         _status_shm: shared_memory.SharedMemory | None = None,
         _comp_shm: shared_memory.SharedMemory | None = None,
@@ -37,6 +59,7 @@ class MixteraTorchDataset(IterableDataset):
         self._query_execution_args = query_execution_args
         self._status_shm = _status_shm
         self._comp_shm = _comp_shm
+        self._checkpoint_path = checkpoint_path
 
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
@@ -50,12 +73,27 @@ class MixteraTorchDataset(IterableDataset):
             self.completion_lock = completion_lock
 
         if self._node_id == 0 and self._dp_group_id == 0 and execute_query:
-            logger.info(
-                f"[{os.getpid()}/{threading.get_native_id()}] "
-                + "Since this is node 0 in data parallel group 0, executing query!"
-            )
-            # Execute query on primary node pre-fork, to share the results among all forked workers
-            self._client.execute_query(query, self._query_execution_args)
+            if self._checkpoint_path is None:
+                logger.info(
+                    f"[{os.getpid()}/{threading.get_native_id()}] "
+                    + "Since this is node 0 in data parallel group 0, executing query!"
+                )
+                # Execute query on primary node pre-fork, to share the results among all forked workers
+                if not self._client.execute_query(query, self._query_execution_args):
+                    raise RuntimeError(
+                        f"[{os.getpid()}/{threading.get_native_id()}]"
+                        + "[Node0/DP0]Query execution at server not successful."
+                    )
+            else:
+                logger.info(f"[{os.getpid()}/{threading.get_native_id()}] " + "Initiating checkpoint restore!")
+                with open(self._checkpoint_path / "mixtera.id", "r", encoding="utf-8") as fp:
+                    checkpoint_id = fp.read().strip()
+
+                logger.info(
+                    f"[{os.getpid()}/{threading.get_native_id()}] "
+                    + f"Restoring checkpoint {checkpoint_id} for job {query.job_id}!"
+                )
+                self._client.restore_checkpoint(query.job_id, checkpoint_id)
 
     def _init_status_shm(self) -> None:
         # This function intiailizes a shared memory segment
@@ -95,6 +133,9 @@ class MixteraTorchDataset(IterableDataset):
         self.status_shm_name = status_shm_name
         self.comp_shm_name = comp_shm_name
 
+        _shared_memory_names.add(status_shm_name)
+        _shared_memory_names.add(comp_shm_name)
+
         logger.debug(f"[Process {os.getpid()}] Created shared memory objects for {self.num_workers} workers")
 
     @property
@@ -131,34 +172,41 @@ class MixteraTorchDataset(IterableDataset):
 
     def _cleanup_shared_memory(self, unlink: bool) -> None:
         # Attempt to close and unlink shared memory segments
+        any_close = False
         try:
-            any_close = False
             if self._status_shm is not None:
                 any_close = True
                 self._status_shm.close()
                 if unlink:
                     self._status_shm.unlink()
                 self._status_shm = None
+        except FileNotFoundError as e:
+            logger.warning(
+                f"FileNotFoundError during shared memory cleanup: {e}\n"
+                + "This indicates multiple workers cleaned up the shm, which should not happen."
+            )
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning(f"Error during shared memory cleanup: {e}")
 
+        try:
             if self._comp_shm is not None:
                 any_close = True
                 self._comp_shm.close()
                 if unlink:
                     self._comp_shm.unlink()
                 self._comp_shm = None
-
-            if any_close:
-                logger.info(f"[Worker {self.worker_id}] Shared memory closed.")
-                if unlink:
-                    logger.info(f"[Worker {self.worker_id}] Shared memory unlinked.")
-
         except FileNotFoundError as e:
-            logger.error(
+            logger.warning(
                 f"FileNotFoundError during shared memory cleanup: {e}\n"
                 + "This indicates multiple workers cleaned up the shm, which should not happen."
             )
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Error during shared memory cleanup: {e}")
+            logger.warning(f"Error during shared memory cleanup: {e}")
+
+        if any_close:
+            logger.info(f"[Worker {self.worker_id}] Shared memory closed.")
+            if unlink:
+                logger.info(f"[Worker {self.worker_id}] Shared memory unlinked.")
 
     @property
     def worker_status(self) -> list[int] | None:
