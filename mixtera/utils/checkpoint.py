@@ -189,24 +189,14 @@ def handle_mixtera_checkpoint(
     # Receive back from server checkpoint id, store that in checkpoint_path / mixtera.id
     logger.debug(f"[DP Group {dp_group_id}][Node {node_id}] Reporting worker status {worker_status}")
     checkpoint_id = torch_dataset._client.checkpoint(job_id, dp_group_id, node_id, worker_status)
-    logger.debug(f"[DP Group {dp_group_id}][Node {node_id}] Checkpoint ID is {checkpoint_id}")
 
     if node_id == 0 and dp_group_id == 0:
+        logger.debug(f"[DP Group {dp_group_id}][Node {node_id}] Checkpoint ID is {checkpoint_id}")
         with open(checkpoint_path / "mixtera.id", "w+", encoding="utf-8") as fp:
             fp.write(checkpoint_id)
 
     while not torch_dataset._client.checkpoint_completed(job_id, checkpoint_id, wait_for_disk):
         sleep(0.1)
-
-    # Sanity check (because only a single node actually writes the file)
-    with open(checkpoint_path / "mixtera.id", "r", encoding="utf-8") as fp:
-        written_chkpnt = fp.read().strip()
-
-    if written_chkpnt != checkpoint_id:
-        raise RuntimeError(
-            f"[DP Group {dp_group_id}][Node {node_id}]"
-            + f"Inconsistent checkpoint state: {written_chkpnt} vs {checkpoint_id}"
-        )
 
     if node_id == 0 and dp_group_id == 0:
         logger.info("Finalized Mixtera Checkpoint.")

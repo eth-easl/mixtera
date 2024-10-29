@@ -441,6 +441,10 @@ class ChunkDistributor:
                 shutil.copytree(directory_to_copy, chkpnt_dir / "queryresult")
                 logger.debug("Directory copied..")
 
+            assert (
+                chkpnt_dir / "queryresult"
+            ).exists(), f"QueryResult directory {(chkpnt_dir / 'queryresult')} should exist now!"
+
             checkpoint_path = chkpnt_dir / checkpoint_id
             checkpoint_path.mkdir(parents=True, exist_ok=False)
 
