@@ -1,3 +1,4 @@
+import atexit
 import multiprocessing as mp
 import os
 import random
@@ -16,6 +17,25 @@ from mixtera.core.query import Query
 from mixtera.core.query.mixture import Mixture
 from numpy.typing import NDArray
 from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable=import-error,no-name-in-module
+
+_shared_memory_names: set[str] = set()
+
+
+def _cleanup_all_shared_memory() -> None:
+    """Atexit handler to clean up all shared memory segments."""
+    for shm_name in _shared_memory_names:
+        try:
+            shm = shared_memory.SharedMemory(name=shm_name)
+            shm.close()
+            shm.unlink()
+            logger.info(f"Shared memory {shm_name} cleaned up in atexit handler.")
+        except FileNotFoundError:
+            logger.debug(f"Shared memory {shm_name} already unlinked.")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning(f"Error cleaning up shared memory {shm_name} in atexit handler: {e}")
+
+
+atexit.register(_cleanup_all_shared_memory)
 
 
 class MixteraTorchDataset(IterableDataset):
@@ -109,6 +129,9 @@ class MixteraTorchDataset(IterableDataset):
         self.status_shm_name = status_shm_name
         self.comp_shm_name = comp_shm_name
 
+        _shared_memory_names.add(status_shm_name)
+        _shared_memory_names.add(comp_shm_name)
+
         logger.debug(f"[Process {os.getpid()}] Created shared memory objects for {self.num_workers} workers")
 
     @property
@@ -145,27 +168,14 @@ class MixteraTorchDataset(IterableDataset):
 
     def _cleanup_shared_memory(self, unlink: bool) -> None:
         # Attempt to close and unlink shared memory segments
+        any_close = False
         try:
-            any_close = False
             if self._status_shm is not None:
                 any_close = True
                 self._status_shm.close()
                 if unlink:
                     self._status_shm.unlink()
                 self._status_shm = None
-
-            if self._comp_shm is not None:
-                any_close = True
-                self._comp_shm.close()
-                if unlink:
-                    self._comp_shm.unlink()
-                self._comp_shm = None
-
-            if any_close:
-                logger.info(f"[Worker {self.worker_id}] Shared memory closed.")
-                if unlink:
-                    logger.info(f"[Worker {self.worker_id}] Shared memory unlinked.")
-
         except FileNotFoundError as e:
             logger.error(
                 f"FileNotFoundError during shared memory cleanup: {e}\n"
@@ -173,6 +183,26 @@ class MixteraTorchDataset(IterableDataset):
             )
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error(f"Error during shared memory cleanup: {e}")
+
+        try:
+            if self._comp_shm is not None:
+                any_close = True
+                self._comp_shm.close()
+                if unlink:
+                    self._comp_shm.unlink()
+                self._comp_shm = None
+        except FileNotFoundError as e:
+            logger.error(
+                f"FileNotFoundError during shared memory cleanup: {e}\n"
+                + "This indicates multiple workers cleaned up the shm, which should not happen."
+            )
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error(f"Error during shared memory cleanup: {e}")
+
+        if any_close:
+            logger.info(f"[Worker {self.worker_id}] Shared memory closed.")
+            if unlink:
+                logger.info(f"[Worker {self.worker_id}] Shared memory unlinked.")
 
     @property
     def worker_status(self) -> list[int] | None:
@@ -218,3 +248,6 @@ class MixteraTorchDataset(IterableDataset):
                     self._cleanup_shared_memory(False)
         finally:
             self._cleanup_shared_memory(True)
+
+    def __del__(self) -> None:
+        self._cleanup_shared_memory(True)
