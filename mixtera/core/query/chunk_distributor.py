@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import re
 import shutil
 import threading
 from copy import deepcopy
@@ -606,6 +607,17 @@ class ChunkDistributor:
         chunk_distributor._worker_statuses = {}
         chunk_distributor._nodes_reported = set()
         chunk_distributor._checkpoint_id_counter.value = state["_checkpoint_id_counter"]
+
+        # Update the _checkpoint_id_counter.value to avoid overwriting existing checkpoints
+        checkpoint_dirs = chkpnt_dir.parent.glob("chkpnt_*")
+        checkpoint_numbers = [chunk_distributor._checkpoint_id_counter.value]
+        pattern = re.compile(r"chkpnt_(\d+)")
+        for checkpoint_dir in checkpoint_dirs:
+            match = pattern.match(checkpoint_dir.name)
+            if match:
+                checkpoint_numbers.append(int(match.group(1)))
+        if checkpoint_numbers:
+            chunk_distributor._checkpoint_id_counter.value = max(checkpoint_numbers)
 
         logger.debug("Loaded Distributor from checkpoint.")
 
