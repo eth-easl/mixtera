@@ -248,6 +248,3 @@ class MixteraTorchDataset(IterableDataset):
                     self._cleanup_shared_memory(False)
         finally:
             self._cleanup_shared_memory(True)
-
-    def __del__(self) -> None:
-        self._cleanup_shared_memory(True)
