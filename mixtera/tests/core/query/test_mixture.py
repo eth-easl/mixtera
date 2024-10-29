@@ -5,7 +5,7 @@ from mixtera.core.query import Component, HierarchicalStaticMixture, MixtureKey,
 
 class TestMixture(unittest.TestCase):
 
-    def test_hiearchical_mixture_correctness_multiple_values(self):
+    def test_hiearchical_mixture_correctness_with_multiple_values(self):
         # Submixture for Turkish
         turkish_submixture = MixtureNode(
             property_name="topic",
@@ -14,7 +14,8 @@ class TestMixture(unittest.TestCase):
 
         # Testing a single component with a submixture with list of values.
         language_mixture = MixtureNode(
-            property_name="language", components=[Component(values=["Turkish"], weight=1, submixture=turkish_submixture)]
+            property_name="language",
+            components=[Component(values=["Turkish"], weight=1, submixture=turkish_submixture)],
         )
 
         mixture = HierarchicalStaticMixture(
