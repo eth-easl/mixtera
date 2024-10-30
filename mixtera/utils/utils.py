@@ -217,6 +217,37 @@ def numpy_to_native(value: Any) -> Any:
     return value  # Assume it's already a native type
 
 
+def allocate_chunks(N: int, ratios: list[float]) -> list[int]:
+    """
+    Allocates integer chunks summing up to N based on the given ratios.
+
+    Parameters:
+    - N: The total integer to be divided.
+    - ratios: A list of ratios that sum to 1.
+
+    Returns:
+    - allocations: A list of integer allocations that sum up to N.
+    """
+    exact_allocations = [r * N for r in ratios]
+
+    floored_allocations = [int(e) for e in exact_allocations]
+
+    total_floored = sum(floored_allocations)
+
+    remaining_units = N - total_floored
+
+    remainders = [e - f for e, f in zip(exact_allocations, floored_allocations)]
+
+    indices = sorted(range(len(ratios)), key=lambda i: (-remainders[i], i))
+
+    for i in indices[:remaining_units]:
+        floored_allocations[i] += 1
+
+    assert sum(floored_allocations) == N, f"{N}, {ratios}"
+
+    return floored_allocations
+
+
 class DummyPool:
     def __init__(self, num_workers: int) -> None:
         del num_workers

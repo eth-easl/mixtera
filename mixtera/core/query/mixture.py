@@ -41,6 +41,12 @@ class MixtureKey:
                 return False
         return True
 
+    def fulfills(self, other: object) -> bool:
+        if not isinstance(other, MixtureKey):
+            return False
+
+        return other == self
+
     #  Mixture keys with multiple values for the same property are "greater" than those with a single value
     #  Where we count the number of values for each property (compare per property)
     def __lt__(self, other: object) -> bool:
@@ -101,7 +107,7 @@ class MixtureKey:
 class Mixture(ABC):
     """Base Mixture class."""
 
-    def __init__(self, chunk_size: int) -> None:
+    def __init__(self, chunk_size: int, strict: bool = True) -> None:
         """
         Base initialize for a Mixture object.
 
@@ -109,10 +115,11 @@ class Mixture(ABC):
             chunk_size: the size of a chunk in number of instances
         """
         self.chunk_size = chunk_size
+        self.strict = strict
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": "base_mixture", "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": "base_mixture", "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     @abstractmethod
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
@@ -156,7 +163,7 @@ class ArbitraryMixture(Mixture):
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     def inform(self, chunker_index: "ChunkerIndex") -> None:
         del chunker_index
@@ -169,8 +176,8 @@ class InferringMixture(Mixture):
     to have a balanced sample per chunk.
     """
 
-    def __init__(self, chunk_size: int) -> None:
-        super().__init__(chunk_size)
+    def __init__(self, chunk_size: int, strict: bool = True) -> None:
+        super().__init__(chunk_size, strict)
         self._mixture: dict[MixtureKey, int] = {}
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
@@ -204,7 +211,7 @@ class InferringMixture(Mixture):
 class StaticMixture(Mixture):
     """Mixture class that simply stores a predefined mixture."""
 
-    def __init__(self, chunk_size: int, mixture: dict[MixtureKey, float]) -> None:
+    def __init__(self, chunk_size: int, mixture: dict[MixtureKey, float], strict: bool = True) -> None:
         """
         Initializer for StaticMixture.
 
@@ -218,7 +225,7 @@ class StaticMixture(Mixture):
                    ...
                 }
         """
-        super().__init__(chunk_size)
+        super().__init__(chunk_size, strict)
         self._mixture = StaticMixture.parse_user_mixture(chunk_size, mixture)
 
     @staticmethod
@@ -239,7 +246,7 @@ class StaticMixture(Mixture):
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._mixture
