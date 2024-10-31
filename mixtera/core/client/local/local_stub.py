@@ -25,6 +25,9 @@ class LocalStub(MixteraClient):
         if not self.directory.exists():
             raise RuntimeError(f"Directory {self.directory} does not exist.")
 
+        self.checkpoint_directory = self.directory / "checkpoints"
+        self.checkpoint_directory.mkdir(exist_ok=True)
+
         self._mdc = MixteraDataCollection(self.directory)
         self._training_query_map_lock = mp.Lock()
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
@@ -62,16 +65,26 @@ class LocalStub(MixteraClient):
     def execute_query(self, query: Query, args: QueryExecutionArgs) -> bool:
         assert args.dp_groups > 0 and args.nodes_per_group > 0 and args.num_workers >= 0
 
+        if query.job_id in self._training_query_map:
+            # Early return to fail
+            # If you want to run a job again, use `restore_checkpoint`.`
+            logger.warning(f"We already have a query for job {query.job_id}!")
+            return False
+
+        cache_path = None
         if (cached_results := self._query_cache.get_queryresults_if_cached(query)) is not None:
-            query.results = cached_results
+            query.results = cached_results[0]
+            cache_path = cached_results[1]
             assert (
                 query.results._num_returns_gen == 0
             ), "We cached a query that already has returned items, this should not happen!"
             query.results.update_mixture(args.mixture)
         else:
             query.execute(self._mdc, args.mixture)
-            self._query_cache.cache_query(query)
-        return self._register_query(query, args.mixture, args.dp_groups, args.nodes_per_group, args.num_workers)
+            cache_path = self._query_cache.cache_query(query)
+        return self._register_query(
+            query, args.mixture, args.dp_groups, args.nodes_per_group, args.num_workers, cache_path
+        )
 
     def is_remote(self) -> bool:
         return False
@@ -120,7 +133,13 @@ class LocalStub(MixteraClient):
         return query_result.dataset_type, query_result.parsing_func, query_result.file_path
 
     def _register_query(
-        self, query: "Query", mixture: Mixture, dp_groups: int, nodes_per_group: int, num_workers: int
+        self,
+        query: "Query",
+        mixture: Mixture,
+        dp_groups: int,
+        nodes_per_group: int,
+        num_workers: int,
+        cache_path: Path | None = None,
     ) -> bool:
         if query.job_id in self._training_query_map:
             logger.warning(f"We already have a query for job {query.job_id}!")
@@ -128,7 +147,9 @@ class LocalStub(MixteraClient):
 
         with self._training_query_map_lock:
             self._training_query_map[query.job_id] = (
-                ChunkDistributor(dp_groups, nodes_per_group, num_workers, query.results, query.job_id),
+                ChunkDistributor(
+                    dp_groups, nodes_per_group, num_workers, query.results, query.job_id, cached_query=cache_path
+                ),
                 query,
                 mixture,
             )
@@ -146,3 +167,29 @@ class LocalStub(MixteraClient):
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
             raise RuntimeError(f"Unknown job {job_id}")
         return self._training_query_map[job_id][0]
+
+    def checkpoint(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_status: list[int], server: bool = False
+    ) -> str:
+        return self._get_query_chunk_distributor(job_id).checkpoint(
+            dp_group_id, node_id, worker_status, self.checkpoint_directory / job_id, server
+        )
+
+    def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
+        return self._get_query_chunk_distributor(job_id).checkpoint_completed(chkpnt_id, on_disk)
+
+    def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        query = None
+        mixture = None
+        with self._training_query_map_lock:
+            if job_id in self._training_query_map:
+                logger.warning(f"We already have a query for job {job_id}! Overwriting this with checkpoint.")
+                query = self._training_query_map[job_id][1]
+                mixture = self._training_query_map[job_id][2]
+
+            distri = ChunkDistributor.from_checkpoint(self.checkpoint_directory / job_id, chkpnt_id, job_id)
+            self._training_query_map[job_id] = (
+                distri,
+                query,
+                mixture if mixture is not None else distri._query_result._mixture,
+            )

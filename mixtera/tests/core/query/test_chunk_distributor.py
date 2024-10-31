@@ -83,7 +83,14 @@ def test_cache_management(chunk_distributor):
     # Access the same chunk multiple times and check cache behavior
     _ = chunk_distributor.next_chunk_for(0, 0, 0, True)
     _ = chunk_distributor.next_chunk_for(0, 1, 0, True)
-    # This should remove the chunk from cache as it has been accessed by all nodes
+    # After both nodes have accessed chunk 0, it should still be in cache due to deferred eviction
+    assert 0 in chunk_distributor._chunk_cache[0]
+
+    # Access further chunks to trigger eviction
+    _ = chunk_distributor.next_chunk_for(0, 0, 0, True)  # Worker 0 on node 0 accesses chunk 3
+    _ = chunk_distributor.next_chunk_for(0, 1, 0, True)  # Worker 0 on node 1 accesses chunk 3
+
+    # Now chunk 0 should be evicted from the cache
     assert 0 not in chunk_distributor._chunk_cache[0]
 
 
@@ -97,6 +104,18 @@ def test_chunk_cache_eviction_multiple_chunks(chunk_distributor):
     assert chunk_0_1_0 == 0
     assert chunk_0_0_1 == 1
     assert chunk_0_1_1 == 1
+
+    # Chunks 0 and 1 should still be in cache due to deferred eviction
+    assert 0 in chunk_distributor._chunk_cache[0]
+    assert 1 in chunk_distributor._chunk_cache[0]
+
+    # Access further chunks to trigger eviction
+    chunk_distributor.next_chunk_for(0, 0, 0, True)  # Worker 0 accesses chunk 3
+    chunk_distributor.next_chunk_for(0, 1, 0, True)
+    chunk_distributor.next_chunk_for(0, 0, 1, True)  # Worker 1 accesses chunk 4
+    chunk_distributor.next_chunk_for(0, 1, 1, True)
+
+    # Now chunks 0 and 1 should be evicted from the cache
     assert 0 not in chunk_distributor._chunk_cache[0]
     assert 1 not in chunk_distributor._chunk_cache[0]
 

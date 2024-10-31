@@ -74,7 +74,7 @@ class TestQueryCache(unittest.TestCase):
 
         self.query.results._id = "specialtest"
         self.query_cache.cache_query(self.query)
-        result = self.query_cache.get_queryresults_if_cached(self.query)
+        result, _ = self.query_cache.get_queryresults_if_cached(self.query)
         self.assertIsInstance(result, MockResult)
         self.assertEqual(result._id, "specialtest")
 

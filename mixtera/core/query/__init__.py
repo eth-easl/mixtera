@@ -1,6 +1,14 @@
 from mixtera.core.query.operators.select import Select
 
-from .mixture import ArbitraryMixture, Mixture, MixtureKey, StaticMixture
+from .mixture import (
+    ArbitraryMixture,
+    Component,
+    HierarchicalStaticMixture,
+    Mixture,
+    MixtureKey,
+    MixtureNode,
+    StaticMixture,
+)
 from .operators._base import Operator
 from .query import Query
 from .query_cache import QueryCache
@@ -20,6 +28,9 @@ __all__ = [
     "Mixture",
     "MixtureKey",
     "StaticMixture",
+    "HierarchicalStaticMixture",
+    "MixtureNode",
+    "Component",
     "ArbitraryMixture",
     "ResultChunk",
 ]

@@ -142,7 +142,7 @@ async def write_int(data: int, num_bytes: int, writer: asyncio.StreamWriter, dra
         await writer.drain()
 
 
-async def read_utf8_string(size_bytes: int, reader: asyncio.StreamReader) -> Optional[str]:
+async def read_utf8_string(size_bytes: int, reader: asyncio.StreamReader, timeout: float = 10.0) -> Optional[str]:
     """
     Asynchronously read an utf8 string from `asyncio.StreamReader`.
     Args:
@@ -153,8 +153,8 @@ async def read_utf8_string(size_bytes: int, reader: asyncio.StreamReader) -> Opt
     Raises:
         asyncio.TimeoutError: If the timeout is exceeded before `num_bytes` could be read.
     """
-    if (string_size := await read_int(size_bytes, reader)) is not None:
-        if (string_data := await read_bytes(string_size, reader)) is not None:
+    if (string_size := await read_int(size_bytes, reader, timeout=timeout)) is not None:
+        if (string_data := await read_bytes(string_size, reader, timeout=timeout)) is not None:
             return string_data.decode("utf-8")
     return None
 

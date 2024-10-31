@@ -588,3 +588,74 @@ class ServerConnection:
         await write_int(data_only_on_primary, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+
+    def checkpoint(self, job_id: str, dp_group_id: int, node_id: int, worker_status: list[int]) -> str:
+        return run_async_until_complete(self._checkpoint(job_id, dp_group_id, node_id, worker_status))
+
+    async def _checkpoint(self, job_id: str, dp_group_id: int, node_id: int, worker_status: list[int]) -> str | None:
+        reader, writer = await self._connect_to_server()
+        if reader is None or writer is None:
+            return None
+
+        # Announce we want to perform a checkpoint
+        await write_int(int(ServerTask.CHECKPOINT), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Send job_id
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Send dp_group_id and node_id
+        await write_int(dp_group_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(node_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Send worker_status
+        await write_int(len(worker_status), NUM_BYTES_FOR_IDENTIFIERS, writer)
+        for status in worker_status:
+            await write_int(status, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Read checkpoint ID from the server
+        chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_SIZES, reader, timeout=60 * 15)
+        return chkpnt_id
+
+    def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
+        return run_async_until_complete(self._checkpoint_completed(job_id, chkpnt_id, on_disk))
+
+    async def _checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
+        reader, writer = await self._connect_to_server()
+        if reader is None or writer is None:
+            return False
+
+        # Announce we want to check if a checkpoint is completed
+        await write_int(int(ServerTask.CHECKPOINT_COMPLETED), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Send job_id and chkpnt_id
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_utf8_string(chkpnt_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Send on_disk flag
+        await write_int(int(on_disk), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Read success flag from the server
+        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        return bool(success)
+
+    def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        return run_async_until_complete(self._restore_checkpoint(job_id, chkpnt_id))
+
+    async def _restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        reader, writer = await self._connect_to_server()
+        if reader is None or writer is None:
+            return
+
+        # Announce we want to restore a checkpoint
+        await write_int(int(ServerTask.RESTORE_CHECKPOINT), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Send job_id and chkpnt_id
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_utf8_string(chkpnt_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+        # Read success flag from the server (if needed)
+        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 15)
+        if not bool(success):
+            logger.error(f"Failed to restore checkpoint {chkpnt_id} for job {job_id}")
+        else:
+            logger.info("Successfully restored from checkpoint at server.")
