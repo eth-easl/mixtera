@@ -1,10 +1,11 @@
 import multiprocessing as mp
 from pathlib import Path
+from queue import Empty, Queue
 from typing import Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.mixtera_client import QueryExecutionArgs
+from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
 from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -13,6 +14,8 @@ from mixtera.core.query import Mixture, Query, QueryResult, ResultChunk
 from mixtera.core.query.chunk_distributor import ChunkDistributor
 from mixtera.core.query.query_cache import QueryCache
 from mixtera.utils import wait_for_key_in_dict
+
+FEEDBACK_QUEUE_TIMEOUT = 60
 
 
 class LocalStub(MixteraClient):
@@ -32,6 +35,8 @@ class LocalStub(MixteraClient):
         self._training_query_map_lock = mp.Lock()
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
         self._query_cache = QueryCache(self.directory / "querycache", self._mdc)
+
+        self.feedback_queue: "Queue[ClientFeedback]" = Queue()
 
     def register_dataset(
         self,
@@ -193,3 +198,15 @@ class LocalStub(MixteraClient):
                 query,
                 mixture if mixture is not None else distri._query_result._mixture,
             )
+
+    def receive_feedback(self, feedback: ClientFeedback) -> bool:
+        self.feedback_queue.put(feedback)
+        return True
+
+    def process_feedback(self) -> ClientFeedback | None:
+        try:
+            feedback = self.feedback_queue.get(timeout=FEEDBACK_QUEUE_TIMEOUT)
+            return feedback
+        except Empty:
+            logger.warning("There is no unprocessed feedback")
+            return None

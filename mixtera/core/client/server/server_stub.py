@@ -2,14 +2,14 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
 from loguru import logger
-from mixtera.core.client import MixteraClient
+from mixtera.core.client import ClientFeedback, MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import Query, ResultChunk
-from mixtera.network.connection import ClientFeedback, ServerConnection
+from mixtera.network.connection import ServerConnection
 
 
 class ServerStub(MixteraClient):
@@ -71,8 +71,8 @@ class ServerStub(MixteraClient):
 
         return True
 
-    def send_feedback(self, feedback: ClientFeedback) -> bool:
-        if not self.server_connection.send_feedback(feedback):
+    def receive_feedback(self, feedback: ClientFeedback) -> bool:
+        if not self.server_connection.receive_feedback(feedback):
             logger.error("Could not send the message to the server!")
             return False
 

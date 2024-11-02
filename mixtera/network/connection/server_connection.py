@@ -1,5 +1,4 @@
 import asyncio
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional, Type
 
 import dill
@@ -23,13 +22,8 @@ from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
-    from mixtera.core.client.mixtera_client import QueryExecutionArgs
+    from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
     from mixtera.core.query import Query, ResultChunk
-
-
-@dataclass
-class ClientFeedback:
-    training_steps: int = 0
 
 
 class ServerConnection:
@@ -666,10 +660,10 @@ class ServerConnection:
         else:
             logger.info("Successfully restored from checkpoint at server.")
 
-    def send_feedback(self, message: ClientFeedback) -> bool:
-        return run_async_until_complete(self._send_feedback(message))
+    def receive_feedback(self, message: "ClientFeedback") -> bool:
+        return run_async_until_complete(self._receive_feedback(message))
 
-    async def _send_feedback(self, message: ClientFeedback) -> bool:
+    async def _receive_feedback(self, message: "ClientFeedback") -> bool:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:

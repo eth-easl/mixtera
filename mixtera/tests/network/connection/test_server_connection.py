@@ -5,10 +5,10 @@ from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import dill
-from mixtera.core.client.mixtera_client import QueryExecutionArgs
+from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
-from mixtera.network.connection.server_connection import ClientFeedback, ServerConnection
+from mixtera.network.connection.server_connection import ServerConnection
 from mixtera.network.server_task import ServerTask
 
 
@@ -490,7 +490,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_pickeled_object")
     @patch("mixtera.network.connection.server_connection.read_int")
-    async def test_send_feedback(
+    async def test_receive_feedback(
         self,
         mock_read_int,
         mock_write_pickeled_object,
@@ -503,7 +503,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_read_int.return_value = 1
         message = ClientFeedback(100)
 
-        success = await self.server_connection._send_feedback(message)
+        success = await self.server_connection._receive_feedback(message)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()

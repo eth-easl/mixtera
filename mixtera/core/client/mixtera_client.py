@@ -35,6 +35,11 @@ class ResultStreamingArgs:
     chunk_reading_window_size: int = 128
 
 
+@dataclass
+class ClientFeedback:
+    training_steps: int = 0
+
+
 class MixteraClient(ABC):
     def __new__(cls, *args: Any) -> "MixteraClient":
         """
@@ -370,4 +375,11 @@ class MixteraClient(ABC):
                                          have access to the same paths as the primary.
         """
 
+        raise NotImplementedError()
+
+    @abstractmethod
+    def receive_feedback(self, feedback: ClientFeedback) -> bool:
+        """
+        This function sends the training feedback to the server for the mixture schedules .
+        """
         raise NotImplementedError()

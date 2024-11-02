@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.mixtera_client import QueryExecutionArgs
+from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
@@ -241,6 +241,12 @@ class TestLocalStub(unittest.TestCase):
         )
         self.assertIn(self.job_id, self.local_stub._training_query_map)
         self.assertEqual(self.local_stub._training_query_map[self.job_id][0], mock_chunk_distributor)
+
+    def test_receive_feedback(self):
+        for _ in range(100):
+            feedback = ClientFeedback(100)
+            result = self.local_stub.receive_feedback(feedback)
+            self.assertTrue(result)
 
 
 if __name__ == "__main__":
