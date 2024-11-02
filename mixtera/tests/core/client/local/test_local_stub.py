@@ -248,6 +248,16 @@ class TestLocalStub(unittest.TestCase):
             result = self.local_stub.receive_feedback(feedback)
             self.assertTrue(result)
 
+    def test_process_feedback(self):
+        # First sending feedbacks.
+        for _ in range(100):
+            self.local_stub.receive_feedback(ClientFeedback(100))
+
+        # Then checking if we can take them.
+        for _ in range(100):
+            feedback = self.local_stub.process_feedback()
+            self.assertEqual(feedback.training_steps, 100, "The received feedback is wrong.")
+
 
 if __name__ == "__main__":
     unittest.main()
