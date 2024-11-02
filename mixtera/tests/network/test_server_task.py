@@ -58,4 +58,4 @@ class TestServerTask(unittest.TestCase):
 
     def test_invalid_value(self):
         with self.assertRaises(ValueError):
-            ServerTask(12)
+            ServerTask(14)

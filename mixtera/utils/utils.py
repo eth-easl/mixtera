@@ -8,12 +8,14 @@ import time
 from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, List, Optional, Type, Union
 
 import numpy as np
 from loguru import logger
-from mixtera.core.datacollection.index import ChunkerIndex
 from tqdm import tqdm
+
+if TYPE_CHECKING:
+    from mixtera.core.datacollection.index import ChunkerIndex
 
 
 def flatten(non_flat_list: List[List[Any]]) -> List[Any]:
@@ -256,7 +258,7 @@ def serialize_file(args: tuple[Path, int, int, list[list[int]]]) -> None:
 
 
 def serialize_chunker_index(
-    chunker_index: ChunkerIndex,
+    chunker_index: "ChunkerIndex",
     output_dir: str | Path,
 ) -> None:
     output_dir = Path(output_dir)
@@ -307,7 +309,7 @@ def deserialize_file(args: tuple[Path, int, int, int]) -> tuple[int, int, int, L
     return (mixture_key_idx, dataset_id, file_id, intervals)
 
 
-def deserialize_chunker_index(input_dir: str | Path) -> ChunkerIndex:
+def deserialize_chunker_index(input_dir: str | Path) -> "ChunkerIndex":
     input_dir = Path(input_dir)
     with open(input_dir / "mixture_keys_order.pkl", "rb") as f:
         mixture_keys_order = pickle.load(f)
@@ -357,7 +359,7 @@ def deserialize_chunker_index(input_dir: str | Path) -> ChunkerIndex:
         )
 
     # Reconstruct the chunker_index
-    chunker_index: ChunkerIndex = {}
+    chunker_index: dict[Any, Any] = {}
     # Initialize per-mixture key dictionaries
     chunker_index_per_mixture_key: list[dict] = [{} for _ in range(len(mixture_keys_list))]
 

@@ -119,3 +119,14 @@ class ServerStub(MixteraClient):
             degree_of_parallelism=degree_of_parallelism,
             data_only_on_primary=data_only_on_primary,
         )
+
+    def checkpoint(
+        self, job_id: str, dp_group_id: int, node_id: int, worker_status: list[int], server: bool = False
+    ) -> str:
+        return self.server_connection.checkpoint(job_id, dp_group_id, node_id, worker_status)
+
+    def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
+        return self.server_connection.checkpoint_completed(job_id, chkpnt_id, on_disk)
+
+    def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        return self.server_connection.restore_checkpoint(job_id, chkpnt_id)

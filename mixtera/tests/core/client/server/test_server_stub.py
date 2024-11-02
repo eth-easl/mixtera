@@ -166,3 +166,38 @@ class TestServerStub(unittest.TestCase):
             degree_of_parallelism=2,
             data_only_on_primary=False,
         )
+
+    @patch.object(ServerConnection, "checkpoint")
+    def test_checkpoint(self, mock_checkpoint):
+        job_id = "test_job_id"
+        dp_group_id = 0
+        node_id = 0
+        worker_status = [1, 2, 3]
+        expected_checkpoint_id = "test_checkpoint_id"
+        mock_checkpoint.return_value = expected_checkpoint_id
+
+        result = self.server_stub.checkpoint(job_id, dp_group_id, node_id, worker_status)
+
+        mock_checkpoint.assert_called_once_with(job_id, dp_group_id, node_id, worker_status)
+        self.assertEqual(result, expected_checkpoint_id)
+
+    @patch.object(ServerConnection, "checkpoint_completed")
+    def test_checkpoint_completed(self, mock_checkpoint_completed):
+        job_id = "test_job_id"
+        chkpnt_id = "test_checkpoint_id"
+        on_disk = True
+        mock_checkpoint_completed.return_value = True
+
+        result = self.server_stub.checkpoint_completed(job_id, chkpnt_id, on_disk)
+
+        mock_checkpoint_completed.assert_called_once_with(job_id, chkpnt_id, on_disk)
+        self.assertTrue(result)
+
+    @patch.object(ServerConnection, "restore_checkpoint")
+    def test_restore_checkpoint(self, mock_restore_checkpoint):
+        job_id = "test_job_id"
+        chkpnt_id = "test_checkpoint_id"
+
+        self.server_stub.restore_checkpoint(job_id, chkpnt_id)
+
+        mock_restore_checkpoint.assert_called_once_with(job_id, chkpnt_id)
