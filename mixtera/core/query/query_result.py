@@ -419,15 +419,15 @@ class QueryResult:
                                     logger.debug("All mixture components are exhausted.")
                                     # If all components are exhausted, we cannot proceed
                                     return
-                                else:
-                                    keys = list(remaining_sizes.keys())
-                                    ratios = [original_sizes[key] / total_original_size_remaining for key in keys]
-                                    additional_chunks = allocate_chunks(remaining_size_to_redistribute, ratios)
 
-                                    for i, key in enumerate(keys):
-                                        remaining_sizes[key] += additional_chunks[i]
+                                keys = list(remaining_sizes.keys())
+                                ratios = [original_sizes[key] / total_original_size_remaining for key in keys]
+                                additional_chunks = allocate_chunks(remaining_size_to_redistribute, ratios)
 
-                                    global_progress_made = True
+                                for i, key in enumerate(keys):
+                                    remaining_sizes[key] += additional_chunks[i]
+
+                                global_progress_made = True
 
                                 break
 
