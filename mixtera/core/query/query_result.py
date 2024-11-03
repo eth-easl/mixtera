@@ -382,7 +382,8 @@ class QueryResult:
                                                     else merge_sorted_lists(chunk[mixture_key][dataset_id][file_id],
                                                                             ranges)
                                                 )
-                                                # If we extended the ranges of that file, we need to sort them since, e.g.,
+                                                # If we extended the ranges of that file,
+                                                # we need to sort them since, e.g.,
                                                 # the JSONL file wrapper expects them in sorted order
                                                 # Since we now ranges are sorted and the existing ranges
                                                 # are sorted as well, we use a merge operation.
@@ -408,7 +409,8 @@ class QueryResult:
                                 exhausted_mixture_keys.add(mixture_key)
                                 remaining_size_to_redistribute = remaining_sizes.pop(mixture_key)
 
-                                # Now redistribute remaining_size_to_redistribute among other mixture_keys not in exhausted_keys
+                                # Now redistribute remaining_size_to_redistribute among other
+                                # mixture_keys not in exhausted_keys
                                 total_original_size_remaining = sum(
                                     size for key, size in original_sizes.items() if key not in exhausted_mixture_keys
                                 )

@@ -1145,7 +1145,6 @@ class TestQueryResult(unittest.TestCase):
 
         self.assertEqual(len(chunks), 1)
 
-
     def create_uneven_distribution_test_df(self):
         data = {
             'dataset_id': [],
@@ -1247,7 +1246,8 @@ class TestQueryResult(unittest.TestCase):
             for lang in ['JavaScript', 'Python', 'HTML']:
                 self.assertTrue(
                     chunk_language_counts[lang] == expected_counts[i][lang],
-                    f"Chunk {i}: Expected {expected_counts[i][lang]} samples of {lang}, got {chunk_language_counts[lang]}"
+                    f"Chunk {i}: Expected {expected_counts[i][lang]} samples of {lang}, "
+                    f"got {chunk_language_counts[lang]}"
                 )
 
         # Check that total samples returned matches the dataset
