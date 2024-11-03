@@ -1146,35 +1146,29 @@ class TestQueryResult(unittest.TestCase):
         self.assertEqual(len(chunks), 1)
 
     def create_uneven_distribution_test_df(self):
-        data = {
-            'dataset_id': [],
-            'file_id': [],
-            'interval_start': [],
-            'interval_end': [],
-            'language': []
-        }
+        data = {"dataset_id": [], "file_id": [], "interval_start": [], "interval_end": [], "language": []}
         # 50 JavaScript, 30 HTML, 20 Python samples
 
         for i in range(50):
-            data['dataset_id'].append(0)
-            data['file_id'].append(0)
-            data['interval_start'].append(i)
-            data['interval_end'].append(i + 1)
-            data['language'].append(['JavaScript'])
+            data["dataset_id"].append(0)
+            data["file_id"].append(0)
+            data["interval_start"].append(i)
+            data["interval_end"].append(i + 1)
+            data["language"].append(["JavaScript"])
 
         for i in range(50, 80):
-            data['dataset_id'].append(0)
-            data['file_id'].append(0)
-            data['interval_start'].append(i)
-            data['interval_end'].append(i + 1)
-            data['language'].append(['HTML'])
+            data["dataset_id"].append(0)
+            data["file_id"].append(0)
+            data["interval_start"].append(i)
+            data["interval_end"].append(i + 1)
+            data["language"].append(["HTML"])
 
         for i in range(80, 100):
-            data['dataset_id'].append(0)
-            data['file_id'].append(0)
-            data['interval_start'].append(i)
-            data['interval_end'].append(i + 1)
-            data['language'].append(['Python'])
+            data["dataset_id"].append(0)
+            data["file_id"].append(0)
+            data["interval_start"].append(i)
+            data["interval_end"].append(i + 1)
+            data["language"].append(["Python"])
         df = pl.DataFrame(data)
         return df.to_arrow()
 
@@ -1182,10 +1176,10 @@ class TestQueryResult(unittest.TestCase):
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
     def test_non_strict_mixture_with_component_exhaustion(
-            self,
-            mock_get_file_path_by_id: MagicMock,
-            mock_get_dataset_type_by_id: MagicMock,
-            mock_get_dataset_func_by_id: MagicMock,
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
     ):
         mock_get_file_path_by_id.return_value = "test_file_path"
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
@@ -1197,11 +1191,11 @@ class TestQueryResult(unittest.TestCase):
         mixture = StaticMixture(
             chunk_size=10,
             mixture={
-                MixtureKey({'language': ['JavaScript']}): 0.4,
-                MixtureKey({'language': ['Python']}): 0.4,
-                MixtureKey({'language': ['HTML']}): 0.2
+                MixtureKey({"language": ["JavaScript"]}): 0.4,
+                MixtureKey({"language": ["Python"]}): 0.4,
+                MixtureKey({"language": ["HTML"]}): 0.2,
             },
-            strict=False
+            strict=False,
         )
 
         query_result = QueryResult(self.client._mdc, df, mixture)
@@ -1211,26 +1205,26 @@ class TestQueryResult(unittest.TestCase):
         total_samples = len(df)
         self.assertTrue(len(chunks) > 0)
 
-        language_counts = {'JavaScript': 0, 'Python': 0, 'HTML': 0}
+        language_counts = {"JavaScript": 0, "Python": 0, "HTML": 0}
 
         expected_counts = [
-            {'JavaScript': 4, 'Python': 4, 'HTML': 2},
-            {'JavaScript': 4, 'Python': 4, 'HTML': 2},
-            {'JavaScript': 4, 'Python': 4, 'HTML': 2},
-            {'JavaScript': 4, 'Python': 4, 'HTML': 2},
-            {'JavaScript': 4, 'Python': 4, 'HTML': 2},
-            {'JavaScript': 7, 'Python': 0, 'HTML': 3},
-            {'JavaScript': 7, 'Python': 0, 'HTML': 3},
-            {'JavaScript': 7, 'Python': 0, 'HTML': 3},
-            {'JavaScript': 7, 'Python': 0, 'HTML': 3},
-            {'JavaScript': 2, 'Python': 0, 'HTML': 8},
+            {"JavaScript": 4, "Python": 4, "HTML": 2},
+            {"JavaScript": 4, "Python": 4, "HTML": 2},
+            {"JavaScript": 4, "Python": 4, "HTML": 2},
+            {"JavaScript": 4, "Python": 4, "HTML": 2},
+            {"JavaScript": 4, "Python": 4, "HTML": 2},
+            {"JavaScript": 7, "Python": 0, "HTML": 3},
+            {"JavaScript": 7, "Python": 0, "HTML": 3},
+            {"JavaScript": 7, "Python": 0, "HTML": 3},
+            {"JavaScript": 7, "Python": 0, "HTML": 3},
+            {"JavaScript": 2, "Python": 0, "HTML": 8},
         ]
 
         for i, chunk in enumerate(chunks):
             chunk_size = 0
-            chunk_language_counts = {'JavaScript': 0, 'Python': 0, 'HTML': 0}
+            chunk_language_counts = {"JavaScript": 0, "Python": 0, "HTML": 0}
             for mixture_key, datasets in chunk._result_index.items():
-                language = mixture_key.properties['language'][0]
+                language = mixture_key.properties["language"][0]
                 for dataset_id, files in datasets.items():
                     for file_id, ranges in files.items():
                         for start, end in ranges:
@@ -1243,11 +1237,11 @@ class TestQueryResult(unittest.TestCase):
             self.assertTrue(chunk_size <= mixture.chunk_size)
 
             # Check that the result matches expected counts
-            for lang in ['JavaScript', 'Python', 'HTML']:
+            for lang in ["JavaScript", "Python", "HTML"]:
                 self.assertTrue(
                     chunk_language_counts[lang] == expected_counts[i][lang],
                     f"Chunk {i}: Expected {expected_counts[i][lang]} samples of {lang}, "
-                    f"got {chunk_language_counts[lang]}"
+                    f"got {chunk_language_counts[lang]}",
                 )
 
         # Check that total samples returned matches the dataset
@@ -1258,10 +1252,10 @@ class TestQueryResult(unittest.TestCase):
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_dataset_type_by_id")
     @patch("mixtera.core.datacollection.MixteraDataCollection._get_file_path_by_id")
     def test_strict_mixture_with_component_exhaustion(
-            self,
-            mock_get_file_path_by_id: MagicMock,
-            mock_get_dataset_type_by_id: MagicMock,
-            mock_get_dataset_func_by_id: MagicMock,
+        self,
+        mock_get_file_path_by_id: MagicMock,
+        mock_get_dataset_type_by_id: MagicMock,
+        mock_get_dataset_func_by_id: MagicMock,
     ):
         mock_get_file_path_by_id.return_value = "test_file_path"
         mock_get_dataset_type_by_id.return_value = "test_dataset_type"
@@ -1272,11 +1266,11 @@ class TestQueryResult(unittest.TestCase):
         mixture = StaticMixture(
             chunk_size=10,
             mixture={
-                MixtureKey({'language': ['JavaScript']}): 0.4,
-                MixtureKey({'language': ['Python']}): 0.4,
-                MixtureKey({'language': ['HTML']}): 0.2
+                MixtureKey({"language": ["JavaScript"]}): 0.4,
+                MixtureKey({"language": ["Python"]}): 0.4,
+                MixtureKey({"language": ["HTML"]}): 0.2,
             },
-            strict=True
+            strict=True,
         )
 
         query_result = QueryResult(self.client._mdc, df, mixture)
@@ -1287,13 +1281,13 @@ class TestQueryResult(unittest.TestCase):
 
         self.assertEqual(len(chunks), expected_total_chunks)
 
-        language_counts = {'JavaScript': 0, 'Python': 0, 'HTML': 0}
+        language_counts = {"JavaScript": 0, "Python": 0, "HTML": 0}
 
         for i, chunk in enumerate(chunks):
             chunk_size = 0
-            chunk_language_counts = {'JavaScript': 0, 'Python': 0, 'HTML': 0}
+            chunk_language_counts = {"JavaScript": 0, "Python": 0, "HTML": 0}
             for mixture_key, datasets in chunk._result_index.items():
-                language = mixture_key.properties['language'][0]  # Get the language
+                language = mixture_key.properties["language"][0]  # Get the language
                 for dataset_id, files in datasets.items():
                     for file_id, ranges in files.items():
                         for start, end in ranges:
@@ -1305,16 +1299,12 @@ class TestQueryResult(unittest.TestCase):
             # Check that chunk size matches mixture.chunk_size
             self.assertEqual(chunk_size, mixture.chunk_size)
             # Check that the proportions are as specified
-            expected_counts = {
-                'JavaScript': 4,
-                'Python': 4,
-                'HTML': 2
-            }
+            expected_counts = {"JavaScript": 4, "Python": 4, "HTML": 2}
 
-            for lang in ['JavaScript', 'Python', 'HTML']:
+            for lang in ["JavaScript", "Python", "HTML"]:
                 self.assertTrue(
                     (chunk_language_counts[lang] == expected_counts[lang]),
-                    f"Chunk {i}: Expected {expected_counts[lang]} samples of {lang}, got {chunk_language_counts[lang]}"
+                    f"Chunk {i}: Expected {expected_counts[lang]} samples of {lang}, got {chunk_language_counts[lang]}",
                 )
 
         # After 'Python' is exhausted, the iteration should stop (no more chunks)

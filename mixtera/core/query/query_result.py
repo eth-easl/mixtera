@@ -365,7 +365,7 @@ class QueryResult:
                                         )
 
                                         assert (
-                                                chunk_size <= remaining_sizes[mixture_key]
+                                            chunk_size <= remaining_sizes[mixture_key]
                                         ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
                                         remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
 
@@ -379,8 +379,9 @@ class QueryResult:
                                                 chunk[mixture_key][dataset_id][file_id] = (
                                                     ranges
                                                     if file_id not in chunk[mixture_key][dataset_id]
-                                                    else merge_sorted_lists(chunk[mixture_key][dataset_id][file_id],
-                                                                            ranges)
+                                                    else merge_sorted_lists(
+                                                        chunk[mixture_key][dataset_id][file_id], ranges
+                                                    )
                                                 )
                                                 # If we extended the ranges of that file,
                                                 # we need to sort them since, e.g.,
