@@ -28,6 +28,10 @@ class Dataset(ABC):
                 from mixtera.core.datacollection.datasets import JSONLDataset  # pylint: disable=import-outside-toplevel
 
                 return JSONLDataset
+            if dataset_type == DatasetType.WEB_DATASET:
+                from mixtera.core.datacollection.datasets import WebDataset
+
+                return WebDataset
             if dataset_type == DatasetType.GENERIC_DATASET:
                 return Dataset
 
