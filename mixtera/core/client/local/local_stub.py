@@ -199,7 +199,7 @@ class LocalStub(MixteraClient):
                 mixture if mixture is not None else distri._query_result._mixture,
             )
 
-    def receive_feedback(self, feedback: ClientFeedback) -> bool:
+    def send_feedback(self, feedback: ClientFeedback) -> bool:
         self.feedback_queue.put(feedback)
         return True
 

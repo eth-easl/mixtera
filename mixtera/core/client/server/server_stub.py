@@ -71,7 +71,7 @@ class ServerStub(MixteraClient):
 
         return True
 
-    def receive_feedback(self, feedback: ClientFeedback) -> bool:
+    def send_feedback(self, feedback: ClientFeedback) -> bool:
         if not self.server_connection.receive_feedback(feedback):
             logger.error("Could not send the message to the server!")
             return False
