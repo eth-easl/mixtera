@@ -4,10 +4,7 @@ from pathlib import Path
 from typing import Iterable, Callable, Optional
 
 import wids
-from wids.wids import IndexedTarSamples
 from loguru import logger
-
-
 
 from mixtera.core.datacollection.datasets import Dataset, DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -62,7 +59,7 @@ class WebDataset(Dataset):
     @staticmethod
     def read_ranges_from_files(
         ranges_per_file: dict[str, list[tuple[int, int]]],
-        parsing_func: Callable[[str], str],
+        parsing_func: Callable[[str], str], # TODO: Will not necessarily take a string?
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
         for file, range_list in ranges_per_file.items():
@@ -90,11 +87,9 @@ class WebDataset(Dataset):
             last_r_start = r_start
 
             # Yielding samples in the current range
-            yield from (parsing_func(dataset[line]) for line in range(r_start, r_end + 1))
+            yield from (parsing_func(dataset[line]) for line in range(r_start, r_end))
 
             last_line_read = r_end
-
-
 
     @staticmethod
     def _count_unique_samples(tar_path: str) -> int:

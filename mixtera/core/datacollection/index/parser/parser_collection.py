@@ -56,6 +56,28 @@ class SlimPajamaMetadataParser(MetadataParser):
 
         self.add_metadata(sample_id=line_number, redpajama_set_name=redpajama_set_name)
 
+class ImagenetWebDatasetMetadataParser(MetadataParser):
+    """
+        Metadata parser class for the ImageNet dataset in WebDataset format.
+    """
+
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="class_label",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+            )
+        ]
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        class_label = str(payload.get(".cls"))
+        if class_label is None:
+            raise RuntimeError("Property 'class_label' is not nullable and is missing.")
+
+        self.add_metadata(sample_id=line_number, class_label=class_label)
 
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
@@ -65,6 +87,7 @@ class MetadataParserFactory:
         self._registry: dict[str, type[MetadataParser]] = {
             "RED_PAJAMA": RedPajamaMetadataParser,
             "SLIM_PAJAMA": SlimPajamaMetadataParser,
+            "IMAGENET_WEB_DATASET": ImagenetWebDatasetMetadataParser,
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
