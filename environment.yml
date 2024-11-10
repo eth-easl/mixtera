@@ -19,4 +19,5 @@ dependencies:
   - conda-forge::transformers
   - pip: # Both duckdb and polars recommend their pip build over conda
     - duckdb
-    - polars 
+    - polars
+    - webdataset
