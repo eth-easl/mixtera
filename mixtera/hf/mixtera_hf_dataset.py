@@ -56,7 +56,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         return self
 
     @property
-    def n_shards(self) -> int:
+    def num_shards(self) -> int:
         # HF requires us to set some number.
         return max(self._query_execution_args.num_workers, 1) * max(self._query_execution_args.dp_groups, 1) * 8
 
@@ -65,22 +65,23 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         assert self._shard_call_count > 0, "shard_data_sources should have been called - something went wrong."
         return self._res_str_args.worker_id
 
-    def shard_data_sources(self, worker_id: int, num_workers: int) -> "_MixteraHFIterable":
-        logger.debug(f"shard_data_sources called with worker_id={worker_id} and num_workers={num_workers}")
+    def shard_data_sources(self, num_shards: int, index: int, contiguous: bool = True) -> "_MixteraHFIterable":
+        del contiguous
+        logger.debug(f"shard_data_sources called with num_shards={num_shards} and index={index}")
         # This is called in two cases:
         # On each dp node with num_workers = number of dp nodes
         # On each dp nodes with num_workers = num data loading workers IF num_workers > 0
 
         assert (
-            num_workers == max(self._query_execution_args.num_workers, 1)
-            or num_workers == self._query_execution_args.dp_groups
+            num_shards == max(self._query_execution_args.num_workers, 1)
+            or num_shards == self._query_execution_args.dp_groups
         ), (
-            f"num_workers = {num_workers} != query.num_workers ="
+            f"num_shards = {num_shards} != query.num_workers ="
             + f"{max(self._query_execution_args.num_workers,1)} defined at query execution."
         )
 
         res_args = deepcopy(self._res_str_args)
-        res_args.worker_id = worker_id
+        res_args.worker_id = index
         return _MixteraHFIterable(
             self._client,
             self._query,
