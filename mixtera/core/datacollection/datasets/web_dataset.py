@@ -1,11 +1,10 @@
 import tarfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Iterable, Callable, Optional
+from typing import Callable, Iterable, Optional
 
 import wids
 from loguru import logger
-
 from mixtera.core.datacollection.datasets import Dataset, DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem import FileSystem
@@ -30,7 +29,7 @@ class WebDataset(Dataset):
         yield from FileSystem.get_all_files_with_ext(loc, "tar")
 
     @staticmethod
-    def _get_wids_dataset_from_file(loc: Path | str):
+    def _get_wids_dataset_from_file(loc: Path | str) -> tuple[wids.ShardListDataset, int]:
         n_samples = WebDataset._count_unique_samples(str(loc))
 
         shard_info = {
@@ -59,21 +58,21 @@ class WebDataset(Dataset):
     @staticmethod
     def read_ranges_from_files(
         ranges_per_file: dict[str, list[tuple[int, int]]],
-        parsing_func: Callable[[str], str], # TODO: Will not necessarily take a string?
+        parsing_func: Callable[[str | dict], str],  # TODO: Will not necessarily take a string?
         server_connection: Optional[ServerConnection],
-    ) -> Iterable[str]:
+    ) -> Iterable[str | dict]:
         for file, range_list in ranges_per_file.items():
             yield from WebDataset._read_ranges_from_file(file, range_list, parsing_func, server_connection)
 
     @staticmethod
     def _read_ranges_from_file(  # pylint: disable=contextmanager-generator-missing-cleanup
-            file: str,
-            range_list: list[tuple[int, int]],
-            parsing_func: Callable[[dict], str],
-            server_connection: Optional[ServerConnection],
+        file: str,
+        range_list: list[tuple[int, int]],
+        parsing_func: Callable[[dict], str],
+        server_connection: Optional[ServerConnection],  # pylint: disable=unused-argument
     ) -> Iterable[str]:
         # TODO: need to modify our FileSystem abstraction to use server_connection
-        dataset, n_samples = WebDataset._get_wids_dataset_from_file(file)
+        dataset, _ = WebDataset._get_wids_dataset_from_file(file)
 
         last_line_read = 0
         last_r_start = -1
@@ -107,7 +106,7 @@ class WebDataset(Dataset):
             Number of unique samples.
         """
         try:
-            with tarfile.open(tar_path, 'r') as tar:
+            with tarfile.open(tar_path, "r") as tar:
                 file_names = [member.name for member in tar.getmembers() if member.isfile()]
         except tarfile.TarError as e:
             logger.error(f"Error opening tar file {tar_path}: {e}")
@@ -135,7 +134,7 @@ class WebDataset(Dataset):
             True if the .tar file is valid, False otherwise.
         """
         try:
-            with tarfile.open(tar_path, 'r') as tar:
+            with tarfile.open(tar_path, "r") as tar:
                 file_members = [member for member in tar.getmembers() if member.isfile()]
                 if not file_members:
                     logger.error(f"No files found in tar archive: {tar_path}")
@@ -183,7 +182,7 @@ class WebDataset(Dataset):
             logger.error(f"The provided path is not a directory: {path}")
             return False
 
-        tar_files = list(folder.glob('*.tar'))
+        tar_files = list(folder.glob("*.tar"))
         if not tar_files:
             logger.error(f"No .tar files found in the directory: {path}")
             return False
