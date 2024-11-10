@@ -1225,8 +1225,8 @@ class TestQueryResult(unittest.TestCase):
             chunk_language_counts = {"JavaScript": 0, "Python": 0, "HTML": 0}
             for mixture_key, datasets in chunk._result_index.items():
                 language = mixture_key.properties["language"][0]
-                for dataset_id, files in datasets.items():
-                    for file_id, ranges in files.items():
+                for files in datasets.values():
+                    for ranges in files.values():
                         for start, end in ranges:
                             count = end - start
                             chunk_size += count
@@ -1288,8 +1288,8 @@ class TestQueryResult(unittest.TestCase):
             chunk_language_counts = {"JavaScript": 0, "Python": 0, "HTML": 0}
             for mixture_key, datasets in chunk._result_index.items():
                 language = mixture_key.properties["language"][0]  # Get the language
-                for dataset_id, files in datasets.items():
-                    for file_id, ranges in files.items():
+                for files in datasets.values():
+                    for ranges in files.values():
                         for start, end in ranges:
                             count = end - start
                             chunk_size += count

@@ -219,7 +219,7 @@ def numpy_to_native(value: Any) -> Any:
     return value  # Assume it's already a native type
 
 
-def allocate_chunks(N: int, ratios: list[float]) -> list[int]:
+def allocate_chunks(N: int, ratios: list[float]) -> list[int]:  # pylint: disable=invalid-name
     """
     Allocates integer chunks summing up to N based on the given ratios.
 

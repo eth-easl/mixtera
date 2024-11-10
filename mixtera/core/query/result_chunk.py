@@ -159,14 +159,14 @@ class ResultChunk:
                 logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
-        """ If we have a mixture, ensure that the mixture supports the chunk
-        if self._mixture is not None and (not self._mixture.keys() == self._result_index.keys()):
-            raise RuntimeError(
-                "The received chunk has keys that do not match the mixture. That should not happen.\n"
-                + f"{self._result_index.keys()}"
-                + f"\n{self._mixture.keys()}"
-                + f"\n{self._mixture}"
-            )"""
+        # If we have a mixture, ensure that the mixture supports the chunk
+        # if self._mixture is not None and (not self._mixture.keys() == self._result_index.keys()):
+        #     raise RuntimeError(
+        #         "The received chunk has keys that do not match the mixture. That should not happen.\n"
+        #         + f"{self._result_index.keys()}"
+        #         + f"\n{self._mixture.keys()}"
+        #         + f"\n{self._mixture}"
+        #     )
 
     def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
