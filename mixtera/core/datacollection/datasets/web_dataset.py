@@ -39,15 +39,15 @@ class WebDataset(Dataset):
 
         dataset = wids.ShardListDataset(
             shards=[shard_info],
-            cache_size=int(1e9),  # TODO: Should be configurable
-            lru_size=10,  # TODO: Should be configurable
+            cache_size=int(1e9),  # Should be configurable
+            lru_size=10,  # Should be configurable
         )
 
         return dataset, n_samples
 
     @staticmethod
     def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
-        # TODO: This should use our FileSystem class and properly support server connections as well
+        # This should use our FileSystem class and properly support server connections as well
         # but it requires changes to the FileSystem abstraction
 
         dataset, n_samples = WebDataset._get_wids_dataset_from_file(loc)
@@ -58,7 +58,7 @@ class WebDataset(Dataset):
     @staticmethod
     def read_ranges_from_files(
         ranges_per_file: dict[str, list[tuple[int, int]]],
-        parsing_func: Callable[[str | dict], str],  # TODO: Will not necessarily take a string?
+        parsing_func: Callable[[str | dict], str],  # Will not necessarily take a string?
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str | dict]:
         for file, range_list in ranges_per_file.items():
@@ -71,7 +71,7 @@ class WebDataset(Dataset):
         parsing_func: Callable[[dict], str],
         server_connection: Optional[ServerConnection],  # pylint: disable=unused-argument
     ) -> Iterable[str]:
-        # TODO: need to modify our FileSystem abstraction to use server_connection
+        # need to modify our FileSystem abstraction to use server_connection
         dataset, _ = WebDataset._get_wids_dataset_from_file(file)
 
         last_line_read = 0

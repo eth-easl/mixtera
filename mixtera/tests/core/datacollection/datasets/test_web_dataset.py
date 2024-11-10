@@ -27,7 +27,7 @@ class TestWebDataset(unittest.TestCase):
         self.assertListEqual(iterated_files, tar_files)
 
     def test_build_file_index(self):
-        pass  # TODO: Implement when WebDataset's indexing is defined
+        pass  # Implement when WebDataset's indexing is defined
 
     def test_read_ranges_from_tar_e2e(self):
         """
