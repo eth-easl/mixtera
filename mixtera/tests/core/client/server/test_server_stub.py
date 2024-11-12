@@ -209,5 +209,5 @@ class TestServerStub(unittest.TestCase):
         feedback = ClientFeedback(100)
         result = self.server_stub.send_feedback(job_id, feedback)
 
-        mock_receive_feedback.assert_called_once_with(job_id, feedback)
+        mock_receive_feedback.assert_called_once_with(job_id, feedback.training_steps)
         self.assertTrue(result)

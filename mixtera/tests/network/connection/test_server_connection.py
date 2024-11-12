@@ -507,7 +507,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_int.assert_has_calls(
             [call(int(ServerTask.RECEIVE_FEEDBACK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
         )
-        mock_write_int.assert_has_calls([call(training_steps, NUM_BYTES_FOR_SIZES, mock_writer)])
+        mock_write_int.assert_has_calls([call(training_steps, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_write_utf8_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
 
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)

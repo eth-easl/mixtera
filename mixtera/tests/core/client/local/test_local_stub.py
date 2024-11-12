@@ -244,19 +244,21 @@ class TestLocalStub(unittest.TestCase):
         self.assertEqual(self.local_stub._training_query_map[self.job_id][0], mock_chunk_distributor)
 
     def test_send_feedback(self):
+        self.local_stub._training_query_map["feedback_job"] = (None, None, 100)
         for steps in range(100):
             feedback = ClientFeedback(steps)
-            result = self.local_stub.send_feedback(self.job_id, feedback)
+            result = self.local_stub.send_feedback("feedback_job", feedback)
             self.assertTrue(result)
 
     def test_process_feedback(self):
+        self.local_stub._training_query_map["feedback_job"] = (None, None, 100)
         # First sending feedbacks.
         for steps in range(100):
-            self.local_stub.send_feedback(self.job_id, ClientFeedback(steps))
+            self.local_stub.send_feedback("feedback_job", ClientFeedback(steps))
 
         # Then checking if we can process them.
         for steps in range(100):
-            feedback = self.local_stub.process_feedback(self.job_id)
+            feedback = self.local_stub.process_feedback("feedback_job")
             self.assertEqual(feedback.training_steps, steps, "The received feedback is wrong.")
 
 
