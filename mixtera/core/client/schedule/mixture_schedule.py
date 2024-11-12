@@ -92,14 +92,13 @@ class MixtureSchedule(Mixture):
         )
         return f'{{"mixture": "mixture_schedule", "schedule": [{schedule_str}], "chunk_size": {self.chunk_size}}}'
 
-    def define_arbitrary_schedule(self, mixture_count: int = 5, interval_length: int = 200):
+    def define_arbitrary_schedule(self, mixture_count: int = 5, interval_length: int = 200) -> None:
         """
         Defines a schedule with arbitrary mixtures in every interval.
 
         Args:
-            schedule_length: The number of training steps for the client.
-            interval_length: The length for a interval in training.
-            Number of updates will be schedule_length / interval_length.
+            mixture_count: The length of the schedule.
+            interval_length: The interval length for the mixture.
 
         Returns:
             ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
@@ -111,7 +110,7 @@ class MixtureSchedule(Mixture):
             self._schedule.append(ScheduleEntry(start, ArbitraryMixture(self.chunk_size)))
             start += interval_length
 
-    def add_to_schedule(self, start_step: int, mixture: Mixture):
+    def add_to_schedule(self, start_step: int, mixture: Mixture) -> None:
         """
         Adds a new mixture to the schedule.
 

@@ -25,6 +25,7 @@ class TestMixtureSchedule(unittest.TestCase):
         ), "Wrong mixture is used from the schedule."
 
         mixture_schedule.set_current_step(300)
+        current_mixture = mixture_schedule.get_current_mixture()
         assert (
             current_mixture.mixture_in_rows()[MixtureKey({"language": ["HTML"]})] == 5
         ), "Wrong mixture is used from the schedule."
