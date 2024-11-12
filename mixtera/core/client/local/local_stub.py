@@ -15,8 +15,6 @@ from mixtera.core.query.chunk_distributor import ChunkDistributor
 from mixtera.core.query.query_cache import QueryCache
 from mixtera.utils import wait_for_key_in_dict
 
-FEEDBACK_QUEUE_TIMEOUT = 60
-
 
 class LocalStub(MixteraClient):
     def __init__(self, directory: Path | str) -> None:
@@ -204,13 +202,16 @@ class LocalStub(MixteraClient):
             logger.warning(f"There is no job with the id: {job_id}!")
             return False
 
-        self.feedback_queue_map[job_id].append(feedback)
+        if job_id not in self.feedback_queue_map:
+            self.feedback_queue_map[job_id] = [feedback]
+        else:
+            self.feedback_queue_map[job_id].append(feedback)
         return True
 
     def process_feedback(self, job_id: str) -> ClientFeedback | None:
         try:
             feedback = self.feedback_queue_map[job_id].pop(0)
             return feedback
-        except Exception as e:
+        except IndexError as e:
             logger.warning(f"There is an issue retrieving the feedback for {job_id} with the exception {e}")
             return None

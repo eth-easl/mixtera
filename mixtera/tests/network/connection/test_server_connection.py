@@ -486,16 +486,12 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         )
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=900)
 
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     @patch("mixtera.network.connection.server_connection.read_int")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
-    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     async def test_receive_feedback(
-        self,
-        mock_read_int,
-        mock_write_int,
-        mock_write_utf8_string,
-        mock_connect_to_server,
+        self, mock_write_utf8_string, mock_write_int, mock_read_int, mock_connect_to_server
     ):
         job_id = "job_id"
         mock_reader = create_mock_reader()
@@ -511,7 +507,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_int.assert_has_calls(
             [call(int(ServerTask.RECEIVE_FEEDBACK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
         )
-        mock_write_int.assert_has_calls([call(training_steps, NUM_BYTES_FOR_SIZES, mock_writer)])
+        mock_write_int.assert_has_calls([call(training_steps, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_write_utf8_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
 
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
