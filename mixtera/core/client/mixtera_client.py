@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
+from mixtera.core.client.mixtera_client_feedback import ClientFeedback
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -33,11 +34,6 @@ class ResultStreamingArgs:
     chunk_reading_degree_of_parallelism: int = 1
     chunk_reading_per_window_mixture: bool = False
     chunk_reading_window_size: int = 128
-
-
-@dataclass
-class ClientFeedback:
-    training_steps: int = 0
 
 
 class MixteraClient(ABC):
@@ -378,7 +374,7 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def send_feedback(self, feedback: ClientFeedback) -> bool:
+    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         """
         This function sends the training feedback to the server for the mixture schedules .
         """

@@ -5,7 +5,7 @@ from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import dill
-from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.connection.server_connection import ServerConnection
@@ -486,29 +486,32 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         )
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=900)
 
-    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
-    @patch("mixtera.network.connection.server_connection.write_int")
-    @patch("mixtera.network.connection.server_connection.write_pickeled_object")
     @patch("mixtera.network.connection.server_connection.read_int")
+    @patch("mixtera.network.connection.server_connection.write_int")
+    @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     async def test_receive_feedback(
         self,
         mock_read_int,
-        mock_write_pickeled_object,
         mock_write_int,
+        mock_write_utf8_string,
         mock_connect_to_server,
     ):
+        job_id = "job_id"
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
         mock_connect_to_server.return_value = mock_reader, mock_writer
         mock_read_int.return_value = 1
-        message = ClientFeedback(100)
+        training_steps = 100
 
-        success = await self.server_connection._receive_feedback(message)
+        success = await self.server_connection._receive_feedback(job_id, training_steps)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
         mock_write_int.assert_has_calls(
             [call(int(ServerTask.RECEIVE_FEEDBACK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
         )
-        mock_write_pickeled_object.assert_has_calls([call(message, NUM_BYTES_FOR_SIZES, mock_writer)])
+        mock_write_int.assert_has_calls([call(training_steps, NUM_BYTES_FOR_SIZES, mock_writer)])
+        mock_write_utf8_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)

@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
@@ -204,8 +204,9 @@ class TestServerStub(unittest.TestCase):
 
     @patch.object(ServerConnection, "receive_feedback")
     def test_send_feedback(self, mock_receive_feedback):
-        feedback = ClientFeedback(100)
-        result = self.server_stub.send_feedback(feedback)
+        job_id = "test_job_id"
+        training_steps = 100
+        result = self.server_stub.send_feedback(job_id, training_steps)
 
-        mock_receive_feedback.assert_called_once_with(feedback)
+        mock_receive_feedback.assert_called_once_with(job_id, training_steps)
         self.assertTrue(result)
