@@ -211,6 +211,6 @@ class LocalStub(MixteraClient):
         try:
             feedback = self.feedback_queue_map[job_id].pop(0)
             return feedback
-        except Exception as e:
+        except IndexError as e:
             logger.warning(f"There is an issue retrieving the feedback for {job_id} with the exception {e}")
             return None
