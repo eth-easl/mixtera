@@ -1,37 +1,98 @@
 import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from loguru import logger
-from mixtera.core.query import ArbitraryMixture, Mixture
+from mixtera.core.query import ArbitraryMixture, Mixture, MixtureKey
 
-MixtureInterval = tuple[int, int, Mixture]
+if TYPE_CHECKING:
+    from mixtera.core.datacollection.index import ChunkerIndex
+@dataclass
+class ScheduleEntry:
+    start_step: int
+    mixture: Mixture
 
-
-class MixtureSchedule:
+class MixtureSchedule(Mixture):
     """
-    A class to represent the mixture schedule for MixteraClient.
+    Mixture that changes over time based on a schedule plan.
     """
 
-    def __init__(self, chunk_size: int):
-        self._chunk_size = chunk_size
-        self._schedule: list[MixtureInterval] = []  # Start, length, mixture of the interval
+    def __init__(self, chunk_size: int, schedule: list[ScheduleEntry]) -> None:
+        """
+        Initialize the MixtureSchedule with a schedule plan.
 
-    def create_schedule(self, mixture_list: list[MixtureInterval]):
-        self._schedule = mixture_list[:]
-
-    def __str__(self) -> str:
-        """String representation of this mixture schedule."""
-        result = "The client has the following schedule: \n"
-        for item in self._schedule:
-            result += f"Start: {item[0]}, End: {item[0] + item[1]}, Mixture: {item[2]} \n"
-        return result
+        Args:
+            chunk_size: The size of a chunk in number of instances.
+            schedule: A list of ScheduleEntry indicating the mixture to use at each training step.
+        """
+        super().__init__(chunk_size)
+        self.schedule = sorted(schedule, key=lambda entry: entry.start_step)
+        self.current_step = 0
 
     def is_schedule_defined(self) -> bool:
         """
         Returns if there is an existing schedule.
         """
         return len(self._schedule) > 0
+    
+    def set_current_step(self, current_step: int) -> None:
+        """
+        Set the current training step.
 
-    def define_arbitrary_schedule(self, schedule_length: int = 1000, interval_length: int = 200):
+        Args:
+            step: The current training step.
+        """
+        self.current_step = current_step
+
+    def mixture_in_rows(self) -> dict[MixtureKey, int]:
+        """
+        Returns the mixture dictionary for the current training step.
+
+        Returns:
+            The mixture dictionary for the current training step.
+        """
+        current_mixture = self._get_current_mixture()
+        return current_mixture.mixture_in_rows()
+
+    def inform(self, chunker_index: "ChunkerIndex") -> None:
+        """
+        Inform the current mixture about the overall chunker index.
+
+        Args:
+            chunker_index: The chunker index.
+        """
+        current_mixture = self._get_current_mixture()
+        current_mixture.inform(chunker_index)
+
+    def _get_current_mixture(self) -> Mixture:
+        """
+        Get the mixture corresponding to the current training step.
+
+        Returns:
+            The mixture for the current training step.
+        """
+        # Retrieve the mixture based on the current step from the schedule
+        # This method will select the appropriate mixture according to the schedule entries
+        for entry in reversed(self.schedule):
+            if self.current_step >= entry.start_step:
+                return entry.mixture
+        # Default to the first mixture if current_step is before any start_step
+        return self.schedule[0].mixture
+
+    def __str__(self) -> str:
+        """
+        String representation of this mixture schedule.
+
+        Returns:
+            A string describing the mixture schedule.
+        """
+        schedule_str = ', '.join(
+            [f'(start_step: {entry.start_step}, mixture: {entry.mixture})' for entry in self.schedule]
+        )
+        return f'{{"mixture": "mixture_schedule", "schedule": [{schedule_str}], "chunk_size": {self.chunk_size}}}'
+
+
+    def define_arbitrary_schedule(self, mixture_count: int = 5, interval_length: int = 200):
         """
         Defines a schedule with arbitrary mixtures in every interval.
 
@@ -43,34 +104,14 @@ class MixtureSchedule:
         Returns:
             ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
         """
-        interval_count = math.ceil(schedule_length / interval_length)
         start = 0
+        self.schedule = []
 
-        for _ in range(interval_count):
-            self._schedule.append(start, interval_length, ArbitraryMixture(self._chunk_size))
-            start += self._interval_size
+        for _ in range(mixture_count):
+            self._schedule.append(ScheduleEntry(start, ArbitraryMixture(self.chunk_size)))
+            start += interval_length
 
-    def get_current_mixture(self, step: int) -> Mixture | None:
-        """
-        Finding the mixture that should be applied in the given training step for predefined schedules.
-
-        Args:
-            step: The step which the mixture is looked for.
-
-        Returns:
-            Mixture: The mixture belonging to the step.
-        """
-        assert self.is_schedule_defined(), "There is no defined schedule."
-
-        for interval in self._schedule:
-            if step >= interval[0] and step < interval[0] + interval[1]:
-                logger.info(f"Returning the mixture for {step} in the schedule.")
-                return interval[2]
-
-        logger.error(f"There is no defined mixture for the step {step}.")
-        return None
-
-    def add_to_schedule(self, training_length: int, mixture: Mixture):
+    def add_to_schedule(self, start_step: int, mixture: Mixture):
         """
         Adds a new mixture to the schedule.
 
@@ -78,6 +119,11 @@ class MixtureSchedule:
             training_length: The duration that the client should be trained on that mixture.
             mixture: Mixture to be trained on.
         """
-        last_start, last_length, _ = self._schedule[len(self._schedule) - 1]
-        start = last_length + last_start
-        self._schedule.append((start, training_length, mixture))
+        for item in self.schedule:
+            # If the given starting step already existing, we just update the mixture.
+            if item.start_step == start_step:
+                item.mixture = mixture
+                return
+
+        self.schedule.append(ScheduleEntry(start_step, mixture))
+        self.schedule = sorted(self.schedule, key=lambda item: item.start_step)
