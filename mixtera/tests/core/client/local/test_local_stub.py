@@ -246,7 +246,7 @@ class TestLocalStub(unittest.TestCase):
     def test_send_feedback(self):
         for steps in range(100):
             feedback = ClientFeedback(steps)
-            result = self.local_stub.send_feedback(feedback, self.job_id)
+            result = self.local_stub.send_feedback(self.job_id, feedback)
             self.assertTrue(result)
 
     def test_process_feedback(self):
