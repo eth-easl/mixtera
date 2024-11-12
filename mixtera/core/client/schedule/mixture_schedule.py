@@ -99,9 +99,6 @@ class MixtureSchedule(Mixture):
         Args:
             mixture_count: The length of the schedule.
             interval_length: The interval length for the mixture.
-
-        Returns:
-            ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
         """
         start = 0
         self.schedule = []
@@ -115,8 +112,8 @@ class MixtureSchedule(Mixture):
         Adds a new mixture to the schedule.
 
         Args:
-            training_length: The duration that the client should be trained on that mixture.
-            mixture: Mixture to be trained on.
+            start_step: The starting training step for that mixture in the schedule.
+            mixture: Mixture to be added to the schedule.
         """
         assert mixture.chunk_size == self.chunk_size, "The chunk size of the mixtures does not match."
         for item in self.schedule:
