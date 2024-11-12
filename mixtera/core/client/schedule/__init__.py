@@ -1,3 +1,3 @@
-from .mixture_schedule import MixtureSchedule
+from .mixture_schedule import MixtureSchedule, ScheduleEntry
 
-__all__ = ["MixtureSchedule"]
+__all__ = ["MixtureSchedule", "ScheduleEntry"]

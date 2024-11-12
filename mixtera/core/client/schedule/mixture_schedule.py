@@ -1,16 +1,17 @@
-import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from loguru import logger
 from mixtera.core.query import ArbitraryMixture, Mixture, MixtureKey
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.index import ChunkerIndex
+
+
 @dataclass
 class ScheduleEntry:
     start_step: int
     mixture: Mixture
+
 
 class MixtureSchedule(Mixture):
     """
@@ -34,7 +35,7 @@ class MixtureSchedule(Mixture):
         Returns if there is an existing schedule.
         """
         return len(self._schedule) > 0
-    
+
     def set_current_step(self, current_step: int) -> None:
         """
         Set the current training step.
@@ -61,10 +62,10 @@ class MixtureSchedule(Mixture):
         Args:
             chunker_index: The chunker index.
         """
-        current_mixture = self._get_current_mixture()
+        current_mixture = self.get_current_mixture()
         current_mixture.inform(chunker_index)
 
-    def _get_current_mixture(self) -> Mixture:
+    def get_current_mixture(self) -> Mixture:
         """
         Get the mixture corresponding to the current training step.
 
@@ -72,8 +73,8 @@ class MixtureSchedule(Mixture):
             The mixture for the current training step.
         """
         # Retrieve the mixture based on the current step from the schedule
-        # This method will select the appropriate mixture according to the schedule entries
         for entry in reversed(self.schedule):
+            assert entry.mixture.chunk_size == self.chunk_size, "The chunk size of the mixtures does not match."
             if self.current_step >= entry.start_step:
                 return entry.mixture
         # Default to the first mixture if current_step is before any start_step
@@ -86,11 +87,10 @@ class MixtureSchedule(Mixture):
         Returns:
             A string describing the mixture schedule.
         """
-        schedule_str = ', '.join(
-            [f'(start_step: {entry.start_step}, mixture: {entry.mixture})' for entry in self.schedule]
+        schedule_str = ", ".join(
+            [f"(start_step: {entry.start_step}, mixture: {entry.mixture})" for entry in self.schedule]
         )
         return f'{{"mixture": "mixture_schedule", "schedule": [{schedule_str}], "chunk_size": {self.chunk_size}}}'
-
 
     def define_arbitrary_schedule(self, mixture_count: int = 5, interval_length: int = 200):
         """
@@ -119,6 +119,7 @@ class MixtureSchedule(Mixture):
             training_length: The duration that the client should be trained on that mixture.
             mixture: Mixture to be trained on.
         """
+        assert mixture.chunk_size == self.chunk_size, "The chunk size of the mixtures does not match."
         for item in self.schedule:
             # If the given starting step already existing, we just update the mixture.
             if item.start_step == start_step:
