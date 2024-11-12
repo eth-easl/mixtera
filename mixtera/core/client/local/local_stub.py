@@ -1,11 +1,11 @@
 import multiprocessing as mp
 from pathlib import Path
-from queue import Empty, Queue
 from typing import Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
+from mixtera.core.client.mixtera_client_feedback import ClientFeedback
 from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -36,7 +36,7 @@ class LocalStub(MixteraClient):
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
         self._query_cache = QueryCache(self.directory / "querycache", self._mdc)
 
-        self.feedback_queue: "Queue[ClientFeedback]" = Queue()
+        self.feedback_queue_map: dict[str, list[ClientFeedback]] = {}
 
     def register_dataset(
         self,
@@ -199,14 +199,18 @@ class LocalStub(MixteraClient):
                 mixture if mixture is not None else distri._query_result._mixture,
             )
 
-    def send_feedback(self, feedback: ClientFeedback) -> bool:
-        self.feedback_queue.put(feedback)
+    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
+        if job_id not in self._training_query_map:
+            logger.warning(f"There is no job with the id: {job_id}!")
+            return False
+
+        self.feedback_queue_map[job_id].append(feedback)
         return True
 
-    def process_feedback(self) -> ClientFeedback | None:
+    def process_feedback(self, job_id: str) -> ClientFeedback | None:
         try:
-            feedback = self.feedback_queue.get(timeout=FEEDBACK_QUEUE_TIMEOUT)
+            feedback = self.feedback_queue_map[job_id].pop(0)
             return feedback
-        except Empty:
-            logger.warning("There is no unprocessed feedback")
+        except Exception as e:
+            logger.warning(f"There is an issue retrieving the feedback for {job_id} with the exception {e}")
             return None

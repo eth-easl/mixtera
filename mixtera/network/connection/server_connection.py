@@ -22,7 +22,7 @@ from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
 
 if TYPE_CHECKING:
-    from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
+    from mixtera.core.client.mixtera_client import QueryExecutionArgs
     from mixtera.core.query import Query, ResultChunk
 
 
@@ -660,10 +660,10 @@ class ServerConnection:
         else:
             logger.info("Successfully restored from checkpoint at server.")
 
-    def receive_feedback(self, message: "ClientFeedback") -> bool:
-        return run_async_until_complete(self._receive_feedback(message))
+    def receive_feedback(self, job_id: str, training_steps: int) -> bool:
+        return run_async_until_complete(self._receive_feedback(job_id, training_steps))
 
-    async def _receive_feedback(self, message: "ClientFeedback") -> bool:
+    async def _receive_feedback(self, job_id: str, training_steps: int) -> bool:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -672,7 +672,8 @@ class ServerConnection:
         # Announce we want to send a message to server.
         await write_int(int(ServerTask.RECEIVE_FEEDBACK), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        # Announce the feedback.
-        await write_pickeled_object(message, NUM_BYTES_FOR_SIZES, writer)
+        # Announce the training steps and the job id.
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(training_steps, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))

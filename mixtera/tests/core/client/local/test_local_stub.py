@@ -4,7 +4,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.mixtera_client import ClientFeedback, QueryExecutionArgs
+from mixtera.core.client.mixtera_client import QueryExecutionArgs
+from mixtera.core.client.mixtera_client_feedback import ClientFeedback
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
@@ -243,20 +244,20 @@ class TestLocalStub(unittest.TestCase):
         self.assertEqual(self.local_stub._training_query_map[self.job_id][0], mock_chunk_distributor)
 
     def test_send_feedback(self):
-        for _ in range(100):
-            feedback = ClientFeedback(100)
-            result = self.local_stub.send_feedback(feedback)
+        for steps in range(100):
+            feedback = ClientFeedback(steps)
+            result = self.local_stub.send_feedback(self.job_id, feedback)
             self.assertTrue(result)
 
     def test_process_feedback(self):
         # First sending feedbacks.
-        for _ in range(100):
-            self.local_stub.send_feedback(ClientFeedback(100))
+        for steps in range(100):
+            self.local_stub.send_feedback(self.job_id, ClientFeedback(steps))
 
         # Then checking if we can process them.
-        for _ in range(100):
-            feedback = self.local_stub.process_feedback()
-            self.assertEqual(feedback.training_steps, 100, "The received feedback is wrong.")
+        for steps in range(100):
+            feedback = self.local_stub.process_feedback(self.job_id)
+            self.assertEqual(feedback.training_steps, steps, "The received feedback is wrong.")
 
 
 if __name__ == "__main__":
