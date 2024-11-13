@@ -60,9 +60,4 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                   const std::vector<std::string>& property_columns,
                   ChunkerIndexCpp& local_chunker_index);
 
-template <typename ArrowType>
-int64_t GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t position) {
-    using ArrayType = typename arrow::TypeTraits<ArrowType>::ArrayType;
-    auto index_array = std::static_pointer_cast<ArrayType>(indices);
-    return static_cast<int64_t>(index_array->Value(position));
-}
+bool GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t position, int64_t& out_index);

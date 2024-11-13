@@ -7,8 +7,67 @@
 #include <arrow/python/pyarrow.h>
 #include <thread>
 #include <iostream>
+#include <typeinfo>
+#include <arrow/util/checked_cast.h>
+
 
 namespace py = pybind11;
+
+bool GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t position, int64_t& out_index) {
+    if (position < 0 || position >= indices->length()) {
+        std::cerr << "Index position out of bounds: " << position << std::endl;
+        return false;
+    }
+
+    switch (indices->type_id()) {
+        case arrow::Type::INT8: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::Int8Array>(indices);
+            out_index = static_cast<int64_t>(index_array->Value(position));
+            return true;
+        }
+        case arrow::Type::UINT8: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::UInt8Array>(indices);
+            out_index = static_cast<int64_t>(index_array->Value(position));
+            return true;
+        }
+        case arrow::Type::INT16: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::Int16Array>(indices);
+            out_index = static_cast<int64_t>(index_array->Value(position));
+            return true;
+        }
+        case arrow::Type::UINT16: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::UInt16Array>(indices);
+            out_index = static_cast<int64_t>(index_array->Value(position));
+            return true;
+        }
+        case arrow::Type::INT32: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::Int32Array>(indices);
+            out_index = static_cast<int64_t>(index_array->Value(position));
+            return true;
+        }
+        case arrow::Type::UINT32: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::UInt32Array>(indices);
+            out_index = static_cast<int64_t>(index_array->Value(position));
+            return true;
+        }
+        case arrow::Type::INT64: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::Int64Array>(indices);
+            out_index = index_array->Value(position);
+            return true;
+        }
+        case arrow::Type::UINT64: {
+            auto index_array = arrow::internal::checked_pointer_cast<arrow::UInt64Array>(indices);
+            out_index = static_cast<int64_t>(index_array->Value(position));
+            return true;
+        }
+        default:
+            std::cerr << "Unsupported index type: " << indices->type()->ToString() << std::endl;
+            return false;
+    }
+}
+
+
+
 std::vector<Interval> merge_sorted_intervals(const std::vector<Interval>& list1, const std::vector<Interval>& list2) {
     std::vector<Interval> merged;
     merged.reserve(list1.size() + list2.size());
@@ -60,17 +119,85 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                   const std::vector<std::string>& property_columns,
                   ChunkerIndexCpp& local_chunker_index) {
     try {
-        // Get columns
-        auto dataset_id_array = std::static_pointer_cast<arrow::Int32Array>(table->GetColumnByName("dataset_id")->chunk(0));
-        auto file_id_array = std::static_pointer_cast<arrow::Int32Array>(table->GetColumnByName("file_id")->chunk(0));
-        auto interval_start_array = std::static_pointer_cast<arrow::Int32Array>(table->GetColumnByName("interval_start")->chunk(0));
-        auto interval_end_array = std::static_pointer_cast<arrow::Int32Array>(table->GetColumnByName("interval_end")->chunk(0));
+
+        if (start_row < 0 || end_row > table->num_rows() || start_row >= end_row) {
+            std::cerr << "Invalid row indices: start_row=" << start_row << ", end_row=" << end_row << std::endl;
+            return;
+        }
+
+        // Get columns and check that they exist
+        auto dataset_id_column = table->GetColumnByName("dataset_id");
+        auto file_id_column = table->GetColumnByName("file_id");
+        auto interval_start_column = table->GetColumnByName("interval_start");
+        auto interval_end_column = table->GetColumnByName("interval_end");
+
+        if (!dataset_id_column || !file_id_column || !interval_start_column || !interval_end_column) {
+            std::cerr << "One or more required columns ('dataset_id', 'file_id', 'interval_start', 'interval_end') are missing." << std::endl;
+            return;
+        }
+
+        // Since we've called CombineChunks, each column should have only one chunk
+        if (dataset_id_column->num_chunks() != 1 || file_id_column->num_chunks() != 1 ||
+            interval_start_column->num_chunks() != 1 || interval_end_column->num_chunks() != 1) {
+            std::cerr << "Columns have unexpected number of chunks after CombineChunks." << std::endl;
+            return;
+        }
+
+        std::shared_ptr<arrow::Array> dataset_id_array = dataset_id_column->chunk(0);
+        std::shared_ptr<arrow::Array> file_id_array = file_id_column->chunk(0);
+        std::shared_ptr<arrow::Array> interval_start_array = interval_start_column->chunk(0);
+        std::shared_ptr<arrow::Array> interval_end_array = interval_end_column->chunk(0);
+
+        // **Print out the data types for debugging**
+        std::cout << "Dataset ID column type: " << dataset_id_array->type()->ToString()
+                    << ", array class: " << typeid(*dataset_id_array.get()).name() << std::endl;
+
+        std::cout << "File ID column type: " << file_id_array->type()->ToString()
+                    << ", array class: " << typeid(*file_id_array.get()).name() << std::endl;
+
+        std::cout << "Interval Start column type: " << interval_start_array->type()->ToString()
+                    << ", array class: " << typeid(*interval_start_array.get()).name() << std::endl;
+
+        std::cout << "Interval End column type: " << interval_end_array->type()->ToString()
+                    << ", array class: " << typeid(*interval_end_array.get()).name() << std::endl;
+
+        // Cast arrays to appropriate types and check
+        auto dataset_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(dataset_id_array);
+        auto file_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(file_id_array);
+        auto interval_start_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(interval_start_array);
+        auto interval_end_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(interval_end_array);
+
+        if (!dataset_id_array_int32 || !file_id_array_int32 || !interval_start_array_int32 || !interval_end_array_int32) {
+            std::cerr << "Failed to cast arrays to Int32Array." << std::endl;
+            return;
+        }
+
+        // Check that arrays have sufficient length
+        int64_t array_length = dataset_id_array_int32->length();
+        if (array_length < end_row) {
+            std::cerr << "Array length is less than end_row: array_length=" << array_length << ", end_row=" << end_row << std::endl;
+            return;
+        }
 
         // Prepare property arrays
         std::vector<std::shared_ptr<arrow::Array>> property_arrays;
         for (const auto& col_name : property_columns) {
-            property_arrays.push_back(table->GetColumnByName(col_name)->chunk(0));
+            auto column = table->GetColumnByName(col_name);
+            if (!column) {
+                std::cerr << "Property column '" << col_name << "' not found in table." << std::endl;
+                property_arrays.push_back(nullptr); // Placeholder to maintain alignment
+                continue;
+            }
+
+            if (column->num_chunks() != 1) {
+                std::cerr << "Property column '" << col_name << "' has unexpected number of chunks after CombineChunks." << std::endl;
+                property_arrays.push_back(nullptr);
+                continue;
+            }
+
+            property_arrays.push_back(column->chunk(0));
         }
+
 
         for (int64_t i = start_row; i < end_row; ++i) {
             MixtureKeyCpp key;
@@ -79,33 +206,54 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                 auto array = property_arrays[j];
                 std::string col_name = property_columns[j];
 
+                if (!array) {
+                    continue;
+                }
+
+                if (i >= array->length()) {
+                    std::cerr << "Index out of bounds for property '" << col_name << "' at row " << i << std::endl;
+                    continue;
+                }
+
                 if (array->IsNull(i)) {
                     continue;
                 }
 
-                auto type_id = array->type_id();
 
+                auto type_id = array->type_id();
 
                 try {
                     if (type_id == arrow::Type::STRING) {
                         // Handle STRING type
-                        auto str_array = std::static_pointer_cast<arrow::StringArray>(array);
+                        auto str_array = arrow::internal::checked_pointer_cast<arrow::StringArray>(array);
                         std::string value = str_array->GetString(i);
                         key.properties[col_name] = {value};
                     } else if (type_id == arrow::Type::LIST) {
                         // Handle LIST type
-                        auto list_array = std::static_pointer_cast<arrow::ListArray>(array);
+                        auto list_array = arrow::internal::checked_pointer_cast<arrow::ListArray>(array);
                         if (list_array->IsNull(i)) {
                             continue;
                         }
-                        auto value_array = list_array->values();
+
                         int64_t offset = list_array->value_offset(i);
                         int64_t length = list_array->value_length(i);
+                        auto value_array = list_array->values();
+
+                        if (!value_array) {
+                            std::cerr << "Value array is null for LIST column '" << col_name << "'" << std::endl;
+                            continue;
+                        }
+
+                        if (offset < 0 || length < 0 || (offset + length) > value_array->length()) {
+                            std::cerr << "Invalid offset/length for LIST column '" << col_name << "' at row " << i << std::endl;
+                            continue;
+                        }
+
                         std::vector<std::string> values;
 
                         if (value_array->type_id() == arrow::Type::STRING) {
                             // LIST of STRING
-                            auto str_values = std::static_pointer_cast<arrow::StringArray>(value_array);
+                            auto str_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(value_array);
                             for (int64_t k = offset; k < offset + length; ++k) {
                                 if (str_values->IsNull(k)) {
                                     continue;
@@ -115,10 +263,15 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                             }
                         } else if (value_array->type_id() == arrow::Type::DICTIONARY) {
                             // LIST of DICTIONARY
-                            auto dict_array = std::static_pointer_cast<arrow::DictionaryArray>(value_array);
+                            auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(value_array);
                             auto dict = dict_array->dictionary();
-                            auto dict_values = std::static_pointer_cast<arrow::StringArray>(dict);
+                            auto dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
                             auto indices = dict_array->indices();
+
+                            if (!dict_values || !indices) {
+                                std::cerr << "Dictionary values or indices are null in LIST of DICTIONARY for column '" << col_name << "'" << std::endl;
+                                continue;
+                            }
 
                             for (int64_t k = offset; k < offset + length; ++k) {
                                 if (dict_array->IsNull(k)) {
@@ -126,35 +279,14 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                                 }
 
                                 int64_t index = 0;
-                                switch (indices->type_id()) {
-                                    case arrow::Type::INT8:
-                                        index = GetIndexValue<arrow::Int8Type>(indices, k);
-                                        break;
-                                    case arrow::Type::INT16:
-                                        index = GetIndexValue<arrow::Int16Type>(indices, k);
-                                        break;
-                                    case arrow::Type::INT32:
-                                        index = GetIndexValue<arrow::Int32Type>(indices, k);
-                                        break;
-                                    case arrow::Type::INT64:
-                                        index = GetIndexValue<arrow::Int64Type>(indices, k);
-                                        break;
-                                    case arrow::Type::UINT8:
-                                        index = GetIndexValue<arrow::UInt8Type>(indices, k);
-                                        break;
-                                    case arrow::Type::UINT16:
-                                        index = GetIndexValue<arrow::UInt16Type>(indices, k);
-                                        break;
-                                    case arrow::Type::UINT32:
-                                        index = GetIndexValue<arrow::UInt32Type>(indices, k);
-                                        break;
-                                    case arrow::Type::UINT64:
-                                        index = GetIndexValue<arrow::UInt64Type>(indices, k);
-                                        break;
-                                    default:
-                                        std::cerr << "Unsupported index type in DICTIONARY array: "
-                                                  << indices->type()->ToString() << std::endl;
-                                        continue;
+                                if (!GetIndexValue(indices, k, index)) {
+                                    std::cerr << "Failed to get index value at position " << k << " in LIST of DICTIONARY for column '" << col_name << "'" << std::endl;
+                                    continue;
+                                }
+
+                                if (index < 0 || index >= dict_values->length()) {
+                                    std::cerr << "Index out of bounds in dictionary values for LIST of DICTIONARY at position " << k << std::endl;
+                                    continue;
                                 }
 
                                 std::string val = dict_values->GetString(index);
@@ -166,46 +298,30 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                         key.properties[col_name] = values;
                     } else if (type_id == arrow::Type::DICTIONARY) {
                         // Handle DICTIONARY type
-                        auto dict_array = std::static_pointer_cast<arrow::DictionaryArray>(array);
+                        auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(array);
 
                         if (dict_array->IsNull(i)) {
                             continue;
                         }
 
                         auto dict = dict_array->dictionary();
-                        auto dict_values = std::static_pointer_cast<arrow::StringArray>(dict);
+                        auto dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
                         auto indices = dict_array->indices();
 
+                        if (!dict_values || !indices) {
+                            std::cerr << "Dictionary values or indices are null in DICTIONARY column '" << col_name << "'" << std::endl;
+                            continue;
+                        }
+
                         int64_t index = 0;
-                        switch (indices->type_id()) {
-                            case arrow::Type::INT8:
-                                index = GetIndexValue<arrow::Int8Type>(indices, i);
-                                break;
-                            case arrow::Type::INT16:
-                                index = GetIndexValue<arrow::Int16Type>(indices, i);
-                                break;
-                            case arrow::Type::INT32:
-                                index = GetIndexValue<arrow::Int32Type>(indices, i);
-                                break;
-                            case arrow::Type::INT64:
-                                index = GetIndexValue<arrow::Int64Type>(indices, i);
-                                break;
-                            case arrow::Type::UINT8:
-                                index = GetIndexValue<arrow::UInt8Type>(indices, i);
-                                break;
-                            case arrow::Type::UINT16:
-                                index = GetIndexValue<arrow::UInt16Type>(indices, i);
-                                break;
-                            case arrow::Type::UINT32:
-                                index = GetIndexValue<arrow::UInt32Type>(indices, i);
-                                break;
-                            case arrow::Type::UINT64:
-                                index = GetIndexValue<arrow::UInt64Type>(indices, i);
-                                break;
-                            default:
-                                std::cerr << "Unsupported index type in DICTIONARY array: "
-                                          << indices->type()->ToString() << std::endl;
-                                continue;
+                        if (!GetIndexValue(indices, i, index)) {
+                            std::cerr << "Failed to get index value at position " << i << " in DICTIONARY column '" << col_name << "'" << std::endl;
+                            continue;
+                        }
+
+                        if (index < 0 || index >= dict_values->length()) {
+                            std::cerr << "Index out of bounds in dictionary values for DICTIONARY at position " << i << std::endl;
+                            continue;
                         }
 
                         std::string value = dict_values->GetString(index);
@@ -215,18 +331,27 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                     }
                 } catch (const std::exception& e) {
                     std::cerr << "Exception at row " << i << ", column '" << col_name << "': " << e.what() << std::endl;
-                    throw;
+                    continue;
                 }
             }
 
-            int64_t dataset_id = static_cast<int64_t>(dataset_id_array->Value(i));
-            int64_t file_id = static_cast<int64_t>(file_id_array->Value(i));
-            int64_t interval_start = static_cast<int64_t>(interval_start_array->Value(i));
-            int64_t interval_end = static_cast<int64_t>(interval_end_array->Value(i));
+            // Access dataset_id, file_id, interval_start, and interval_end
+            if (i >= dataset_id_array_int32->length() || i >= file_id_array_int32->length() ||
+                i >= interval_start_array_int32->length() || i >= interval_end_array_int32->length()) {
+                std::cerr << "Index out of bounds at row " << i << std::endl;
+                continue;
+            }
+
+            int64_t dataset_id = static_cast<int64_t>(dataset_id_array_int32->Value(i));
+            int64_t file_id = static_cast<int64_t>(file_id_array_int32->Value(i));
+            int64_t interval_start = static_cast<int64_t>(interval_start_array_int32->Value(i));
+            int64_t interval_end = static_cast<int64_t>(interval_end_array_int32->Value(i));
 
             if (interval_end < interval_start) {
-                std::cerr << "Warning: interval_end = " << interval_end <<  " < interval_start = " << interval_start << " at row " << i <<  " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
+                std::cerr << "Warning: interval_end = " << interval_end << " < interval_start = " << interval_start << " at row " << i << " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
+                continue; // Skip invalid intervals
             }
+
 
             // Optional: Debugging output
             
