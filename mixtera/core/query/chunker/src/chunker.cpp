@@ -225,7 +225,7 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
             int64_t interval_end = static_cast<int64_t>(interval_end_array->Value(i));
 
             if (interval_end < interval_start) {
-                std::cerr << "Warning: interval_end = " << interval_start <<  " < interval_start = " << interval_start << " at row " << i <<  " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
+                std::cerr << "Warning: interval_end = " << interval_end <<  " < interval_start = " << interval_start << " at row " << i <<  " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
             }
 
             // Optional: Debugging output
@@ -260,13 +260,23 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         // Convert PyArrow Table to C++ Arrow Table
         std::shared_ptr<arrow::Table> table = arrow::py::unwrap_table(py_table.ptr()).ValueOrDie();
 
-        int64_t num_rows = table->num_rows();
+        std::shared_ptr<arrow::Table> combined_table;
+        arrow::Result<std::shared_ptr<arrow::Table>> combine_result = table->CombineChunks();
+        if (!combine_result.ok()) {
+            std::cerr << "Error combining chunks: " << combine_result.status().message() << std::endl;
+            throw std::runtime_error("Failed to combine chunks");
+        } else {
+            combined_table = combine_result.ValueOrDie();
+        }
+        std::cout << "Combined table." << std::endl;
+
+        int64_t num_rows = combined_table->num_rows();
 
         // Identify property columns
         std::vector<std::string> exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"};
         std::vector<std::string> property_columns;
 
-        for (const auto& field : table->schema()->fields()) {
+        for (const auto& field : combined_table->schema()->fields()) {
             std::string col_name = field->name();
             if (std::find(exclude_keys.begin(), exclude_keys.end(), col_name) == exclude_keys.end()) {
                 property_columns.push_back(col_name);
@@ -291,7 +301,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
                 threads.emplace_back([&, start_row, end_row, t]() {
                     try {
                         // Each thread processes its assigned rows
-                        process_rows(table, start_row, end_row, property_columns, thread_chunker_indices[t]);
+                        process_rows(combined_table, start_row, end_row, property_columns, thread_chunker_indices[t]);
                     } catch (const std::exception& e) {
                         std::cerr << "Exception in thread " << t << ": " << e.what() << std::endl;
                         // Handle exception or terminate
