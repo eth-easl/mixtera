@@ -6,6 +6,7 @@ from collections import defaultdict
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
+from UltraDict import UltraDict
 
 import dill
 import pyarrow as pa
@@ -83,7 +84,7 @@ class QueryResult:
         }
     
     @staticmethod
-    def _worker_process_func(input_queue, output_queue, property_columns):
+    def _worker_process_func(worker_id, input_queue, property_columns, worker_ultradict_name):
         """
         Worker function for processing batches from the input queue and putting results into the output queue.
 
@@ -92,25 +93,47 @@ class QueryResult:
             output_queue (multiprocessing.Queue): Queue to put processed results.
             property_columns (set): Set of property column names used in processing.
         """
-        logger.debug(f"Process [{os.getpid()}] Started worker!")
+        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Started worker!")
         import time
+
+        per_worker_dict = UltraDict(
+            name=worker_ultradict_name,
+            create=True,
+            buffer_size=(4 * 1024 * 1024 * 1024) - 1,  # 4GB buffer
+            recurse=True,
+            auto_unlink=False,  # Do not auto-unlink in worker
+        )
+
+        chunker_indices = []
+
+        num_batches = 0
         while True:
+            num_batches += 1
             start_get = time.time()
             batch = input_queue.get()
             if batch is None:
                 break            
             start = time.time()
-            logger.debug(f"Process [{os.getpid()}] Obtained batch from queue in {start - start_get} seconds.")
-            entries, num_rows = QueryResult._process_batch(batch, property_columns)
+            logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Obtained batch {num_batches} from queue in {start - start_get} seconds.")
+            chunker_index, num_rows = QueryResult._process_batch(batch, property_columns)
+            chunker_indices.append(chunker_index)
             end = time.time()
-            output_queue.put((entries, num_rows))
-            end4 = time.time()
-            logger.debug(f"Process [{os.getpid()}] Put result into queue in {end4 - end} seconds.")
+            logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Processed batch in {end - start} seconds.")
+        
+        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Processed batches, starting to merge.")
+        merge_start = time.time()
+        local_chunker_index = QueryResult._merge_chunker_indices(chunker_indices)
+        merge_end = time.time()
+        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Merged within {merge_end - merge_start}.")
 
-        logger.debug(f"Process [{os.getpid()}] Exiting worker!")
+        with per_worker_dict.lock:
+            per_worker_dict.update(local_chunker_index)
+        
+        update_end = time.time()
+        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Exiting worker! Merge into shared memory took {update_end - merge_end}")
 
     @staticmethod
-    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> tuple[list[tuple[MixtureKey, Any, Any, list[int]]], int]:
+    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> int:
         """
         Processes a single batch of query results to build a partial ChunkerIndex.
 
@@ -129,7 +152,7 @@ class QueryResult:
         """
         batch_dict = batch.to_pydict()
         num_rows = len(batch_dict["dataset_id"])
-        entries = []
+        chunker_index = create_chunker_index()
 
         for i in range(num_rows):
             dataset_id = batch_dict["dataset_id"][i]
@@ -146,9 +169,8 @@ class QueryResult:
                     and not (isinstance(batch_dict[k][i], list) and len(batch_dict[k][i]) == 0)
                 }
             )
-            entries.append((key, dataset_id, file_id, interval))
-
-        return entries, num_rows
+            chunker_index[key][dataset_id][file_id].append(interval)
+        return chunker_index, num_rows
 
     @staticmethod
     def _merge_chunker_indices(indices: list[ChunkerIndex]) -> ChunkerIndex:
@@ -231,15 +253,21 @@ class QueryResult:
         logger.debug(f"Starting {num_workers} worker processes.")
         # Start worker processes
         workers = []
-        for _ in range(num_workers):
+        per_worker_ultradict_names = []
+        import uuid
+        for worker_id in range(num_workers):
+            unique_id = uuid.uuid4().hex
+            worker_ultradict_name = f"ch_{worker_id}_{unique_id}"[:10]
+            per_worker_ultradict_names.append(worker_ultradict_name)
             p = mp.Process(
                 target=QueryResult._worker_process_func,
-                args=(input_queue, output_queue, property_columns),
+                args=(worker_id, input_queue, property_columns, worker_ultradict_name),
             )
             workers.append(p)
             p.start()
         logger.debug(f"Started {num_workers} worker processes.")
-        import zlib
+        
+        """import zlib
         results = []
         with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
             processed_batches = 0
@@ -254,14 +282,25 @@ class QueryResult:
                 end4 = time.time()
                 logger.debug(f"Appended to queue in {end4 - end} seconds.")
                 pbar.update(handled_rows)
-                processed_batches += 1
+                processed_batches += 1"""
 
         for p in workers:
             p.join()
+            logger.debug("Another worker finished...")
 
         logger.info("Merging results...")
-        raise NotImplementedError("need to implement merging of entries")
-        chunker_index = QueryResult._merge_chunker_indices(results)
+
+        per_worker_indices = []
+        for worker_ultradict_name in per_worker_ultradict_names:
+            worker_ultradict = UltraDict(name=worker_ultradict_name, auto_unlink=True)
+            per_worker_indices.append(worker_ultradict)
+
+        chunker_index = QueryResult._merge_chunker_indices(per_worker_indices)
+
+        # Cleanup
+        for worker_ultradict in per_worker_indices:
+            worker_ultradict.close()
+            worker_ultradict.unlink()
 
         logger.info("Chunker index creation completed")
         return chunker_index
