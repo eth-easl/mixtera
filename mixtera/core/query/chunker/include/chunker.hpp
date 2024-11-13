@@ -54,10 +54,8 @@ std::vector<Interval> merge_sorted_intervals(const std::vector<Interval>& list1,
 void merge_chunker_indices(const std::vector<ChunkerIndexCpp>& thread_indices,
                            ChunkerIndexCpp& merged_index);
 
-void process_rows(const std::shared_ptr<arrow::Table>& table,
-                  int64_t start_row,
-                  int64_t end_row,
-                  const std::vector<std::string>& property_columns,
-                  ChunkerIndexCpp& local_chunker_index);
+void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
+                   const std::vector<std::string>& property_columns,
+                   ChunkerIndexCpp& local_chunker_index);
 
 bool GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t position, int64_t& out_index);

@@ -113,93 +113,45 @@ void merge_chunker_indices(const std::vector<ChunkerIndexCpp>& thread_indices,
 }
 
 // Helper function to process a range of rows
-void process_rows(const std::shared_ptr<arrow::Table>& table,
-                  int64_t start_row,
-                  int64_t end_row,
-                  const std::vector<std::string>& property_columns,
-                  ChunkerIndexCpp& local_chunker_index) {
+void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
+                   const std::vector<std::string>& property_columns,
+                   ChunkerIndexCpp& local_chunker_index) {
     try {
 
-        if (start_row < 0 || end_row > table->num_rows() || start_row >= end_row) {
-            std::cerr << "Invalid row indices: start_row=" << start_row << ", end_row=" << end_row << std::endl;
+        int64_t num_rows = batch->num_rows();
+
+        // Get required columns
+        auto dataset_id_array = batch->GetColumnByName("dataset_id");
+        auto file_id_array = batch->GetColumnByName("file_id");
+        auto interval_start_array = batch->GetColumnByName("interval_start");
+        auto interval_end_array = batch->GetColumnByName("interval_end");
+
+        if (!dataset_id_array || !file_id_array || !interval_start_array || !interval_end_array) {
+            std::cerr << "One or more required columns are missing in batch." << std::endl;
             return;
         }
 
-        // Get columns and check that they exist
-        auto dataset_id_column = table->GetColumnByName("dataset_id");
-        auto file_id_column = table->GetColumnByName("file_id");
-        auto interval_start_column = table->GetColumnByName("interval_start");
-        auto interval_end_column = table->GetColumnByName("interval_end");
-
-        if (!dataset_id_column || !file_id_column || !interval_start_column || !interval_end_column) {
-            std::cerr << "One or more required columns ('dataset_id', 'file_id', 'interval_start', 'interval_end') are missing." << std::endl;
-            return;
-        }
-
-        // Since we've called CombineChunks, each column should have only one chunk
-        if (dataset_id_column->num_chunks() != 1 || file_id_column->num_chunks() != 1 ||
-            interval_start_column->num_chunks() != 1 || interval_end_column->num_chunks() != 1) {
-            std::cerr << "Columns have unexpected number of chunks after CombineChunks." << std::endl;
-            return;
-        }
-
-        std::shared_ptr<arrow::Array> dataset_id_array = dataset_id_column->chunk(0);
-        std::shared_ptr<arrow::Array> file_id_array = file_id_column->chunk(0);
-        std::shared_ptr<arrow::Array> interval_start_array = interval_start_column->chunk(0);
-        std::shared_ptr<arrow::Array> interval_end_array = interval_end_column->chunk(0);
-
-        // **Print out the data types for debugging**
-        std::cout << "Dataset ID column type: " << dataset_id_array->type()->ToString()
-                    << ", array class: " << typeid(*dataset_id_array.get()).name() << std::endl;
-
-        std::cout << "File ID column type: " << file_id_array->type()->ToString()
-                    << ", array class: " << typeid(*file_id_array.get()).name() << std::endl;
-
-        std::cout << "Interval Start column type: " << interval_start_array->type()->ToString()
-                    << ", array class: " << typeid(*interval_start_array.get()).name() << std::endl;
-
-        std::cout << "Interval End column type: " << interval_end_array->type()->ToString()
-                    << ", array class: " << typeid(*interval_end_array.get()).name() << std::endl;
-
-        // Cast arrays to appropriate types and check
+        // Cast required arrays
         auto dataset_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(dataset_id_array);
         auto file_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(file_id_array);
         auto interval_start_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(interval_start_array);
         auto interval_end_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(interval_end_array);
 
-        if (!dataset_id_array_int32 || !file_id_array_int32 || !interval_start_array_int32 || !interval_end_array_int32) {
-            std::cerr << "Failed to cast arrays to Int32Array." << std::endl;
-            return;
-        }
-
-        // Check that arrays have sufficient length
-        int64_t array_length = dataset_id_array_int32->length();
-        if (array_length < end_row) {
-            std::cerr << "Array length is less than end_row: array_length=" << array_length << ", end_row=" << end_row << std::endl;
-            return;
-        }
-
         // Prepare property arrays
         std::vector<std::shared_ptr<arrow::Array>> property_arrays;
         for (const auto& col_name : property_columns) {
-            auto column = table->GetColumnByName(col_name);
-            if (!column) {
-                std::cerr << "Property column '" << col_name << "' not found in table." << std::endl;
-                property_arrays.push_back(nullptr); // Placeholder to maintain alignment
+            auto array = batch->GetColumnByName(col_name);
+            if (!array) {
+                std::cerr << "Property column '" << col_name << "' not found in batch." << std::endl;
+                property_arrays.push_back(nullptr); // Placeholder
                 continue;
             }
-
-            if (column->num_chunks() != 1) {
-                std::cerr << "Property column '" << col_name << "' has unexpected number of chunks after CombineChunks." << std::endl;
-                property_arrays.push_back(nullptr);
-                continue;
-            }
-
-            property_arrays.push_back(column->chunk(0));
+            property_arrays.push_back(array);
         }
 
 
-        for (int64_t i = start_row; i < end_row; ++i) {
+
+        for (int64_t i = 0; i < num_rows; ++i) {
             MixtureKeyCpp key;
 
             for (size_t j = 0; j < property_columns.size(); ++j) {
@@ -207,11 +159,6 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                 std::string col_name = property_columns[j];
 
                 if (!array) {
-                    continue;
-                }
-
-                if (i >= array->length()) {
-                    std::cerr << "Index out of bounds for property '" << col_name << "' at row " << i << std::endl;
                     continue;
                 }
 
@@ -335,17 +282,10 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
                 }
             }
 
-            // Access dataset_id, file_id, interval_start, and interval_end
-            if (i >= dataset_id_array_int32->length() || i >= file_id_array_int32->length() ||
-                i >= interval_start_array_int32->length() || i >= interval_end_array_int32->length()) {
-                std::cerr << "Index out of bounds at row " << i << std::endl;
-                continue;
-            }
-
-            int64_t dataset_id = static_cast<int64_t>(dataset_id_array_int32->Value(i));
-            int64_t file_id = static_cast<int64_t>(file_id_array_int32->Value(i));
-            int64_t interval_start = static_cast<int64_t>(interval_start_array_int32->Value(i));
-            int64_t interval_end = static_cast<int64_t>(interval_end_array_int32->Value(i));
+            int64_t dataset_id = dataset_id_array_int32->Value(i);
+            int64_t file_id = file_id_array_int32->Value(i);
+            int64_t interval_start = interval_start_array_int32->Value(i);
+            int64_t interval_end = interval_end_array_int32->Value(i);
 
             if (interval_end < interval_start) {
                 std::cerr << "Warning: interval_end = " << interval_end << " < interval_start = " << interval_start << " at row " << i << " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
@@ -385,23 +325,11 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         // Convert PyArrow Table to C++ Arrow Table
         std::shared_ptr<arrow::Table> table = arrow::py::unwrap_table(py_table.ptr()).ValueOrDie();
 
-        std::shared_ptr<arrow::Table> combined_table;
-        arrow::Result<std::shared_ptr<arrow::Table>> combine_result = table->CombineChunks();
-        if (!combine_result.ok()) {
-            std::cerr << "Error combining chunks: " << combine_result.status().message() << std::endl;
-            throw std::runtime_error("Failed to combine chunks");
-        } else {
-            combined_table = combine_result.ValueOrDie();
-        }
-        std::cout << "Combined table." << std::endl;
-
-        int64_t num_rows = combined_table->num_rows();
-
         // Identify property columns
         std::vector<std::string> exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"};
         std::vector<std::string> property_columns;
 
-        for (const auto& field : combined_table->schema()->fields()) {
+        for (const auto& field : table->schema()->fields()) {
             std::string col_name = field->name();
             if (std::find(exclude_keys.begin(), exclude_keys.end(), col_name) == exclude_keys.end()) {
                 property_columns.push_back(col_name);
@@ -411,22 +339,35 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         // Release GIL for multithreading
         py::gil_scoped_release release;
 
-        // Determine row ranges for each thread
-        int64_t rows_per_thread = (num_rows + num_threads - 1) / num_threads;
+        // Create a TableBatchReader
+        arrow::TableBatchReader batch_reader(*table);
+        //batch_reader.set_chunksize(1 << 15); // Set chunksize (adjust as needed)
+
+        // Read all record batches
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::shared_ptr<arrow::RecordBatch> batch;
+        while (batch_reader.ReadNext(&batch).ok() && batch) {
+            batches.push_back(batch);
+        }
 
         // Prepare per-thread indices
         std::vector<ChunkerIndexCpp> thread_chunker_indices(num_threads);
+        
+        // Determine batch ranges for each thread
+        int64_t num_batches = batches.size();
+        int64_t batches_per_thread = (num_batches + num_threads - 1) / num_threads;
 
         // Launch threads
         std::vector<std::thread> threads;
         for (int t = 0; t < num_threads; ++t) {
-            int64_t start_row = t * rows_per_thread;
-            int64_t end_row = std::min(start_row + rows_per_thread, num_rows);
-            if (start_row < end_row) {
-                threads.emplace_back([&, start_row, end_row, t]() {
+            int64_t start_batch = t * batches_per_thread;
+            int64_t end_batch = std::min(start_batch + batches_per_thread, num_batches);
+            if (start_batch < end_batch) {
+                threads.emplace_back([&, start_batch, end_batch, t]() {
                     try {
-                        // Each thread processes its assigned rows
-                        process_rows(combined_table, start_row, end_row, property_columns, thread_chunker_indices[t]);
+                        for (int64_t b = start_batch; b < end_batch; ++b) {
+                            process_batch(batches[b], property_columns, thread_chunker_indices[t]);
+                        }
                     } catch (const std::exception& e) {
                         std::cerr << "Exception in thread " << t << ": " << e.what() << std::endl;
                         // Handle exception or terminate
@@ -435,6 +376,8 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
                 });
             }
         }
+
+
 
         // Wait for threads to finish
         for (auto& thread : threads) {
