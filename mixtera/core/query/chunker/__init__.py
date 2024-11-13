@@ -1,0 +1,1 @@
+from .chunker_extension import create_chunker_index_cpp as create_chunker_index

@@ -51,6 +51,9 @@ class QueryResult:
         self._mixture = mixture
         logger.debug("Instantiating QueryResult..")
         logger.debug("Creating chunker index.")
+        logger.debug(results)
+        import polars as pl
+        logger.debug(pl.from_arrow(results))
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
         self._mixture.inform(self._chunker_index)
@@ -208,7 +211,7 @@ class QueryResult:
                 output_queue.put({'entry_count': 0})
 
             end_put = time.time()
-            logger.debug(f"Process [{os.getpid()}] Put result into queue in {end_put - end} seconds.")
+            logger.debug(f"Process [{os.getpid()}]Worker {worker_id}: Put result into queue in {end_put - end} seconds.")
 
         logger.debug(f"Process [{os.getpid()}] Exiting worker {worker_id}!")
 
@@ -265,7 +268,9 @@ class QueryResult:
             chunker_index: The ChunkerIndex to merge entries into.
         """
         chunker_index = create_chunker_index()
+        import time
         for info in entries_list:
+            start = time.time()
             num_entries = info['num_entries']
             shm_names = info['shm_names']
 
@@ -291,6 +296,9 @@ class QueryResult:
             shm_keys = multiprocessing.shared_memory.SharedMemory(name=shm_names['keys'])
             keys_buffer = shm_keys.buf
 
+            end1 = time.time()
+            logger.debug(f"Instantiated SHM objects in {end1 - start} seconds.")
+
             # Reconstruct entries and build ChunkerIndex
             for i in range(num_entries):
                 dataset_id = int(dataset_ids[i])
@@ -299,11 +307,11 @@ class QueryResult:
 
                 offset = key_offsets[i]
                 size = key_sizes[i]
-                key_bytes = keys_buffer[offset:offset+size]
-                key = pickle.loads(bytes(key_bytes))
-
+                key = pickle.loads(keys_buffer[offset:offset+size])
                 chunker_index[key][dataset_id][file_id].append(interval) 
 
+            end2 = time.time()
+            logger.debug(f"Constructing the chunker index object took {end2-end1} seconds.")
             del dataset_ids, file_ids, interval_starts, interval_ends, key_offsets, key_sizes, keys_buffer, key_bytes
 
             # Clean up shared memory
@@ -321,6 +329,8 @@ class QueryResult:
             shm_key_sizes.unlink()
             shm_keys.close()
             shm_keys.unlink()
+            end3 = time.time()
+            logger.debug(f"Cleanup took {end3-end2} seconds.")
         
         return chunker_index
 
@@ -372,6 +382,14 @@ class QueryResult:
             ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
         """
         logger.info("Converting to chunker index structure...")
+        num_cores = os.cpu_count() or 1
+        num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
+
+        from mixtera.core.query.chunker import create_chunker_index as exttest
+        result = exttest(table, num_workers)
+        logger.debug(result)
+
+        return result
 
         # Identify property columns that define mixture keys
         exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"}
@@ -380,8 +398,6 @@ class QueryResult:
         total_rows = table.num_rows
         batches = table.to_batches()  # Split the table into record batches for parallel processing
         # Determine the number of worker processes to use
-        num_cores = os.cpu_count() or 1
-        num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
         # Use a dummy pool for testing, or a multiprocessing pool otherwise
         in_test = os.environ.get("PYTEST_CURRENT_TEST")
         core_string = "" if in_test else f" (using {num_workers} cores)"

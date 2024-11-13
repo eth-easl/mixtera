@@ -1,0 +1,68 @@
+#pragma once
+
+#include <pybind11/pybind11.h>
+#include <arrow/api.h>
+#include <arrow/python/pyarrow.h>
+#include <arrow/type_traits.h>
+#include <arrow/array.h>
+
+#include <unordered_map>
+#include <vector>
+#include <string>
+
+namespace py = pybind11;
+
+// Define MixtureKey equivalent in C++
+struct MixtureKeyCpp {
+    std::unordered_map<std::string, std::vector<std::string>> properties;
+
+    bool operator==(const MixtureKeyCpp& other) const {
+        return properties == other.properties;
+    }
+};
+
+// Hash function for MixtureKeyCpp
+namespace std {
+    template <>
+    struct hash<MixtureKeyCpp> {
+        std::size_t operator()(const MixtureKeyCpp& key) const {
+            std::size_t seed = 0;
+            for (const auto& [prop_name, prop_values] : key.properties) {
+                seed ^= std::hash<std::string>{}(prop_name);
+                for (const auto& val : prop_values) {
+                    seed ^= std::hash<std::string>{}(val);
+                }
+            }
+            return seed;
+        }
+    };
+}
+
+// Define the types for the chunker index data
+using Interval = std::pair<int64_t, int64_t>;
+using FileIntervals = std::unordered_map<int64_t, std::vector<Interval>>;
+using DatasetFiles = std::unordered_map<int64_t, FileIntervals>;
+using ChunkerIndexCpp = std::unordered_map<MixtureKeyCpp, DatasetFiles>;
+
+// Function declarations
+py::object create_chunker_index(py::object py_table, int num_threads);
+
+// Function to merge two sorted vectors of intervals
+std::vector<Interval> merge_sorted_intervals(const std::vector<Interval>& list1, const std::vector<Interval>& list2);
+
+// Function to merge per-thread chunker indices
+void merge_chunker_indices(const std::vector<ChunkerIndexCpp>& thread_indices,
+                           ChunkerIndexCpp& merged_index);
+
+void process_rows(const std::shared_ptr<arrow::Table>& table,
+                  int64_t start_row,
+                  int64_t end_row,
+                  const std::vector<std::string>& property_columns,
+                  ChunkerIndexCpp& local_chunker_index);
+
+template <typename ArrowType>
+int64_t GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t position) {
+    using ArrayType = typename arrow::TypeTraits<ArrowType>::ArrayType;
+    auto index_array = std::static_pointer_cast<ArrayType>(indices);
+    return static_cast<int64_t>(index_array->Value(position));
+}
