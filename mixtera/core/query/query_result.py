@@ -93,30 +93,24 @@ class QueryResult:
             property_columns (set): Set of property column names used in processing.
         """
         logger.debug(f"Process [{os.getpid()}] Started worker!")
-        import zlib
+        import time
         while True:
+            start_get = time.time()
             batch = input_queue.get()
             if batch is None:
-                break
-            import time
+                break            
             start = time.time()
-            result, num_rows = QueryResult._process_batch(batch, property_columns)
+            logger.debug(f"Process [{os.getpid()}] Obtained batch from queue in {start - start_get} seconds.")
+            entries, num_rows = QueryResult._process_batch(batch, property_columns)
             end = time.time()
-            logger.debug(f"Process [{os.getpid()}] Processed batch in {end - start} seconds.")
-            serialized_result = pickle.dumps(result)
-            end2 = time.time()
-            logger.debug(f"Process [{os.getpid()}] Serialized result in {end2 - end} seconds.")
-            compressed_result = zlib.compress(serialized_result)
-            end3 = time.time()
-            logger.debug(f"Process [{os.getpid()}] Compressed result in {end3 - end2} seconds.")
-            output_queue.put((compressed_result, num_rows))
+            output_queue.put((entries, num_rows))
             end4 = time.time()
-            logger.debug(f"Process [{os.getpid()}] Put compressed result into queue in {end4 - end3} seconds.")
+            logger.debug(f"Process [{os.getpid()}] Put result into queue in {end4 - end} seconds.")
 
-        logger.debug(f"Process [{os.getpid()}] Existing worker!")
+        logger.debug(f"Process [{os.getpid()}] Exiting worker!")
 
     @staticmethod
-    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> tuple[dict, int]:
+    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> tuple[list[tuple[MixtureKey, Any, Any, list[int]]], int]:
         """
         Processes a single batch of query results to build a partial ChunkerIndex.
 
@@ -135,7 +129,7 @@ class QueryResult:
         """
         batch_dict = batch.to_pydict()
         num_rows = len(batch_dict["dataset_id"])
-        local_chunker_index = create_chunker_index()
+        entries = []
 
         for i in range(num_rows):
             dataset_id = batch_dict["dataset_id"][i]
@@ -152,9 +146,9 @@ class QueryResult:
                     and not (isinstance(batch_dict[k][i], list) and len(batch_dict[k][i]) == 0)
                 }
             )
-            local_chunker_index[key][dataset_id][file_id].append(interval)
+            entries.append((key, dataset_id, file_id, interval))
 
-        return local_chunker_index, num_rows
+        return entries, num_rows
 
     @staticmethod
     def _merge_chunker_indices(indices: list[ChunkerIndex]) -> ChunkerIndex:
@@ -253,18 +247,12 @@ class QueryResult:
                 import time
                 start = time.time()
                 logger.debug("Obtaining another result from queue...")
-                compressed_result, handled_rows = output_queue.get()
+                entries, handled_rows = output_queue.get()
                 end = time.time()
-                logger.debug(f"Obtained compressed result from queue in {end - start} seconds!")
-                uncompressed_result = zlib.decompress(compressed_result)
-                end2 = time.time()
-                logger.debug(f"Decompressed result in {end2 - end} seconds.")
-                result = pickle.loads(uncompressed_result)
-                end3 = time.time()
-                logger.debug(f"Unpickled result in {end3 - end2} seconds.")
-                results.append(result)
+                logger.debug(f"Obtained entries  from queue in {end - start} seconds!")
+                results.append(entries)
                 end4 = time.time()
-                logger.debug(f"Appended to queue in {end4 - end3} seconds.")
+                logger.debug(f"Appended to queue in {end4 - end} seconds.")
                 pbar.update(handled_rows)
                 processed_batches += 1
 
@@ -272,6 +260,7 @@ class QueryResult:
             p.join()
 
         logger.info("Merging results...")
+        raise NotImplementedError("need to implement merging of entries")
         chunker_index = QueryResult._merge_chunker_indices(results)
 
         logger.info("Chunker index creation completed")
