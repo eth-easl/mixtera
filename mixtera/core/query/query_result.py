@@ -6,7 +6,9 @@ from collections import defaultdict
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
-from UltraDict import UltraDict
+import numpy as np
+import multiprocessing.shared_memory
+
 
 import dill
 import pyarrow as pa
@@ -84,7 +86,7 @@ class QueryResult:
         }
     
     @staticmethod
-    def _worker_process_func(worker_id, input_queue, property_columns, worker_ultradict_name):
+    def _worker_process_func(input_queue, output_queue, property_columns, worker_id):
         """
         Worker function for processing batches from the input queue and putting results into the output queue.
 
@@ -96,17 +98,8 @@ class QueryResult:
         logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Started worker!")
         import time
 
-        per_worker_dict = UltraDict(
-            name=worker_ultradict_name,
-            create=True,
-            buffer_size=(4 * 1024 * 1024 * 1024) - 1,  # 4GB buffer
-            recurse=True,
-            auto_unlink=False,  # Do not auto-unlink in worker
-        )
-
-        chunker_indices = []
-
         num_batches = 0
+
         while True:
             num_batches += 1
             start_get = time.time()
@@ -115,22 +108,109 @@ class QueryResult:
                 break            
             start = time.time()
             logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Obtained batch {num_batches} from queue in {start - start_get} seconds.")
-            chunker_index, num_rows = QueryResult._process_batch(batch, property_columns)
-            chunker_indices.append(chunker_index)
+            entries, _ = QueryResult._process_batch(batch, property_columns)
             end = time.time()
             logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Processed batch in {end - start} seconds.")
-        
-        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Processed batches, starting to merge.")
-        merge_start = time.time()
-        local_chunker_index = QueryResult._merge_chunker_indices(chunker_indices)
-        merge_end = time.time()
-        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Merged within {merge_end - merge_start}.")
+            # Process entries and prepare shared memory segments per batch
+            if entries:
+                # Extract data from entries
+                mixture_keys = []
+                dataset_ids = []
+                file_ids = []
+                interval_starts = []
+                interval_ends = []
 
-        with per_worker_dict.lock:
-            per_worker_dict.update(local_chunker_index)
-        
-        update_end = time.time()
-        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Exiting worker! Merge into shared memory took {update_end - merge_end}")
+                for key, dataset_id, file_id, interval in entries:
+                    mixture_keys.append(key)  # Will serialize later
+                    dataset_ids.append(dataset_id)
+                    file_ids.append(file_id)
+                    interval_starts.append(interval[0])
+                    interval_ends.append(interval[1])
+
+                # Convert lists to numpy arrays
+                num_entries = len(entries)
+                dataset_ids_np = np.array(dataset_ids, dtype=np.int64)
+                file_ids_np = np.array(file_ids, dtype=np.int64)
+                interval_starts_np = np.array(interval_starts, dtype=np.int64)
+                interval_ends_np = np.array(interval_ends, dtype=np.int64)
+
+                # Serialize mixture keys
+                keys_serialized = [pickle.dumps(key) for key in mixture_keys]
+                # Calculate total size required for keys
+                key_sizes = [len(k) for k in keys_serialized]
+                key_offsets = np.cumsum([0] + key_sizes[:-1])
+                total_key_size = sum(key_sizes)
+
+                key_offsets_np = np.array(key_offsets, dtype=np.int64)
+                key_sizes_np = np.array(key_sizes, dtype=np.int64)
+
+                # Create shared memory segments
+                shm_dataset_ids = multiprocessing.shared_memory.SharedMemory(create=True, size=dataset_ids_np.nbytes)
+                shm_file_ids = multiprocessing.shared_memory.SharedMemory(create=True, size=file_ids_np.nbytes)
+                shm_interval_starts = multiprocessing.shared_memory.SharedMemory(create=True, size=interval_starts_np.nbytes)
+                shm_interval_ends = multiprocessing.shared_memory.SharedMemory(create=True, size=interval_ends_np.nbytes)
+                shm_key_offsets = multiprocessing.shared_memory.SharedMemory(create=True, size=key_offsets_np.nbytes)
+                shm_key_sizes = multiprocessing.shared_memory.SharedMemory(create=True, size=key_sizes_np.nbytes)
+                shm_keys = multiprocessing.shared_memory.SharedMemory(create=True, size=total_key_size)
+
+                # Copy data to shared memory
+                np_dataset_ids_shm = np.ndarray(dataset_ids_np.shape, dtype=dataset_ids_np.dtype, buffer=shm_dataset_ids.buf)
+                np_dataset_ids_shm[:] = dataset_ids_np[:]
+
+                np_file_ids_shm = np.ndarray(file_ids_np.shape, dtype=file_ids_np.dtype, buffer=shm_file_ids.buf)
+                np_file_ids_shm[:] = file_ids_np[:]
+
+                np_interval_starts_shm = np.ndarray(interval_starts_np.shape, dtype=interval_starts_np.dtype, buffer=shm_interval_starts.buf)
+                np_interval_starts_shm[:] = interval_starts_np[:]
+
+                np_interval_ends_shm = np.ndarray(interval_ends_np.shape, dtype=interval_ends_np.dtype, buffer=shm_interval_ends.buf)
+                np_interval_ends_shm[:] = interval_ends_np[:]
+
+                np_key_offsets_shm = np.ndarray(key_offsets_np.shape, dtype=key_offsets_np.dtype, buffer=shm_key_offsets.buf)
+                np_key_offsets_shm[:] = key_offsets_np[:]
+
+                np_key_sizes_shm = np.ndarray(key_sizes_np.shape, dtype=key_sizes_np.dtype, buffer=shm_key_sizes.buf)
+                np_key_sizes_shm[:] = key_sizes_np[:]
+
+                # Copy serialized keys into shared memory buffer
+                keys_buffer = shm_keys.buf
+                for offset, key_bytes in zip(key_offsets, keys_serialized):
+                    keys_buffer[offset:offset+len(key_bytes)] = key_bytes
+
+                # Package shared memory info to send back to main process
+                shared_memory_info = {
+                    'num_entries': num_entries,
+                    'shm_names': {
+                        'dataset_ids': shm_dataset_ids.name,
+                        'file_ids': shm_file_ids.name,
+                        'interval_starts': shm_interval_starts.name,
+                        'interval_ends': shm_interval_ends.name,
+                        'key_offsets': shm_key_offsets.name,
+                        'key_sizes': shm_key_sizes.name,
+                        'keys': shm_keys.name,
+                    },
+                    'entry_count': num_entries
+                }
+
+                # Put shared memory info into output queue for main process
+                output_queue.put(shared_memory_info)
+
+                # Close shared memory in worker (do not unlink yet)
+                shm_dataset_ids.close()
+                shm_file_ids.close()
+                shm_interval_starts.close()
+                shm_interval_ends.close()
+                shm_key_offsets.close()
+                shm_key_sizes.close()
+                shm_keys.close()
+            else:
+                # No data processed, inform main process
+                output_queue.put({'entry_count': 0})
+
+            end_put = time.time()
+            logger.debug(f"Process [{os.getpid()}] Put result into queue in {end_put - end} seconds.")
+
+        logger.debug(f"Process [{os.getpid()}] Exiting worker {worker_id}!")
 
     @staticmethod
     def _process_batch(batch: pa.RecordBatch, property_columns: set) -> int:
@@ -153,6 +233,7 @@ class QueryResult:
         batch_dict = batch.to_pydict()
         num_rows = len(batch_dict["dataset_id"])
         chunker_index = create_chunker_index()
+        entries = []
 
         for i in range(num_rows):
             dataset_id = batch_dict["dataset_id"][i]
@@ -170,7 +251,79 @@ class QueryResult:
                 }
             )
             chunker_index[key][dataset_id][file_id].append(interval)
-        return chunker_index, num_rows
+            entries.append((key, dataset_id, file_id, interval))
+
+        return entries, num_rows
+    
+    @staticmethod
+    def _merge_entries_into_chunker_index(entries_list: list[dict]):
+        """
+        Merges a list of entries into the chunker_index.
+
+        Args:
+            entries_list (List[dict]): List of entries dictionaries from shared memory.
+            chunker_index: The ChunkerIndex to merge entries into.
+        """
+        chunker_index = create_chunker_index()
+        for info in entries_list:
+            num_entries = info['num_entries']
+            shm_names = info['shm_names']
+
+            # Access shared memory
+            shm_dataset_ids = multiprocessing.shared_memory.SharedMemory(name=shm_names['dataset_ids'])
+            dataset_ids = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_dataset_ids.buf)
+
+            shm_file_ids = multiprocessing.shared_memory.SharedMemory(name=shm_names['file_ids'])
+            file_ids = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_file_ids.buf)
+
+            shm_interval_starts = multiprocessing.shared_memory.SharedMemory(name=shm_names['interval_starts'])
+            interval_starts = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_interval_starts.buf)
+
+            shm_interval_ends = multiprocessing.shared_memory.SharedMemory(name=shm_names['interval_ends'])
+            interval_ends = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_interval_ends.buf)
+
+            shm_key_offsets = multiprocessing.shared_memory.SharedMemory(name=shm_names['key_offsets'])
+            key_offsets = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_key_offsets.buf)
+
+            shm_key_sizes = multiprocessing.shared_memory.SharedMemory(name=shm_names['key_sizes'])
+            key_sizes = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_key_sizes.buf)
+
+            shm_keys = multiprocessing.shared_memory.SharedMemory(name=shm_names['keys'])
+            keys_buffer = shm_keys.buf
+
+            # Reconstruct entries and build ChunkerIndex
+            for i in range(num_entries):
+                dataset_id = int(dataset_ids[i])
+                file_id = int(file_ids[i])
+                interval = [int(interval_starts[i]), int(interval_ends[i])]
+
+                offset = key_offsets[i]
+                size = key_sizes[i]
+                key_bytes = keys_buffer[offset:offset+size]
+                key = pickle.loads(bytes(key_bytes))
+
+                chunker_index[key][dataset_id][file_id].append(interval) 
+
+            del dataset_ids, file_ids, interval_starts, interval_ends, key_offsets, key_sizes, keys_buffer, key_bytes
+
+            # Clean up shared memory
+            shm_dataset_ids.close()
+            shm_dataset_ids.unlink()
+            shm_file_ids.close()
+            shm_file_ids.unlink()
+            shm_interval_starts.close()
+            shm_interval_starts.unlink()
+            shm_interval_ends.close()
+            shm_interval_ends.unlink()
+            shm_key_offsets.close()
+            shm_key_offsets.unlink()
+            shm_key_sizes.close()
+            shm_key_sizes.unlink()
+            shm_keys.close()
+            shm_keys.unlink()
+        
+        return chunker_index
+
 
     @staticmethod
     def _merge_chunker_indices(indices: list[ChunkerIndex]) -> ChunkerIndex:
@@ -253,54 +406,35 @@ class QueryResult:
         logger.debug(f"Starting {num_workers} worker processes.")
         # Start worker processes
         workers = []
-        per_worker_ultradict_names = []
-        import uuid
         for worker_id in range(num_workers):
-            unique_id = uuid.uuid4().hex
-            worker_ultradict_name = f"ch_{worker_id}_{unique_id}"[:10]
-            per_worker_ultradict_names.append(worker_ultradict_name)
             p = mp.Process(
                 target=QueryResult._worker_process_func,
-                args=(worker_id, input_queue, property_columns, worker_ultradict_name),
+                args=(input_queue, output_queue, property_columns, worker_id),
             )
             workers.append(p)
             p.start()
         logger.debug(f"Started {num_workers} worker processes.")
         
-        """import zlib
-        results = []
+        chunker_index = create_chunker_index()
+
+        processed_batches = 0
+        indices = []
         with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
-            processed_batches = 0
             while processed_batches < num_batches:
-                import time
+                # Get entries from output queue and merge into chunker_index
                 start = time.time()
-                logger.debug("Obtaining another result from queue...")
-                entries, handled_rows = output_queue.get()
+                shared_memory_info = output_queue.get()
                 end = time.time()
-                logger.debug(f"Obtained entries  from queue in {end - start} seconds!")
-                results.append(entries)
-                end4 = time.time()
-                logger.debug(f"Appended to queue in {end4 - end} seconds.")
+                logger.debug(f"got an item from the queue in {end - start} seconds.")
+                if shared_memory_info.get('entry_count', 0) > 0:
+                    indices.append(QueryResult._merge_entries_into_chunker_index([shared_memory_info]))
+                end2 = time.time()
+                logger.debug(f"parsed the shared memory in {end2- end} seconds.")
+                handled_rows = shared_memory_info.get('entry_count', 0)
                 pbar.update(handled_rows)
-                processed_batches += 1"""
+                processed_batches += 1
 
-        for p in workers:
-            p.join()
-            logger.debug("Another worker finished...")
-
-        logger.info("Merging results...")
-
-        per_worker_indices = []
-        for worker_ultradict_name in per_worker_ultradict_names:
-            worker_ultradict = UltraDict(name=worker_ultradict_name, auto_unlink=True)
-            per_worker_indices.append(worker_ultradict)
-
-        chunker_index = QueryResult._merge_chunker_indices(per_worker_indices)
-
-        # Cleanup
-        for worker_ultradict in per_worker_indices:
-            worker_ultradict.close()
-            worker_ultradict.unlink()
+        chunker_index = QueryResult._merge_chunker_indices(indices)
 
         logger.info("Chunker index creation completed")
         return chunker_index
