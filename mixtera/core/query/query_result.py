@@ -51,9 +51,9 @@ class QueryResult:
         self._mixture = mixture
         logger.debug("Instantiating QueryResult..")
         logger.debug("Creating chunker index.")
-        logger.debug(results)
-        import polars as pl
-        logger.debug(pl.from_arrow(results))
+        #logger.debug(results)
+        #import polars as pl
+        #logger.debug(pl.from_arrow(results))
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
         self._mixture.inform(self._chunker_index)
