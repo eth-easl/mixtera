@@ -17,6 +17,8 @@ dependencies:
   - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency
   - huggingface::datasets
   - conda-forge::transformers
+  - conda-forge::pyarrow
+  - cmake
   - pip: # Both duckdb and polars recommend their pip build over conda
     - duckdb
     - polars 

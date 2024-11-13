@@ -225,7 +225,7 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
             int64_t interval_end = static_cast<int64_t>(interval_end_array->Value(i));
 
             if (interval_end < interval_start) {
-                std::cerr << "Warning: interval_end < interval_start at row " << i << std::endl;
+                std::cerr << "Warning: interval_end = " << interval_start <<  " < interval_start = " < interval_start < " at row " << i <<  << " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
             }
 
             // Optional: Debugging output
@@ -308,10 +308,12 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
         // Merge per-thread chunker indices
         ChunkerIndexCpp merged_chunker_index;
+        std::cout << "Merging per-thread indices" << std::endl;
         merge_chunker_indices(thread_chunker_indices, merged_chunker_index);
 
         // Reacquire GIL before working with Python objects
         py::gil_scoped_acquire acquire;
+        std::cout << "Acquired GIL." << std::endl;
 
         // Import the MixtureKey class
         py::object mixture_module = py::module_::import("mixtera.core.query.mixture");

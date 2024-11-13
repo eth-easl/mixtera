@@ -387,7 +387,6 @@ class QueryResult:
 
         from mixtera.core.query.chunker import create_chunker_index as exttest
         result = exttest(table, num_workers)
-        logger.debug(result)
 
         return result
 
