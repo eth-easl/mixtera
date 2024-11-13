@@ -225,7 +225,7 @@ void process_rows(const std::shared_ptr<arrow::Table>& table,
             int64_t interval_end = static_cast<int64_t>(interval_end_array->Value(i));
 
             if (interval_end < interval_start) {
-                std::cerr << "Warning: interval_end = " << interval_start <<  " < interval_start = " < interval_start < " at row " << i <<  << " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
+                std::cerr << "Warning: interval_end = " << interval_start <<  " < interval_start = " << interval_start << " at row " << i <<  " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
             }
 
             // Optional: Debugging output
