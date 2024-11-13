@@ -93,6 +93,7 @@ class QueryResult:
             property_columns (set): Set of property column names used in processing.
         """
         logger.debug(f"Process [{os.getpid()}] Started worker!")
+        import zlib
         while True:
             batch = input_queue.get()
             if batch is None:
@@ -102,9 +103,15 @@ class QueryResult:
             result, num_rows = QueryResult._process_batch(batch, property_columns)
             end = time.time()
             logger.debug(f"Process [{os.getpid()}] Processed batch in {end - start} seconds.")
-            output_queue.put((result, num_rows))
+            serialized_result = pickle.dumps(result)
             end2 = time.time()
-            logger.debug(f"Process [{os.getpid()}] Put batch into queue in {end2 - end} seconds.")
+            logger.debug(f"Process [{os.getpid()}] Serialized result in {end2 - end} seconds.")
+            compressed_result = zlib.compress(serialized_result)
+            end3 = time.time()
+            logger.debug(f"Process [{os.getpid()}] Compressed result in {end3 - end2} seconds.")
+            output_queue.put((compressed_result, num_rows))
+            end4 = time.time()
+            logger.debug(f"Process [{os.getpid()}] Put compressed result into queue in {end4 - end3} seconds.")
 
         logger.debug(f"Process [{os.getpid()}] Existing worker!")
 
@@ -238,7 +245,7 @@ class QueryResult:
             workers.append(p)
             p.start()
         logger.debug(f"Started {num_workers} worker processes.")
-
+        import zlib
         results = []
         with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
             processed_batches = 0
@@ -246,10 +253,18 @@ class QueryResult:
                 import time
                 start = time.time()
                 logger.debug("Obtaining another result from queue...")
-                result, handled_rows = output_queue.get()
+                compressed_result, handled_rows = output_queue.get()
                 end = time.time()
-                logger.debug(f"Obtained another result from queue in {end - start} seconds!")
+                logger.debug(f"Obtained compressed result from queue in {end - start} seconds!")
+                uncompressed_result = zlib.decompress(compressed_result)
+                end2 = time.time()
+                logger.debug(f"Decompressed result in {end2 - end} seconds.")
+                result = pickle.loads(uncompressed_result)
+                end3 = time.time()
+                logger.debug(f"Unpickled result in {end3 - end2} seconds.")
                 results.append(result)
+                end4 = time.time()
+                logger.debug(f"Appended to queue in {end4 - end3} seconds.")
                 pbar.update(handled_rows)
                 processed_batches += 1
 
