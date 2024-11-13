@@ -81,6 +81,32 @@ class QueryResult:
             "file_path": {fid: mdc._get_file_path_by_id(fid) for fid in file_ids},
             "total_length": total_length,
         }
+    
+    @staticmethod
+    def _worker_process_func(input_queue, output_queue, property_columns):
+        """
+        Worker function for processing batches from the input queue and putting results into the output queue.
+
+        Args:
+            input_queue (multiprocessing.Queue): Queue from which to get batches.
+            output_queue (multiprocessing.Queue): Queue to put processed results.
+            property_columns (set): Set of property column names used in processing.
+        """
+        logger.debug(f"Process [{os.getpid()}] Started worker!")
+        while True:
+            batch = input_queue.get()
+            if batch is None:
+                break
+            import time
+            start = time.time()
+            result, num_rows = QueryResult._process_batch(batch, property_columns)
+            end = time.time()
+            logger.debug(f"Process [{os.getpid()}] Processed batch in {end - start} seconds.")
+            output_queue.put((result, num_rows))
+            end2 = time.time()
+            logger.debug(f"Process [{os.getpid()}] Put batch into queue in {end2 - end} seconds.")
+
+        logger.debug(f"Process [{os.getpid()}] Existing worker!")
 
     @staticmethod
     def _process_batch(batch: pa.RecordBatch, property_columns: set) -> tuple[dict, int]:
@@ -182,16 +208,53 @@ class QueryResult:
         num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
         # Use a dummy pool for testing, or a multiprocessing pool otherwise
         in_test = os.environ.get("PYTEST_CURRENT_TEST")
-        pool_c = DummyPool if in_test else mp.Pool
         core_string = "" if in_test else f" (using {num_workers} cores)"
 
-        with pool_c(num_workers) as pool:
-            process_func = partial(QueryResult._process_batch, property_columns=property_columns)
-            with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
-                results = []
-                for result, handled_rows in pool.imap_unordered(process_func, batches):
-                    results.append(result)
-                    pbar.update(handled_rows)
+        # Create queues
+        input_queue = mp.Queue()
+        output_queue = mp.Queue()
+        import time
+        istart = time.time()
+        logger.debug("Begin inserting batches into queue.")
+        num_batches = 0
+        # Put the batches onto the input queue
+        for batch in tqdm(batches, desc="Inserting batches into input queue."):
+            input_queue.put(batch)
+            num_batches += 1
+        logger.debug(f"Inserted {num_batches} batches in {time.time() - istart} seconds.")
+
+        # Put 'None's to signal end of data
+        for _ in range(num_workers):
+            input_queue.put(None)
+
+        logger.debug(f"Starting {num_workers} worker processes.")
+        # Start worker processes
+        workers = []
+        for _ in range(num_workers):
+            p = mp.Process(
+                target=QueryResult._worker_process_func,
+                args=(input_queue, output_queue, property_columns),
+            )
+            workers.append(p)
+            p.start()
+        logger.debug(f"Started {num_workers} worker processes.")
+
+        results = []
+        with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
+            processed_batches = 0
+            while processed_batches < num_batches:
+                import time
+                start = time.time()
+                logger.debug("Obtaining another result from queue...")
+                result, handled_rows = output_queue.get()
+                end = time.time()
+                logger.debug(f"Obtained another result from queue in {end - start} seconds!")
+                results.append(result)
+                pbar.update(handled_rows)
+                processed_batches += 1
+
+        for p in workers:
+            p.join()
 
         logger.info("Merging results...")
         chunker_index = QueryResult._merge_chunker_indices(results)
