@@ -60,8 +60,9 @@ std::vector<std::string> fetch_property_columns(const arrow::Table& table);
 std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, uint32_t num_threads);
 ChunkerIndexCpp merge_chunker_indices(std::vector<ChunkerIndexCpp>* thread_chunker_indices);
 ChunkerIndexCpp merge_chunker_indices_impl(std::vector<ChunkerIndexCpp>* thread_chunker_indices);
+py::dict string_key_to_property_dict(const MixtureKeyCpp& key);
+py::object build_py_chunker_index(ChunkerIndexCpp* merged_chunker_index);
 
-// Function to merge two sorted vectors of intervals
 void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals, std::vector<Interval>& source_intervals);
 
 void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& property_columns,

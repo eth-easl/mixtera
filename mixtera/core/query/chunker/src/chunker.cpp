@@ -23,8 +23,7 @@ namespace py = pybind11;
 
 bool GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t position, int64_t& out_index) {
   if (position < 0 || position >= indices->length()) {
-    std::cerr << "Index position out of bounds: " << position << std::endl;
-    return false;
+    FAIL(fmt::format("Index position out of bounds: {}", position));
   }
 
   switch (indices->type_id()) {
@@ -69,14 +68,14 @@ bool GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t positio
       return true;
     }
     default:
-      std::cerr << "Unsupported index type: " << indices->type()->ToString() << std::endl;
+      spdlog::error(fmt::format("Unsupported index type: {}", indices->type()->ToString()));
       return false;
   }
 }
 
 void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals, std::vector<Interval>& source_intervals) {
-  size_t m = target_intervals.size();
-  size_t n = source_intervals.size();
+  const uint64_t m = target_intervals.size();
+  const uint64_t n = source_intervals.size();
 
   target_intervals.reserve(m + n);
 
@@ -84,11 +83,9 @@ void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals, std
   target_intervals.insert(target_intervals.end(), std::make_move_iterator(source_intervals.begin()),
                           std::make_move_iterator(source_intervals.end()));
 
-  // Clear source_intervals to free memory
   source_intervals.clear();
-  source_intervals.shrink_to_fit();
+  source_intervals.shrink_to_fit();  // Free memory
 
-  // In-place sort
   std::inplace_merge(target_intervals.begin(), target_intervals.begin() + m, target_intervals.end());
 }
 
@@ -96,7 +93,7 @@ void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals, std
 void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& property_columns,
                    ChunkerIndexCpp& local_chunker_index) {
   try {
-    int64_t num_rows = batch->num_rows();
+    const uint64_t num_rows = batch->num_rows();
 
     // Get required columns
     auto dataset_id_array = batch->GetColumnByName("dataset_id");
@@ -105,8 +102,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
     auto interval_end_array = batch->GetColumnByName("interval_end");
 
     if (!dataset_id_array || !file_id_array || !interval_start_array || !interval_end_array) {
-      std::cerr << "One or more required columns are missing in batch." << std::endl;
-      return;
+      FAIL("One or more required columns are missing in batch.");
     }
 
     // Cast required arrays
@@ -120,15 +116,12 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
     for (const std::string& col_name : property_columns) {
       auto array = batch->GetColumnByName(col_name);
       if (!array) {
-        std::cerr << "Property column '" << col_name << "' not found in batch." << std::endl;
-        property_arrays.push_back(nullptr);  // Placeholder
-        continue;
+        FAIL(fmt::format("Property column {} not found in batch.", col_name));
       }
       property_arrays.push_back(array);
     }
 
-    for (int64_t i = 0; i < num_rows; ++i) {
-      // Build the key as a string
+    for (uint64_t i = 0; i < num_rows; ++i) {
       std::string key;
 
       bool first_prop = true;
@@ -155,29 +148,25 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
 
         try {
           if (type_id == arrow::Type::STRING) {
-            // Handle STRING type
-            auto str_array = arrow::internal::checked_pointer_cast<arrow::StringArray>(array);
+            const auto& str_array = arrow::internal::checked_pointer_cast<arrow::StringArray>(array);
             std::string value = str_array->GetString(i);
             key += value;
           } else if (type_id == arrow::Type::LIST) {
-            // Handle LIST type
-            auto list_array = arrow::internal::checked_pointer_cast<arrow::ListArray>(array);
+            const auto& list_array = arrow::internal::checked_pointer_cast<arrow::ListArray>(array);
             if (list_array->IsNull(i)) {
               continue;
             }
 
-            int64_t offset = list_array->value_offset(i);
-            int64_t length = list_array->value_length(i);
-            auto value_array = list_array->values();
+            const int64_t offset = list_array->value_offset(i);
+            const int64_t length = list_array->value_length(i);
+            const auto& value_array = list_array->values();
 
             if (!value_array) {
-              std::cerr << "Value array is null for LIST column '" << col_name << "'" << std::endl;
-              continue;
+              FAIL(fmt::format("Value array is null for LIST column '{}'", col_name));
             }
 
             if (offset < 0 || length < 0 || (offset + length) > value_array->length()) {
-              std::cerr << "Invalid offset/length for LIST column '" << col_name << "' at row " << i << std::endl;
-              continue;
+              FAIL(fmt::format("Invalid offset/length for LIST column '{}' at row {}", col_name, i));
             }
 
             // Build values string
@@ -185,7 +174,6 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
             bool first_value = true;
 
             if (value_array->type_id() == arrow::Type::STRING) {
-              // LIST of STRING
               auto str_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(value_array);
               for (int64_t k = offset; k < offset + length; ++k) {
                 if (str_values->IsNull(k)) {
@@ -199,16 +187,14 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
                 values_str += val;
               }
             } else if (value_array->type_id() == arrow::Type::DICTIONARY) {
-              // LIST of DICTIONARY
-              auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(value_array);
-              auto dict = dict_array->dictionary();
-              auto dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
-              auto indices = dict_array->indices();
+              const auto& dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(value_array);
+              const auto& dict = dict_array->dictionary();
+              const auto& dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
+              const auto& indices = dict_array->indices();
 
               if (!dict_values || !indices) {
-                std::cerr << "Dictionary values or indices are null in LIST of DICTIONARY for column '" << col_name
-                          << "'" << std::endl;
-                continue;
+                FAIL(fmt::format("Dictionary values or indices are null in LIST of DICTIONARY for column '{}'",
+                                 col_name));
               }
 
               for (int64_t k = offset; k < offset + length; ++k) {
@@ -218,18 +204,16 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
 
                 int64_t index = 0;
                 if (!GetIndexValue(indices, k, index)) {
-                  std::cerr << "Failed to get index value at position " << k << " in LIST of DICTIONARY for column '"
-                            << col_name << "'" << std::endl;
-                  continue;
+                  FAIL(fmt::format("Failed to get index value at position {} in LIST of DICTIONARY for column {}", k,
+                                   col_name));
                 }
 
                 if (index < 0 || index >= dict_values->length()) {
-                  std::cerr << "Index out of bounds in dictionary values for LIST of DICTIONARY at position " << k
-                            << std::endl;
-                  continue;
+                  FAIL(fmt::format("Index out of bounds in dictionary values for LIST of DICTIONARY at position {} ",
+                                   k));
                 }
 
-                std::string val = dict_values->GetString(index);
+                const std::string& val = dict_values->GetString(index);
                 if (!first_value) {
                   values_str += ",";
                 }
@@ -237,63 +221,58 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
                 values_str += val;
               }
             } else {
-              std::cerr << "Unsupported list element type in column '" << col_name
-                        << "'. Type: " << value_array->type()->ToString() << std::endl;
+              FAIL(fmt::format("Unsupported list element type in column '{}'. Type: {}", col_name,
+                               value_array->type()->ToString()));
             }
 
             key += values_str;
 
           } else if (type_id == arrow::Type::DICTIONARY) {
             // Handle DICTIONARY type
-            auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(array);
+            const auto& dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(array);
 
             if (dict_array->IsNull(i)) {
               continue;
             }
 
-            auto dict = dict_array->dictionary();
-            auto dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
-            auto indices = dict_array->indices();
+            const auto& dict = dict_array->dictionary();
+            const auto& dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
+            const auto& indices = dict_array->indices();
 
             if (!dict_values || !indices) {
-              std::cerr << "Dictionary values or indices are null in DICTIONARY column '" << col_name << "'"
-                        << std::endl;
-              continue;
+              FAIL(fmt::format("Dictionary values or indices are null in DICTIONARY column '{}'", col_name));
             }
 
             int64_t index = 0;
             if (!GetIndexValue(indices, i, index)) {
-              std::cerr << "Failed to get index value at position " << i << " in DICTIONARY column '" << col_name << "'"
-                        << std::endl;
-              continue;
+              FAIL(fmt::format("Failed to get index value at position {}  in DICTIONARY column '{}'", i, col_name));
             }
 
             if (index < 0 || index >= dict_values->length()) {
-              std::cerr << "Index out of bounds in dictionary values for DICTIONARY at position " << i << std::endl;
-              continue;
+              FAIL(fmt::format("Index out of bounds in dictionary values for DICTIONARY at position {}", i));
             }
 
-            std::string value = dict_values->GetString(index);
+            const std::string& value = dict_values->GetString(index);
             key += value;
 
           } else {
-            std::cerr << "Unsupported array type in column '" << col_name << "' at row " << i
-                      << ". Type: " << array->type()->ToString() << std::endl;
+            FAIL(fmt::format("Unsupported array type in column '{}' at row {}. Type: {}", col_name, i,
+                             array->type()->ToString()));
           }
         } catch (const std::exception& e) {
-          std::cerr << "Exception at row " << i << ", column '" << col_name << "': " << e.what() << std::endl;
-          continue;
+          spdlog::error(fmt::format("Exception at row {}, column {}: {}", i, col_name, e.what()));
+          throw e;
         }
       }
+
       int64_t dataset_id = dataset_id_array_int32->Value(i);
       int64_t file_id = file_id_array_int32->Value(i);
       int64_t interval_start = interval_start_array_int32->Value(i);
       int64_t interval_end = interval_end_array_int32->Value(i);
 
       if (interval_end < interval_start) {
-        std::cerr << "Warning: interval_end = " << interval_end << " < interval_start = " << interval_start
-                  << " at row " << i << " (file " << file_id << " dataset " << dataset_id << " ) " << std::endl;
-        continue;  // Skip invalid intervals
+        FAIL(fmt::format("interval_end = {} < interval_start = {} at row {} (file {}, dataset {})", interval_end,
+                         interval_start, i, file_id, dataset_id));
       }
 
       Interval interval = {interval_start, interval_end};
@@ -304,8 +283,8 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
     }
 
   } catch (const std::exception& e) {
-    std::cerr << "Exception in process_rows: " << e.what() << std::endl;
-    throw;
+    spdlog::error(fmt::format("Exception in process_rows: {}", e.what()));
+    throw e;
   }
 }
 
@@ -364,7 +343,7 @@ std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, u
   const uint64_t batches_per_thread = (num_batches + num_threads - 1) / num_threads;
 
   // Launch threads
-  spdlog::debug("Spawning {} threads to processes {} batches.", num_threads, num_batches);
+  spdlog::info("Spawning {} threads to processes {} batches.", num_threads, num_batches);
   std::vector<std::thread> threads;
   for (uint32_t t = 0; t < num_threads; ++t) {
     int64_t start_batch = t * batches_per_thread;
@@ -400,7 +379,7 @@ std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, u
   table.reset();
 
   py::gil_scoped_acquire acquire;  // Just for cleanliness, always acquire GIL at end of C++ scope.
-  spdlog::debug("calc_thread_chunker_indices done, GIL reacquired.");
+  spdlog::info("calc_thread_chunker_indices done, GIL reacquired.");
   return thread_chunker_indices;
 }
 
@@ -459,7 +438,7 @@ ChunkerIndexCpp merge_chunker_indices_impl(std::vector<ChunkerIndexCpp>* thread_
 
 ChunkerIndexCpp merge_chunker_indices(std::vector<ChunkerIndexCpp>* thread_chunker_indices) {
   py::gil_scoped_release release;
-  spdlog::debug("GIL released, merging chunker indices.");
+  spdlog::info("GIL released, merging chunker indices.");
   ChunkerIndexCpp merged_chunker_index;
 
   if (thread_chunker_indices->size() == 1) {
@@ -468,20 +447,115 @@ ChunkerIndexCpp merge_chunker_indices(std::vector<ChunkerIndexCpp>* thread_chunk
     merged_chunker_index = merge_chunker_indices_impl(thread_chunker_indices);
   }
 
-  spdlog::debug("Merging done, clearing memory.");
+  spdlog::info("Merging done, clearing memory.");
   thread_chunker_indices->clear();
   thread_chunker_indices->shrink_to_fit();
 
   py::gil_scoped_acquire acquire;  // Just for cleanliness, always acquire GIL at end of C++ scope.
-  spdlog::debug("merge_chunker_indices done, GIL reacquired.");
+  spdlog::info("merge_chunker_indices done, GIL reacquired.");
   return merged_chunker_index;
+}
+
+py::dict string_key_to_property_dict(const MixtureKeyCpp& key) {
+  // Parse the C++ key string into a properties dictionary for Python
+  // Expected format: "prop1:val1,val2;prop2:val3"
+  py::dict py_properties;
+  std::stringstream ss_props(key);
+  std::string prop_pair;
+  while (std::getline(ss_props, prop_pair, ';')) {
+    size_t colon_pos = prop_pair.find(':');
+    if (colon_pos == std::string::npos) {
+      continue;
+    }
+    std::string prop_name = prop_pair.substr(0, colon_pos);
+    std::string values_str = prop_pair.substr(colon_pos + 1);
+
+    // Split values by ','
+    std::vector<std::string> values;
+    std::stringstream ss_values(values_str);
+    std::string value;
+    while (std::getline(ss_values, value, ',')) {
+      values.push_back(value);
+    }
+    py_properties[py::cast(prop_name)] = py::cast(std::move(values));
+  }
+  return py_properties;
+}
+
+py::object build_py_chunker_index(ChunkerIndexCpp* merged_chunker_index) {
+  const py::object mixture_module =
+      py::module_::import("mixtera.core.query.mixture");  // Import the MixtureKey class from Python
+  const py::object MixtureKey_class = mixture_module.attr("MixtureKey");
+  py::dict py_chunker_index;
+
+  const size_t total_keys = merged_chunker_index->size();
+  const size_t update_interval =
+      std::max<size_t>(std::ceil(static_cast<double>(total_keys) * 0.001), static_cast<size_t>(1));
+
+  indicators::BlockProgressBar build_bar{
+      indicators::option::BarWidth{50},
+      indicators::option::Start{"["},
+      indicators::option::End{"]"},
+      indicators::option::ForegroundColor{indicators::Color::cyan},
+      indicators::option::PrefixText{"Building Python object: "},
+      indicators::option::ShowElapsedTime{true},
+      indicators::option::ShowRemainingTime{true},
+      indicators::option::MaxProgress{total_keys},
+      indicators::option::Stream{std::cout},
+      indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
+
+  uint64_t key_counter = 0;
+
+  for (auto it = merged_chunker_index->begin(); it != merged_chunker_index->end();) {
+    MixtureKeyCpp key = std::move(it->first);
+    DatasetFiles datasets = std::move(it->second);
+
+    auto current_it = it;
+    ++it;
+    merged_chunker_index->erase(current_it);  // We remove while iterating to reduce memory usage.
+
+    py::object py_mixture_key = MixtureKey_class(string_key_to_property_dict(key));
+
+    py::dict py_datasets;
+    for (auto& [dataset_id, files] : datasets) {
+      py::dict py_files;
+      for (auto& [file_id, intervals] : files) {
+        py_files[py::cast(file_id)] = py::cast(std::move(intervals));  // Convert vector of intervals to Python list
+        intervals.clear();
+        intervals.shrink_to_fit();
+      }
+      files.clear();
+      files = FileIntervals();  // Force deallocation
+
+      py_datasets[py::cast(dataset_id)] = py_files;
+    }
+    datasets.clear();
+    datasets = DatasetFiles();  // Force deallocation
+
+    py_chunker_index[py_mixture_key] = py_datasets;  // Add to chunker index
+
+    if (key_counter % update_interval == 0) {
+      // We don't update the progress bar every time, in extreme cases this may be too slow.
+      build_bar.set_progress(key_counter);
+    }
+    ++key_counter;
+  }
+
+  build_bar.mark_as_completed();
+
+  spdlog::info("Built the Python index, releasing the C++ index.");
+  merged_chunker_index->clear();
+  *merged_chunker_index = ChunkerIndexCpp();
+  return py_chunker_index;
 }
 
 py::object create_chunker_index(py::object py_table, int num_threads) {
   try {
+    spdlog::info("Entered C++ extension for building chunker index.");
     if (num_threads < 0) {
       FAIL(fmt::format("num_threads = {} < 0. Need at least 0 (1) threads.", num_threads));
     }
+
     num_threads = std::max(num_threads, 1);
     indicators::show_console_cursor(false);  // Hides cursor, just for visuals
 
@@ -489,119 +563,15 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         calc_thread_chunker_indices(py_table, static_cast<uint32_t>(num_threads));
 
     ChunkerIndexCpp merged_chunker_index = merge_chunker_indices(&thread_chunker_indices);
+    const py::dict result = build_py_chunker_index(&merged_chunker_index);
 
-    // Import the MixtureKey class
-    py::object mixture_module = py::module_::import("mixtera.core.query.mixture");
-    py::object MixtureKey_class = mixture_module.attr("MixtureKey");
-
-    // Prepare the ChunkerIndex Python dict
-    py::dict py_chunker_index;
-
-    const size_t total_keys = merged_chunker_index.size();
-    const size_t update_interval =
-        std::max<size_t>(std::ceil(static_cast<double>(total_keys) * 0.001), static_cast<size_t>(1));
-
-    // Initialize the building progress bar
-    indicators::BlockProgressBar build_bar{
-        indicators::option::BarWidth{50},
-        indicators::option::Start{"["},
-        indicators::option::End{"]"},
-        indicators::option::ForegroundColor{indicators::Color::cyan},
-        indicators::option::PrefixText{"Building Python object: "},
-        indicators::option::ShowElapsedTime{true},
-        indicators::option::ShowRemainingTime{true},
-        indicators::option::MaxProgress{total_keys},
-        indicators::option::Stream{std::cout},
-        indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
-
-    // To minimize memory usage, we will move data when possible
-    size_t key_counter = 0;
-
-    for (auto it = merged_chunker_index.begin(); it != merged_chunker_index.end();) {
-      // Extract the key and datasets by moving them out of the map
-      MixtureKeyCpp key = std::move(it->first);
-      DatasetFiles datasets = std::move(it->second);
-
-      // Advance iterator before erasing
-      auto current_it = it;
-      ++it;  // Increment iterator before erasing
-      merged_chunker_index.erase(current_it);
-
-      // Parse the key string back into a properties dictionary
-      py::dict py_properties;
-      std::string key_str = key;
-
-      // Parse the key string
-      // Expected format: "prop1:val1,val2;prop2:val3"
-
-      std::stringstream ss_props(key_str);
-      std::string prop_pair;
-      while (std::getline(ss_props, prop_pair, ';')) {
-        size_t colon_pos = prop_pair.find(':');
-        if (colon_pos == std::string::npos) {
-          continue;
-        }
-        std::string prop_name = prop_pair.substr(0, colon_pos);
-        std::string values_str = prop_pair.substr(colon_pos + 1);
-
-        // Split values by ','
-        std::vector<std::string> values;
-        std::stringstream ss_values(values_str);
-        std::string value;
-        while (std::getline(ss_values, value, ',')) {
-          values.push_back(value);
-        }
-
-        py_properties[py::cast(prop_name)] = py::cast(std::move(values));
-      }
-
-      // Create MixtureKey object
-      py::object py_mixture_key = MixtureKey_class(py_properties);
-
-      // Build datasets dict
-      py::dict py_datasets;
-      for (auto& [dataset_id, files] : datasets) {
-        py::dict py_files;
-        for (auto& [file_id, intervals] : files) {
-          // Convert vector of intervals to Python list
-          py_files[py::cast(file_id)] = py::cast(std::move(intervals));
-          // Clear intervals vector after casting
-          intervals.clear();
-          intervals.shrink_to_fit();
-        }
-        // Clear files map to free memory
-        files.clear();
-        files = FileIntervals();  // Force deallocation (optional)
-
-        py_datasets[py::cast(dataset_id)] = py_files;
-      }
-      // Clear datasets map to free memory
-      datasets.clear();
-      datasets = DatasetFiles();  // Force deallocation (optional)
-
-      // Add to chunker index
-      py_chunker_index[py_mixture_key] = py_datasets;
-
-      // Update progress bar
-      if (key_counter % update_interval == 0) {
-        build_bar.set_progress(key_counter);
-      }
-      ++key_counter;
-    }
-
-    build_bar.mark_as_completed();
-    indicators::show_console_cursor(true);
-
-    std::cout << "Releasing the C++ index." << std::endl;
-    merged_chunker_index.clear();
-    std::cout << "Returning from C++" << std::endl;
-
-    // Return the chunker index
-    return py_chunker_index;
+    indicators::show_console_cursor(true);  // Show cursor again
+    spdlog::info("C++ create_chunker_index done, returning.");
+    return result;
 
   } catch (const std::exception& e) {
-    std::cerr << "Exception occurred in create_chunker_index: " << e.what() << std::endl;
-    throw;
+    spdlog::error(fmt::format("Exception occurred in create_chunker_index: {}", e.what()));
+    throw e;
   }
 }
 
