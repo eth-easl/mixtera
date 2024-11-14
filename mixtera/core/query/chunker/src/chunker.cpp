@@ -357,101 +357,109 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
 // Main function
 py::object create_chunker_index(py::object py_table, int num_threads) {
     try {
-        // Initialize Arrow C++ and Python bridges
-        arrow::py::import_pyarrow();
-
-        // Convert PyArrow Table to C++ Arrow Table
-        std::shared_ptr<arrow::Table> table = arrow::py::unwrap_table(py_table.ptr()).ValueOrDie();
-
-        // Identify property columns
-        std::vector<std::string> exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"};
-        std::vector<std::string> property_columns;
-
-        for (const auto& field : table->schema()->fields()) {
-            std::string col_name = field->name();
-            if (std::find(exclude_keys.begin(), exclude_keys.end(), col_name) == exclude_keys.end()) {
-                property_columns.push_back(col_name);
-            }
-        }
-
-        // Release GIL for multithreading
-        py::gil_scoped_release release;
-
-        // Create a TableBatchReader
-        arrow::TableBatchReader batch_reader(*table);
-        //batch_reader.set_chunksize(1); // Set chunksize (adjust as needed)
-
-        // Read all record batches
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        std::shared_ptr<arrow::RecordBatch> batch;
-        while (batch_reader.ReadNext(&batch).ok() && batch) {
-            batches.push_back(batch);
-        }
-
-        const int64_t total_rows = table->num_rows();
-        std::atomic<int64_t> total_rows_processed{0};
-
-        indicators::show_console_cursor(false);
-        // Initialize the progress bar
-        indicators::BlockProgressBar progress_bar{
-            indicators::option::BarWidth{50},
-            indicators::option::Start{"["},
-            indicators::option::End{"]"},
-            indicators::option::ForegroundColor{indicators::Color::green},
-            indicators::option::PrefixText{"Processing rows: "},
-            indicators::option::ShowElapsedTime{true},
-            indicators::option::ShowRemainingTime{true},
-            indicators::option::MaxProgress{static_cast<size_t>(total_rows)},
-            indicators::option::Stream{std::cout}, // Specify the output stream
-            indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
-        };
-
-
         // Prepare per-thread indices
         std::vector<ChunkerIndexCpp> thread_chunker_indices(num_threads);
-        
-        // Determine batch ranges for each thread
-        int64_t num_batches = batches.size();
-        int64_t batches_per_thread = (num_batches + num_threads - 1) / num_threads;
 
-        // Launch threads
-        std::vector<std::thread> threads;
-        for (int t = 0; t < num_threads; ++t) {
-            int64_t start_batch = t * batches_per_thread;
-            int64_t end_batch = std::min(start_batch + batches_per_thread, num_batches);
-            if (start_batch < end_batch) {
-                threads.emplace_back([&, start_batch, end_batch, t]() {
-                    try {
-                        for (int64_t b = start_batch; b < end_batch; ++b) {
-                            process_batch(batches[b], property_columns, thread_chunker_indices[t]);
-                            const int64_t num_rows = batches[b]->num_rows();
-                            total_rows_processed += num_rows;
-                            progress_bar.set_progress(static_cast<size_t>(total_rows_processed.load()));
-                            // After processing, release the batch
-                            batches[b].reset();
-                        }
-                    } catch (const std::exception& e) {
-                        std::cerr << "Exception in thread " << t << ": " << e.what() << std::endl;
-                        // Handle exception or terminate
-                        throw;
-                    }
-                });
+        {
+            // Initialize Arrow C++ and Python bridges
+            arrow::py::import_pyarrow();
+
+            // Convert PyArrow Table to C++ Arrow Table
+            std::shared_ptr<arrow::Table> table = arrow::py::unwrap_table(py_table.ptr()).ValueOrDie();
+
+            // Identify property columns
+            std::vector<std::string> exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"};
+            std::vector<std::string> property_columns;
+
+            for (const auto& field : table->schema()->fields()) {
+                std::string col_name = field->name();
+                if (std::find(exclude_keys.begin(), exclude_keys.end(), col_name) == exclude_keys.end()) {
+                    property_columns.push_back(col_name);
+                }
             }
-        }
 
-        // Wait for threads to finish
-        for (auto& thread : threads) {
-            thread.join();
-        }
+            // Release GIL for multithreading
+            py::gil_scoped_release release;
 
-        std::cout << "All threads finished, clearing batches." << std::endl;
-        batches.clear();
-        batches.shrink_to_fit();
+            // Create a TableBatchReader
+            arrow::TableBatchReader batch_reader(*table);
+            //batch_reader.set_chunksize(1); // Set chunksize (adjust as needed)
+
+            // Read all record batches
+            std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+            std::shared_ptr<arrow::RecordBatch> batch;
+            while (batch_reader.ReadNext(&batch).ok() && batch) {
+                batches.push_back(batch);
+            }
+
+            const int64_t total_rows = table->num_rows();
+            std::atomic<int64_t> total_rows_processed{0};
+
+            indicators::show_console_cursor(false);
+            // Initialize the progress bar
+            indicators::BlockProgressBar progress_bar{
+                indicators::option::BarWidth{50},
+                indicators::option::Start{"["},
+                indicators::option::End{"]"},
+                indicators::option::ForegroundColor{indicators::Color::green},
+                indicators::option::PrefixText{"Processing rows: "},
+                indicators::option::ShowElapsedTime{true},
+                indicators::option::ShowRemainingTime{true},
+                indicators::option::MaxProgress{static_cast<size_t>(total_rows)},
+                indicators::option::Stream{std::cout}, // Specify the output stream
+                indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
+            };
+
+            
+            // Determine batch ranges for each thread
+            int64_t num_batches = batches.size();
+            int64_t batches_per_thread = (num_batches + num_threads - 1) / num_threads;
+
+            // Launch threads
+            std::vector<std::thread> threads;
+            for (int t = 0; t < num_threads; ++t) {
+                int64_t start_batch = t * batches_per_thread;
+                int64_t end_batch = std::min(start_batch + batches_per_thread, num_batches);
+                if (start_batch < end_batch) {
+                    threads.emplace_back([&, start_batch, end_batch, t]() {
+                        try {
+                            for (int64_t b = start_batch; b < end_batch; ++b) {
+                                process_batch(batches[b], property_columns, thread_chunker_indices[t]);
+                                const int64_t num_rows = batches[b]->num_rows();
+                                total_rows_processed += num_rows;
+                                progress_bar.set_progress(static_cast<size_t>(total_rows_processed.load()));
+                                // After processing, release the batch
+                                batches[b].reset();
+                            }
+                        } catch (const std::exception& e) {
+                            std::cerr << "Exception in thread " << t << ": " << e.what() << std::endl;
+                            // Handle exception or terminate
+                            throw;
+                        }
+                    });
+                }
+            }
+
+            // Wait for threads to finish
+            for (auto& thread : threads) {
+                thread.join();
+            }
+
+            std::cout << "All threads finished, clearing batches." << std::endl;
+            batches.clear();
+            batches.shrink_to_fit();
+            table.reset();
+        }
 
         // Merge per-thread chunker indices
         ChunkerIndexCpp merged_chunker_index;
-        std::cout << "Merging per-thread indices" << std::endl;
-        merge_chunker_indices(thread_chunker_indices, merged_chunker_index);
+
+        if (thread_chunker_indices.size() == 1) {
+            merged_chunker_index = thread_chunker_indices[0];
+        } else {
+            std::cout << "Merging per-thread indices" << std::endl;
+            merge_chunker_indices(thread_chunker_indices, merged_chunker_index);
+        }
 
         // After merging, we can clear thread_chunker_indices to free memory
         std::cout << "Merged indices, clearing memory." << std::endl;
