@@ -501,6 +501,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
         size_t total_keys = merged_chunker_index.size();
         const size_t update_interval = std::max<size_t>(std::ceil<size_t>(static_cast<double>(total_keys) * 0.01), static_cast<size_t>(1));
+        const size_t max_progress = std::min(update_interval * 100, total_keys);
 
         // Initialize the building progress bar
         indicators::BlockProgressBar build_bar{
@@ -511,7 +512,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
             indicators::option::PrefixText{"Building Python object: "},
             indicators::option::ShowElapsedTime{true},
             indicators::option::ShowRemainingTime{true},
-            indicators::option::MaxProgress{update_interval * 100},
+            indicators::option::MaxProgress{max_progress},
             indicators::option::Stream{std::cout},
             indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
         };
@@ -587,6 +588,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
             // Update progress bar
             if (key_counter % update_interval == 0) {
+                std::cout << "Processed " << key_counter << " / " << total_keys << " keys...";
                 build_bar.tick();
             }
             ++key_counter;
