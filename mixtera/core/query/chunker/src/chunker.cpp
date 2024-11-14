@@ -191,8 +191,6 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
             property_arrays.push_back(array);
         }
 
-
-
         for (int64_t i = 0; i < num_rows; ++i) {
             MixtureKeyCpp key;
 
@@ -497,37 +495,64 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
             indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
         };
 
+        // To minimize memory usage, we will move data when possible
+        size_t key_counter = 0;
+        const size_t update_interval = std::max<size_t>(std::ceil<size_t>(static_cast<double>(total_keys) * 0.01), static_cast<size_t>(1));
 
-        for (const auto& [key, datasets] : merged_chunker_index) {
-            // Convert MixtureKeyCpp to MixtureKey Python object
-            py::dict py_properties;
-            for (const auto& [prop_name, prop_values] : key.properties) {
-                py::list py_values;
-                for (const auto& val : prop_values) {
-                    py_values.append(py::str(val));
-                }
-                py_properties[py::str(prop_name)] = py_values;
+    for (auto it = merged_chunker_index.begin(); it != merged_chunker_index.end(); ) {
+        // Extract the key and datasets by moving them out of the map
+        MixtureKeyCpp key = std::move(it->first);
+        DatasetFiles datasets = std::move(it->second);
+
+        // Advance iterator before erasing
+        auto current_it = it;
+        ++it; // Increment iterator before erasing
+        merged_chunker_index.erase(current_it);
+
+        // Convert MixtureKeyCpp to MixtureKey Python object
+        py::dict py_properties;
+        for (auto& [prop_name, prop_values] : key.properties) {
+            // Wrap prop_name with py::str or py::cast
+            py_properties[py::cast(prop_name)] = py::cast(std::move(prop_values));
+            // Clear the vector after casting to free memory
+            prop_values.clear();
+            prop_values.shrink_to_fit(); // Optional
+        }
+        key.properties.clear();
+        // key.properties.shrink_to_fit(); // Not applicable for maps
+
+        // Create MixtureKey object
+        py::object py_mixture_key = MixtureKey_class(py_properties);
+
+        // Build datasets dict
+        py::dict py_datasets;
+        for (auto& [dataset_id, files] : datasets) {
+            py::dict py_files;
+            for (auto& [file_id, intervals] : files) {
+                // Convert vector of intervals to Python list
+                py_files[py::cast(file_id)] = py::cast(std::move(intervals));
+                // Clear intervals vector after casting
+                intervals.clear();
+                intervals.shrink_to_fit();
             }
-            // Create MixtureKey object
-            py::object py_mixture_key = MixtureKey_class(py_properties);
+            // Clear files map to free memory
+            files.clear();
+            files = FileIntervals(); // Force deallocation (optional)
 
-            // Build datasets dict
-            py::dict py_datasets;
-            for (const auto& [dataset_id, files] : datasets) {
-                py::dict py_files;
-                for (const auto& [file_id, intervals] : files) {
-                    py::list py_intervals;
-                    for (const auto& interval : intervals) {
-                        py_intervals.append(py::make_tuple(interval.first, interval.second));
-                    }
-                    py_files[py::int_(file_id)] = py_intervals;
-                }
-                py_datasets[py::int_(dataset_id)] = py_files;
+            py_datasets[py::cast(dataset_id)] = py_files;
+        }
+        // Clear datasets map to free memory
+        datasets.clear();
+        datasets = DatasetFiles(); // Force deallocation (optional)
+
+        // Add to chunker index
+        py_chunker_index[py_mixture_key] = py_datasets;
+
+            // Update progress bar
+            if (key_counter % update_interval == 0) {
                 build_bar.tick();
             }
-
-            // Add to chunker index
-            py_chunker_index[py_mixture_key] = py_datasets;
+            ++key_counter;
         }
 
         build_bar.mark_as_completed();
