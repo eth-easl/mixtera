@@ -48,8 +48,9 @@ using ChunkerIndexCpp = std::unordered_map<MixtureKeyCpp, DatasetFiles>;
 py::object create_chunker_index(py::object py_table, int num_threads);
 
 // Function to merge two sorted vectors of intervals
-std::vector<Interval> merge_sorted_intervals(const std::vector<Interval>& list1, const std::vector<Interval>& list2);
-
+void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals,
+                                      std::vector<Interval>& source_intervals);
+                                      
 // Function to merge per-thread chunker indices
 void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
                            ChunkerIndexCpp& merged_index);

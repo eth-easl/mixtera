@@ -71,27 +71,26 @@ bool GetIndexValue(const std::shared_ptr<arrow::Array>& indices, int64_t positio
 }
 
 
+void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals,
+                                      std::vector<Interval>& source_intervals) {
+      size_t m = target_intervals.size();
+      size_t n = source_intervals.size();
 
-std::vector<Interval> merge_sorted_intervals(const std::vector<Interval>& list1, const std::vector<Interval>& list2) {
-    std::vector<Interval> merged;
-    merged.reserve(list1.size() + list2.size());
-    size_t i = 0, j = 0;
+      target_intervals.reserve(m + n);
 
-    while (i < list1.size() && j < list2.size()) {
-        if (list1[i] <= list2[j]) {
-            merged.push_back(list1[i++]);
-        } else {
-            merged.push_back(list2[j++]);
-        }
-    }
-    while (i < list1.size()) {
-        merged.push_back(list1[i++]);
-    }
-    while (j < list2.size()) {
-        merged.push_back(list2[j++]);
-    }
-    return merged;
-}
+      // Copy source_intervals to target_intervals
+      target_intervals.insert(target_intervals.end(),
+                              std::make_move_iterator(source_intervals.begin()),
+                              std::make_move_iterator(source_intervals.end()));
+
+      // Clear source_intervals to free memory
+      source_intervals.clear();
+      source_intervals.shrink_to_fit();
+
+      // In-place sort
+      std::inplace_merge(target_intervals.begin(), target_intervals.begin() + m, target_intervals.end());
+  }
+
 
 void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
                            ChunkerIndexCpp& merged_index) {
@@ -109,6 +108,13 @@ void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
         indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
     };
 
+    std::cout << "Number of per-thread indices: " << total_indices << std::endl;
+
+    for (size_t i = 0; i < total_indices; ++i) {
+        size_t num_keys = thread_indices[i].size();
+        std::cout << "Thread index " << i << " has " << num_keys << " keys." << std::endl;
+    }
+
     for (auto& local_index : thread_indices) {
         for (auto& [key, datasets] : local_index) {
             // Use merged index's datasets for the given key
@@ -123,14 +129,9 @@ void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
                     auto& target_intervals = target_files[file_id];
 
                     if (target_intervals.empty()) {
-                        // If no intervals yet, move intervals directly
                         target_intervals = std::move(intervals);
-                        // intervals are now empty
                     } else {
-                        // Merge sorted intervals
-                        target_intervals = merge_sorted_intervals(target_intervals, intervals);
-                        // intervals can be cleared (already emptied by move)
-                        intervals.clear();
+                        merge_sorted_intervals_inplace(target_intervals, intervals);
                     }
                 }
                 // files map's content (intervals) have been moved or cleared
@@ -445,6 +446,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
         std::cout << "All threads finished, clearing batches." << std::endl;
         batches.clear();
+        batches.shrink_to_fit();
 
         // Merge per-thread chunker indices
         ChunkerIndexCpp merged_chunker_index;
@@ -454,7 +456,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         // After merging, we can clear thread_chunker_indices to free memory
         std::cout << "Merged indices, clearing memory." << std::endl;
         thread_chunker_indices.clear();
-
+        thread_chunker_indices.shrink_to_fit();
         // Reacquire GIL before working with Python objects
         std::cout << "Acquiring GIL." << std::endl;
         py::gil_scoped_acquire acquire;
