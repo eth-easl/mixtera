@@ -137,16 +137,20 @@ void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
                 // files map's content (intervals) have been moved or cleared
                 // We can clear the files map here if desired
                 files.clear();  // Safe to clear after iteration
+                files = FileIntervals(); // force deallocation by deleting the old object
             }
             // datasets map's content (files) have been cleared
             datasets.clear();  // Safe to clear after iteration
+            datasets = DatasetFiles(); // force deallocation
         }
         // local_index's content (datasets) have been cleared
         local_index.clear();  // Clear the local_index to free memory
+        local_index = ChunkerIndexCpp(); // force deallocation
         merge_bar.tick();
     }
     // After processing all local indices, we can clear the thread_indices vector itself
     thread_indices.clear();
+    thread_indices.shrink_to_fit();
     merge_bar.mark_as_completed();
 }
 
