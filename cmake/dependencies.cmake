@@ -3,6 +3,27 @@ include(FetchContent)
 # Configure path to modules (for find_package)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/modules/")
 
+################### fmt ####################
+message(STATUS "Making fmt available.")
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+  GIT_TAG 11.0.2
+)
+FetchContent_MakeAvailable(fmt)
+
+################### spdlog ####################
+message(STATUS "Making spdlog available.")
+set(SPDLOG_FMT_EXTERNAL ON) # Otherwise, we run into linking errors since the fmt version used by spdlog does not match.
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG v1.15.0
+)
+FetchContent_MakeAvailable(spdlog)
+
+################### pybind11 ####################
+
 message(STATUS "Making pybind11 available.")
 
 FetchContent_Declare(
@@ -12,6 +33,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pybind11)
 
+################### indicators ####################
+
+message(STATUS "Making indicators available.")
+
 FetchContent_Declare(
   indicators
   GIT_REPOSITORY https://github.com/p-ranav/indicators.git
@@ -20,6 +45,10 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(indicators)
 target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant)
 
+################### abseil ####################
+
+message(STATUS "Making abseil available.")
+
 FetchContent_Declare(
     absl
     GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
@@ -27,11 +56,13 @@ FetchContent_Declare(
   )
 FetchContent_MakeAvailable(absl)
 
+################### Arrow ####################
 
-### Arrow
-
-find_package(Arrow REQUIRED)
+message(STATUS "Searching for Python.")
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+message(STATUS "Searching for Arrow.")
+find_package(Arrow REQUIRED)
+message(STATUS "Gettng arrow include path.")
 
 execute_process(
     COMMAND "${Python3_EXECUTABLE}" -c "import pyarrow, sys; sys.stdout.write(pyarrow.get_include())"
@@ -44,18 +75,17 @@ if(NOT _PYARROW_GET_INCLUDE_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to get pyarrow include directory")
 endif()
 
-message(STATUS "PyArrow include directory: ${PYARROW_INCLUDE_DIR}")
-
+message(STATUS "Found Pyarrow include path: ${PYARROW_INCLUDE_DIR}")
 target_compile_options(Arrow::arrow_shared INTERFACE -Wno-shadow -Wno-unused-parameter -Wno-shadow-field -Wno-extra-semi -Wno-potentially-evaluated-expression)
 
-# Get PyArrow library directories
+message(STATUS "Gettng pyarrow library dirctory.")
 execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import pyarrow as pa; print(';'.join(pa.get_library_dirs()))"
     OUTPUT_VARIABLE PYARROW_LIBRARY_DIRS
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-message(STATUS "PyArrow library dirs: ${PYARROW_LIBRARY_DIRS}")
+message(STATUS "Found Pyarrow library directory: ${PYARROW_LIBRARY_DIRS}")
 
 find_library(ARROW_PYTHON_LIB
     NAMES arrow_python

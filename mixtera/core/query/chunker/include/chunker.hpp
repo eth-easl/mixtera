@@ -5,12 +5,44 @@
 #include <arrow/python/pyarrow.h>
 #include <arrow/type_traits.h>
 #include <pybind11/pybind11.h>
+#include <spdlog/spdlog.h>
 
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+
+#define FAIL(msg)                                                                                            \
+  throw mixtera::utils::MixteraException("ERROR at " __FILE__ ":" + std::to_string(__LINE__) + " " + (msg) + \
+                                         "\nExecution failed.")
+
+#define ASSERT(expr, msg)         \
+  if (!static_cast<bool>(expr)) { \
+    FAIL((msg));                  \
+  }                               \
+  static_assert(true, "End call of macro with a semicolon")
+
+#ifdef NDEBUG
+#define DEBUG_ASSERT(expr, msg) \
+  do {                          \
+  } while (0)
+#else
+#define DEBUG_ASSERT(expr, msg) ASSERT((expr), (msg))
+#endif
+
+namespace mixtera::utils {
+
+class MixteraException : public std::exception {
+ public:
+  explicit MixteraException(std::string msg) : msg_{std::move(msg)} {}
+  const char* what() const noexcept override { return msg_.c_str(); }
+
+ private:
+  const std::string msg_;
+};
+
+}  // namespace mixtera::utils
 
 namespace py = pybind11;
 
@@ -25,6 +57,7 @@ py::object create_chunker_index(py::object py_table, int num_threads);
 
 // Helper functions
 std::vector<std::string> fetch_property_columns(const arrow::Table& table);
+std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, uint32_t num_threads);
 
 // Function to merge two sorted vectors of intervals
 void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals, std::vector<Interval>& source_intervals);
