@@ -45,7 +45,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 
   # We have a lot of shadowed ctor args with simple structs that should usually be aggregate-initialized, but clang
   # doesn't support aggregate-initialization with emplace_back yet
-  list(APPEND MIXTERA_COMPILE_OPTIONS "-Wshadow-all" "-Wno-shadow-field-in-constructor")
+  list(APPEND MIXTERA_COMPILE_OPTIONS "-Wshadow-all" "-Wno-shadow-field-in-constructor" "-Wno-gcc-compat")
 
   # Without this, we get compilation errors for the chrono header. We need to set this globally
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -std=c++20")

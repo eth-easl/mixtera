@@ -20,6 +20,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(indicators)
 target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant)
 
+FetchContent_Declare(
+    absl
+    GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+    GIT_TAG        20240722.0
+  )
+FetchContent_MakeAvailable(absl)
+
 
 ### Arrow
 

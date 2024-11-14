@@ -5,6 +5,8 @@
 #include <arrow/python/pyarrow.h>
 #include <arrow/type_traits.h>
 #include <arrow/array.h>
+#include "absl/hash/hash.h"
+#include "absl/container/flat_hash_map.h"
 
 #include <unordered_map>
 #include <vector>
@@ -12,15 +14,37 @@
 
 namespace py = pybind11;
 
-// Define MixtureKey equivalent in C++
 struct MixtureKeyCpp {
     std::unordered_map<std::string, std::vector<std::string>> properties;
 
+    // Equality operator
     bool operator==(const MixtureKeyCpp& other) const {
         return properties == other.properties;
     }
+
+    // Implement AbslHashValue
+    template <typename H>
+    friend H AbslHashValue(H h, const MixtureKeyCpp& key) {
+        // Since properties is an unordered_map, we need to ensure hashing is order-independent
+        // Convert properties to a sorted vector of pairs
+        std::vector<std::pair<std::string, std::vector<std::string>>> sorted_properties(
+            key.properties.begin(), key.properties.end());
+
+        // Sort the properties by key to ensure deterministic order
+        std::sort(sorted_properties.begin(), sorted_properties.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        for (auto& [prop_name, prop_values] : sorted_properties) {
+            // Sort the values to ensure deterministic order
+            std::sort(prop_values.begin(), prop_values.end());
+            // Combine into the hash
+            h = H::combine(std::move(h), prop_name, prop_values);
+        }
+        return h;
+    }
 };
 
+/*
 // Hash function for MixtureKeyCpp
 namespace std {
     template <>
@@ -37,12 +61,13 @@ namespace std {
         }
     };
 }
+*/
 
 // Define the types for the chunker index data
 using Interval = std::pair<int64_t, int64_t>;
-using FileIntervals = std::unordered_map<int64_t, std::vector<Interval>>;
-using DatasetFiles = std::unordered_map<int64_t, FileIntervals>;
-using ChunkerIndexCpp = std::unordered_map<MixtureKeyCpp, DatasetFiles>;
+using FileIntervals = absl::flat_hash_map<int64_t, std::vector<Interval>>;
+using DatasetFiles = absl::flat_hash_map<int64_t, FileIntervals>;
+using ChunkerIndexCpp = absl::flat_hash_map<MixtureKeyCpp, DatasetFiles>;
 
 // Function declarations
 py::object create_chunker_index(py::object py_table, int num_threads);
@@ -50,7 +75,7 @@ py::object create_chunker_index(py::object py_table, int num_threads);
 // Function to merge two sorted vectors of intervals
 void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals,
                                       std::vector<Interval>& source_intervals);
-                                      
+
 // Function to merge per-thread chunker indices
 void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
                            ChunkerIndexCpp& merged_index);

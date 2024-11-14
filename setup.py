@@ -80,7 +80,7 @@ class CMakeBuild(build_ext):
 
         # Config and build the extension
         subprocess.check_call(['cmake', ext.cmake_lists_dir] + cmake_args, cwd=str(build_temp))
-        subprocess.check_call(['cmake', '--build', '.', '--config', cfg], cwd=str(build_temp))
+        subprocess.check_call(['cmake', '--build', '.', "-j", "8", '--config', cfg], cwd=str(build_temp))
 
 # Where the magic happens:
 setup(
