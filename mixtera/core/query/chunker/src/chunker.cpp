@@ -92,66 +92,6 @@ void merge_sorted_intervals_inplace(std::vector<Interval>& target_intervals, std
   std::inplace_merge(target_intervals.begin(), target_intervals.begin() + m, target_intervals.end());
 }
 
-void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices, ChunkerIndexCpp& merged_index) {
-  size_t total_indices = thread_indices.size();
-  indicators::BlockProgressBar merge_bar{
-      indicators::option::BarWidth{50},
-      indicators::option::Start{"["},
-      indicators::option::End{"]"},
-      indicators::option::ForegroundColor{indicators::Color::yellow},
-      indicators::option::PrefixText{"Merging indices: "},
-      indicators::option::ShowElapsedTime{true},
-      indicators::option::ShowRemainingTime{true},
-      indicators::option::MaxProgress{total_indices},
-      indicators::option::Stream{std::cout},
-      indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
-
-  std::cout << "Number of per-thread indices: " << total_indices << std::endl;
-
-  for (size_t i = 0; i < total_indices; ++i) {
-    size_t num_keys = thread_indices[i].size();
-    std::cout << "Thread index " << i << " has " << num_keys << " keys." << std::endl;
-  }
-
-  for (auto& local_index : thread_indices) {
-    for (auto& [key, datasets] : local_index) {
-      // Use merged index's datasets for the given key
-      auto& target_datasets = merged_index[key];
-
-      for (auto& [dataset_id, files] : datasets) {
-        // Use merged index's files for the given dataset_id
-        auto& target_files = target_datasets[dataset_id];
-
-        for (auto& [file_id, intervals] : files) {
-          // Use merged index's intervals for the given file_id
-          auto& target_intervals = target_files[file_id];
-
-          if (target_intervals.empty()) {
-            target_intervals = std::move(intervals);
-          } else {
-            merge_sorted_intervals_inplace(target_intervals, intervals);
-          }
-        }
-        // files map's content (intervals) have been moved or cleared
-        // We can clear the files map here if desired
-        files.clear();            // Safe to clear after iteration
-        files = FileIntervals();  // force deallocation by deleting the old object
-      }
-      // datasets map's content (files) have been cleared
-      datasets.clear();           // Safe to clear after iteration
-      datasets = DatasetFiles();  // force deallocation
-    }
-    // local_index's content (datasets) have been cleared
-    local_index.clear();              // Clear the local_index to free memory
-    local_index = ChunkerIndexCpp();  // force deallocation
-    merge_bar.tick();
-  }
-  // After processing all local indices, we can clear the thread_indices vector itself
-  thread_indices.clear();
-  thread_indices.shrink_to_fit();
-  merge_bar.mark_as_completed();
-}
-
 // Helper function to process a range of rows
 void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& property_columns,
                    ChunkerIndexCpp& local_chunker_index) {
@@ -464,10 +404,83 @@ std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, u
   return thread_chunker_indices;
 }
 
+ChunkerIndexCpp merge_chunker_indices_impl(std::vector<ChunkerIndexCpp>* thread_chunker_indices) {
+  ChunkerIndexCpp merged_chunker_index;
+
+  const uint32_t total_indices = thread_chunker_indices->size();
+
+  indicators::BlockProgressBar merge_bar{
+      indicators::option::BarWidth{50},
+      indicators::option::Start{"["},
+      indicators::option::End{"]"},
+      indicators::option::ForegroundColor{indicators::Color::yellow},
+      indicators::option::PrefixText{"Merging indices: "},
+      indicators::option::ShowElapsedTime{true},
+      indicators::option::ShowRemainingTime{true},
+      indicators::option::MaxProgress{total_indices},
+      indicators::option::Stream{std::cout},
+      indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
+
+  for (auto& local_index : *thread_chunker_indices) {
+    for (auto& [key, datasets] : local_index) {
+      auto& target_datasets = merged_chunker_index[key];
+
+      for (auto& [dataset_id, files] : datasets) {
+        auto& target_files = target_datasets[dataset_id];
+
+        for (auto& [file_id, intervals] : files) {
+          auto& target_intervals = target_files[file_id];
+
+          if (target_intervals.empty()) {
+            target_intervals = std::move(intervals);
+          } else {
+            merge_sorted_intervals_inplace(target_intervals, intervals);
+          }
+        }
+        files.clear();            // Safe to clear after iteration
+        files = FileIntervals();  // force deallocation by deleting the old object
+      }
+      datasets.clear();           // Safe to clear after iteration
+      datasets = DatasetFiles();  // force deallocation
+    }
+    local_index.clear();              // Clear the local_index to free memory
+    local_index = ChunkerIndexCpp();  // force deallocation
+
+    merge_bar.tick();
+  }
+
+  // After processing all local indices, we can clear the thread_chunker_indices vector itself
+  thread_chunker_indices->clear();
+  thread_chunker_indices->shrink_to_fit();
+  merge_bar.mark_as_completed();
+
+  return merged_chunker_index;
+}
+
+ChunkerIndexCpp merge_chunker_indices(std::vector<ChunkerIndexCpp>* thread_chunker_indices) {
+  py::gil_scoped_release release;
+  spdlog::debug("GIL released, merging chunker indices.");
+  ChunkerIndexCpp merged_chunker_index;
+
+  if (thread_chunker_indices->size() == 1) {
+    merged_chunker_index = thread_chunker_indices->at(0);
+  } else {
+    merged_chunker_index = merge_chunker_indices_impl(thread_chunker_indices);
+  }
+
+  spdlog::debug("Merging done, clearing memory.");
+  thread_chunker_indices->clear();
+  thread_chunker_indices->shrink_to_fit();
+
+  py::gil_scoped_acquire acquire;  // Just for cleanliness, always acquire GIL at end of C++ scope.
+  spdlog::debug("merge_chunker_indices done, GIL reacquired.");
+  return merged_chunker_index;
+}
+
 py::object create_chunker_index(py::object py_table, int num_threads) {
   try {
     if (num_threads < 0) {
-      FAIL(fmt::format("num_threads = {} < 0. Need at least 0 (or 1) threads.", num_threads));
+      FAIL(fmt::format("num_threads = {} < 0. Need at least 0 (1) threads.", num_threads));
     }
     num_threads = std::max(num_threads, 1);
     indicators::show_console_cursor(false);  // Hides cursor, just for visuals
@@ -475,25 +488,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
     std::vector<ChunkerIndexCpp> thread_chunker_indices =
         calc_thread_chunker_indices(py_table, static_cast<uint32_t>(num_threads));
 
-    py::gil_scoped_release release;
-    // Merge per-thread chunker indices
-    ChunkerIndexCpp merged_chunker_index;
-
-    if (thread_chunker_indices.size() == 1) {
-      merged_chunker_index = thread_chunker_indices[0];
-    } else {
-      std::cout << "Merging per-thread indices" << std::endl;
-      merge_chunker_indices(thread_chunker_indices, merged_chunker_index);
-    }
-
-    // After merging, we can clear thread_chunker_indices to free memory
-    std::cout << "Merged indices, clearing memory." << std::endl;
-    thread_chunker_indices.clear();
-    thread_chunker_indices.shrink_to_fit();
-    // Reacquire GIL before working with Python objects
-    std::cout << "Acquiring GIL." << std::endl;
-    py::gil_scoped_acquire acquire;
-    std::cout << "Acquired GIL." << std::endl;
+    ChunkerIndexCpp merged_chunker_index = merge_chunker_indices(&thread_chunker_indices);
 
     // Import the MixtureKey class
     py::object mixture_module = py::module_::import("mixtera.core.query.mixture");
