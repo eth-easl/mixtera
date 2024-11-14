@@ -530,9 +530,10 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         ++it; // Increment iterator before erasing
         merged_chunker_index.erase(current_it);
 
+        std::cout << "Erased from index" << std::endl;
+
             // Parse the key string back into a properties dictionary
             py::dict py_properties;
-
             std::string key_str = key;
 
             // Parse the key string
@@ -559,8 +560,10 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
                 py_properties[py::cast(prop_name)] = py::cast(std::move(values));
             }
 
+            std::cout << "Parsed key " << key_str << " into py_properties" << std::endl;
             // Create MixtureKey object
             py::object py_mixture_key = MixtureKey_class(py_properties);
+            std::cout << "Created mixturekey object" << std::endl;
 
         // Build datasets dict
         py::dict py_datasets;
@@ -579,6 +582,8 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
             py_datasets[py::cast(dataset_id)] = py_files;
         }
+        std::cout << "Built dataset dict." << std::endl;
+
         // Clear datasets map to free memory
         datasets.clear();
         datasets = DatasetFiles(); // Force deallocation (optional)
@@ -586,12 +591,14 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         // Add to chunker index
         py_chunker_index[py_mixture_key] = py_datasets;
 
-            // Update progress bar
-            if (key_counter % update_interval == 0) {
-                std::cout << "Processed " << key_counter << " / " << total_keys << " keys...";
-                build_bar.tick();
-            }
-            ++key_counter;
+        std::cout << "Added to chunker index." << std::endl;
+
+        // Update progress bar
+        if (key_counter % update_interval == 0) {
+            std::cout << "Processed " << key_counter << " / " << total_keys << " keys...";
+            build_bar.tick();
+        }
+        ++key_counter;
         }
 
         build_bar.mark_as_completed();
