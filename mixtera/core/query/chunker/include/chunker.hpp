@@ -14,20 +14,7 @@
 
 namespace py = pybind11;
 
-struct MixtureKeyCpp {
-    absl::flat_hash_map<std::string, std::vector<std::string>>  properties;
-
-    bool operator==(const MixtureKeyCpp& other) const {
-        return properties == other.properties;
-    }
-
-    // Implement AbslHashValue for hashing
-    template <typename H>
-    friend H AbslHashValue(H h, const MixtureKeyCpp& key) {
-        // Combine the properties map into the hash
-        return H::combine(std::move(h), key.properties);
-    }
-};
+using MixtureKeyCpp = std::string;
 
 /*
 // Hash function for MixtureKeyCpp

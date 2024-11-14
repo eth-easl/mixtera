@@ -192,8 +192,10 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
         }
 
         for (int64_t i = 0; i < num_rows; ++i) {
-            MixtureKeyCpp key;
+            // Build the key as a string
+            std::string key;
 
+            bool first_prop = true;
             for (size_t j = 0; j < property_columns.size(); ++j) {
                 auto array = property_arrays[j];
                 std::string col_name = property_columns[j];
@@ -206,6 +208,12 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                     continue;
                 }
 
+                if (!first_prop) {
+                    key += ";";
+                }
+                first_prop = false;
+
+                key += col_name + ":";
 
                 auto type_id = array->type_id();
 
@@ -214,7 +222,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                         // Handle STRING type
                         auto str_array = arrow::internal::checked_pointer_cast<arrow::StringArray>(array);
                         std::string value = str_array->GetString(i);
-                        key.properties[col_name] = {value};
+                        key += value;
                     } else if (type_id == arrow::Type::LIST) {
                         // Handle LIST type
                         auto list_array = arrow::internal::checked_pointer_cast<arrow::ListArray>(array);
@@ -236,7 +244,9 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                             continue;
                         }
 
-                        std::vector<std::string> values;
+                        // Build values string
+                        std::string values_str;
+                        bool first_value = true;
 
                         if (value_array->type_id() == arrow::Type::STRING) {
                             // LIST of STRING
@@ -246,7 +256,11 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                     continue;
                                 }
                                 std::string val = str_values->GetString(k);
-                                values.push_back(val);
+                                if (!first_value) {
+                                    values_str += ",";
+                                }
+                                first_value = false;
+                                values_str += val;
                             }
                         } else if (value_array->type_id() == arrow::Type::DICTIONARY) {
                             // LIST of DICTIONARY
@@ -277,12 +291,18 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                 }
 
                                 std::string val = dict_values->GetString(index);
-                                values.push_back(val);
+                                if (!first_value) {
+                                    values_str += ",";
+                                }
+                                first_value = false;
+                                values_str += val;
                             }
                         } else {
                             std::cerr << "Unsupported list element type in column '" << col_name << "'. Type: " << value_array->type()->ToString() << std::endl;
                         }
-                        key.properties[col_name] = values;
+
+                        key += values_str;
+
                     } else if (type_id == arrow::Type::DICTIONARY) {
                         // Handle DICTIONARY type
                         auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(array);
@@ -312,7 +332,8 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                         }
 
                         std::string value = dict_values->GetString(index);
-                        key.properties[col_name] = {value};
+                        key += value;
+
                     } else {
                         std::cerr << "Unsupported array type in column '" << col_name << "' at row " << i << ". Type: " << array->type()->ToString() << std::endl;
                     }
@@ -321,7 +342,6 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                     continue;
                 }
             }
-
             int64_t dataset_id = dataset_id_array_int32->Value(i);
             int64_t file_id = file_id_array_int32->Value(i);
             int64_t interval_start = interval_start_array_int32->Value(i);
@@ -480,6 +500,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         py::dict py_chunker_index;
 
         size_t total_keys = merged_chunker_index.size();
+        const size_t update_interval = std::max<size_t>(std::ceil<size_t>(static_cast<double>(total_keys) * 0.01), static_cast<size_t>(1));
 
         // Initialize the building progress bar
         indicators::BlockProgressBar build_bar{
@@ -490,14 +511,13 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
             indicators::option::PrefixText{"Building Python object: "},
             indicators::option::ShowElapsedTime{true},
             indicators::option::ShowRemainingTime{true},
-            indicators::option::MaxProgress{total_keys},
+            indicators::option::MaxProgress{update_interval * 100},
             indicators::option::Stream{std::cout},
             indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
         };
 
         // To minimize memory usage, we will move data when possible
         size_t key_counter = 0;
-        const size_t update_interval = std::max<size_t>(std::ceil<size_t>(static_cast<double>(total_keys) * 0.01), static_cast<size_t>(1));
 
     for (auto it = merged_chunker_index.begin(); it != merged_chunker_index.end(); ) {
         // Extract the key and datasets by moving them out of the map
@@ -509,20 +529,37 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         ++it; // Increment iterator before erasing
         merged_chunker_index.erase(current_it);
 
-        // Convert MixtureKeyCpp to MixtureKey Python object
-        py::dict py_properties;
-        for (auto& [prop_name, prop_values] : key.properties) {
-            // Wrap prop_name with py::str or py::cast
-            py_properties[py::cast(prop_name)] = py::cast(std::move(prop_values));
-            // Clear the vector after casting to free memory
-            prop_values.clear();
-            prop_values.shrink_to_fit(); // Optional
-        }
-        key.properties.clear();
-        // key.properties.shrink_to_fit(); // Not applicable for maps
+            // Parse the key string back into a properties dictionary
+            py::dict py_properties;
 
-        // Create MixtureKey object
-        py::object py_mixture_key = MixtureKey_class(py_properties);
+            std::string key_str = key;
+
+            // Parse the key string
+            // Expected format: "prop1:val1,val2;prop2:val3"
+
+            std::stringstream ss_props(key_str);
+            std::string prop_pair;
+            while (std::getline(ss_props, prop_pair, ';')) {
+                size_t colon_pos = prop_pair.find(':');
+                if (colon_pos == std::string::npos) {
+                    continue;
+                }
+                std::string prop_name = prop_pair.substr(0, colon_pos);
+                std::string values_str = prop_pair.substr(colon_pos + 1);
+
+                // Split values by ','
+                std::vector<std::string> values;
+                std::stringstream ss_values(values_str);
+                std::string value;
+                while (std::getline(ss_values, value, ',')) {
+                    values.push_back(value);
+                }
+
+                py_properties[py::cast(prop_name)] = py::cast(std::move(values));
+            }
+
+            // Create MixtureKey object
+            py::object py_mixture_key = MixtureKey_class(py_properties);
 
         // Build datasets dict
         py::dict py_datasets;
