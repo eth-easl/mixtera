@@ -12,6 +12,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pybind11)
 
+FetchContent_Declare(
+  indicators
+  GIT_REPOSITORY https://github.com/p-ranav/indicators.git
+  GIT_TAG v2.3
+)
+FetchContent_MakeAvailable(indicators)
+target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant)
+
+
+### Arrow
+
 find_package(Arrow REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
@@ -28,7 +39,7 @@ endif()
 
 message(STATUS "PyArrow include directory: ${PYARROW_INCLUDE_DIR}")
 
-target_compile_options(Arrow::arrow_shared INTERFACE -Wno-shadow -Wno-unused-parameter -Wno-shadow-field -Wno-extra-semi)
+target_compile_options(Arrow::arrow_shared INTERFACE -Wno-shadow -Wno-unused-parameter -Wno-shadow-field -Wno-extra-semi -Wno-potentially-evaluated-expression)
 
 # Get PyArrow library directories
 execute_process(
