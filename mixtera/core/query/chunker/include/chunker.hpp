@@ -51,7 +51,7 @@ py::object create_chunker_index(py::object py_table, int num_threads);
 std::vector<Interval> merge_sorted_intervals(const std::vector<Interval>& list1, const std::vector<Interval>& list2);
 
 // Function to merge per-thread chunker indices
-void merge_chunker_indices(const std::vector<ChunkerIndexCpp>& thread_indices,
+void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
                            ChunkerIndexCpp& merged_index);
 
 void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,

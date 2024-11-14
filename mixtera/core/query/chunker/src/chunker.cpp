@@ -9,6 +9,10 @@
 #include <iostream>
 #include <typeinfo>
 #include <arrow/util/checked_cast.h>
+#include <indicators/progress_bar.hpp>
+#include <indicators/block_progress_bar.hpp>
+#include <indicators/termcolor.hpp>
+#include <indicators/cursor_control.hpp> 
 
 
 namespace py = pybind11;
@@ -89,27 +93,60 @@ std::vector<Interval> merge_sorted_intervals(const std::vector<Interval>& list1,
     return merged;
 }
 
-// Function to merge per-thread chunker indices
-void merge_chunker_indices(const std::vector<ChunkerIndexCpp>& thread_indices,
+void merge_chunker_indices(std::vector<ChunkerIndexCpp>& thread_indices,
                            ChunkerIndexCpp& merged_index) {
-    for (const auto& local_index : thread_indices) {
-        for (const auto& [key, datasets] : local_index) {
+    size_t total_indices = thread_indices.size();
+    indicators::BlockProgressBar merge_bar{
+        indicators::option::BarWidth{50},
+        indicators::option::Start{"["},
+        indicators::option::End{"]"},
+        indicators::option::ForegroundColor{indicators::Color::yellow},
+        indicators::option::PrefixText{"Merging indices: "},
+        indicators::option::ShowElapsedTime{true},
+        indicators::option::ShowRemainingTime{true},
+        indicators::option::MaxProgress{total_indices},
+        indicators::option::Stream{std::cout},
+        indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
+    };
+
+    for (auto& local_index : thread_indices) {
+        for (auto& [key, datasets] : local_index) {
+            // Use merged index's datasets for the given key
             auto& target_datasets = merged_index[key];
-            for (const auto& [dataset_id, files] : datasets) {
+
+            for (auto& [dataset_id, files] : datasets) {
+                // Use merged index's files for the given dataset_id
                 auto& target_files = target_datasets[dataset_id];
-                for (const auto& [file_id, intervals] : files) {
+
+                for (auto& [file_id, intervals] : files) {
+                    // Use merged index's intervals for the given file_id
                     auto& target_intervals = target_files[file_id];
+
                     if (target_intervals.empty()) {
-                        // If no intervals yet, assign directly
-                        target_intervals = intervals;
+                        // If no intervals yet, move intervals directly
+                        target_intervals = std::move(intervals);
+                        // intervals are now empty
                     } else {
                         // Merge sorted intervals
                         target_intervals = merge_sorted_intervals(target_intervals, intervals);
+                        // intervals can be cleared (already emptied by move)
+                        intervals.clear();
                     }
                 }
+                // files map's content (intervals) have been moved or cleared
+                // We can clear the files map here if desired
+                files.clear();  // Safe to clear after iteration
             }
+            // datasets map's content (files) have been cleared
+            datasets.clear();  // Safe to clear after iteration
         }
+        // local_index's content (datasets) have been cleared
+        local_index.clear();  // Clear the local_index to free memory
+        merge_bar.tick();
     }
+    // After processing all local indices, we can clear the thread_indices vector itself
+    thread_indices.clear();
+    merge_bar.mark_as_completed();
 }
 
 // Helper function to process a range of rows
@@ -294,14 +331,14 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
 
 
             // Optional: Debugging output
-            
+            /*
             if (i < 10) {
                 std::cout << "Row " << i << ": dataset_id=" << dataset_id
                           << ", file_id=" << file_id
                           << ", interval_start=" << interval_start
                           << ", interval_end=" << interval_end << std::endl;
             }
-            
+            */
 
             Interval interval = {interval_start, interval_end};
 
@@ -341,7 +378,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
         // Create a TableBatchReader
         arrow::TableBatchReader batch_reader(*table);
-        //batch_reader.set_chunksize(1 << 15); // Set chunksize (adjust as needed)
+        //batch_reader.set_chunksize(1); // Set chunksize (adjust as needed)
 
         // Read all record batches
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
@@ -349,6 +386,25 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         while (batch_reader.ReadNext(&batch).ok() && batch) {
             batches.push_back(batch);
         }
+
+        const int64_t total_rows = table->num_rows();
+        std::atomic<int64_t> total_rows_processed{0};
+
+        indicators::show_console_cursor(false);
+        // Initialize the progress bar
+        indicators::BlockProgressBar progress_bar{
+            indicators::option::BarWidth{50},
+            indicators::option::Start{"["},
+            indicators::option::End{"]"},
+            indicators::option::ForegroundColor{indicators::Color::green},
+            indicators::option::PrefixText{"Processing rows: "},
+            indicators::option::ShowElapsedTime{true},
+            indicators::option::ShowRemainingTime{true},
+            indicators::option::MaxProgress{static_cast<size_t>(total_rows)},
+            indicators::option::Stream{std::cout}, // Specify the output stream
+            indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
+        };
+
 
         // Prepare per-thread indices
         std::vector<ChunkerIndexCpp> thread_chunker_indices(num_threads);
@@ -367,29 +423,40 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
                     try {
                         for (int64_t b = start_batch; b < end_batch; ++b) {
                             process_batch(batches[b], property_columns, thread_chunker_indices[t]);
+                            const int64_t num_rows = batches[b]->num_rows();
+                            total_rows_processed += num_rows;
+                            progress_bar.set_progress(static_cast<size_t>(total_rows_processed.load()));
+                            // After processing, release the batch
+                            batches[b].reset();
                         }
                     } catch (const std::exception& e) {
                         std::cerr << "Exception in thread " << t << ": " << e.what() << std::endl;
                         // Handle exception or terminate
-                        std::terminate();
+                        throw;
                     }
                 });
             }
         }
-
-
 
         // Wait for threads to finish
         for (auto& thread : threads) {
             thread.join();
         }
 
+        std::cout << "All threads finished, clearing batches." << std::endl;
+        batches.clear();
+
         // Merge per-thread chunker indices
         ChunkerIndexCpp merged_chunker_index;
         std::cout << "Merging per-thread indices" << std::endl;
         merge_chunker_indices(thread_chunker_indices, merged_chunker_index);
 
+        // After merging, we can clear thread_chunker_indices to free memory
+        std::cout << "Merged indices, clearing memory." << std::endl;
+        thread_chunker_indices.clear();
+
         // Reacquire GIL before working with Python objects
+        std::cout << "Acquiring GIL." << std::endl;
         py::gil_scoped_acquire acquire;
         std::cout << "Acquired GIL." << std::endl;
 
@@ -399,6 +466,23 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
         // Prepare the ChunkerIndex Python dict
         py::dict py_chunker_index;
+
+        size_t total_keys = merged_chunker_index.size();
+
+        // Initialize the building progress bar
+        indicators::BlockProgressBar build_bar{
+            indicators::option::BarWidth{50},
+            indicators::option::Start{"["},
+            indicators::option::End{"]"},
+            indicators::option::ForegroundColor{indicators::Color::cyan},
+            indicators::option::PrefixText{"Building Python object: "},
+            indicators::option::ShowElapsedTime{true},
+            indicators::option::ShowRemainingTime{true},
+            indicators::option::MaxProgress{total_keys},
+            indicators::option::Stream{std::cout},
+            indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
+        };
+
 
         for (const auto& [key, datasets] : merged_chunker_index) {
             // Convert MixtureKeyCpp to MixtureKey Python object
@@ -425,11 +509,19 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
                     py_files[py::int_(file_id)] = py_intervals;
                 }
                 py_datasets[py::int_(dataset_id)] = py_files;
+                build_bar.tick();
             }
 
             // Add to chunker index
             py_chunker_index[py_mixture_key] = py_datasets;
         }
+
+        build_bar.mark_as_completed();
+        indicators::show_console_cursor(true);
+
+        std::cout << "Releasing the C++ index." << std::endl;
+        merged_chunker_index.clear();
+        std::cout << "Returning from C++" << std::endl;
 
         // Return the chunker index
         return py_chunker_index;
