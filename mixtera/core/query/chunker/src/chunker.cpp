@@ -352,24 +352,14 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch,
                 continue; // Skip invalid intervals
             }
 
-
-            // Optional: Debugging output
-            /*
-            if (i < 10) {
-                std::cout << "Row " << i << ": dataset_id=" << dataset_id
-                          << ", file_id=" << file_id
-                          << ", interval_start=" << interval_start
-                          << ", interval_end=" << interval_end << std::endl;
-            }
-            */
-
             Interval interval = {interval_start, interval_end};
 
             // Store intervals in the local chunker index
+            // No need to sort intervals within threads since data is already sorted (as threads process consecutive batches)
             local_chunker_index[key][dataset_id][file_id].push_back(interval);
         }
 
-        // No need to sort intervals within threads since data is already sorted
+        
 
     } catch (const std::exception& e) {
         std::cerr << "Exception in process_rows: " << e.what() << std::endl;
@@ -499,9 +489,8 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         // Prepare the ChunkerIndex Python dict
         py::dict py_chunker_index;
 
-        size_t total_keys = merged_chunker_index.size();
-        const size_t update_interval = std::max<size_t>(std::ceil<size_t>(static_cast<double>(total_keys) * 0.01), static_cast<size_t>(1));
-        const size_t max_progress = std::min(update_interval * 100, total_keys);
+        const size_t total_keys = merged_chunker_index.size();
+        const size_t update_interval = std::max<size_t>(std::ceil(static_cast<double>(total_keys) * 0.001), static_cast<size_t>(1));
 
         // Initialize the building progress bar
         indicators::BlockProgressBar build_bar{
@@ -512,7 +501,7 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
             indicators::option::PrefixText{"Building Python object: "},
             indicators::option::ShowElapsedTime{true},
             indicators::option::ShowRemainingTime{true},
-            indicators::option::MaxProgress{max_progress},
+            indicators::option::MaxProgress{total_keys},
             indicators::option::Stream{std::cout},
             indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
         };
@@ -530,7 +519,6 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         ++it; // Increment iterator before erasing
         merged_chunker_index.erase(current_it);
 
-        std::cout << "Erased from index" << std::endl;
 
             // Parse the key string back into a properties dictionary
             py::dict py_properties;
@@ -560,10 +548,8 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
                 py_properties[py::cast(prop_name)] = py::cast(std::move(values));
             }
 
-            std::cout << "Parsed key " << key_str << " into py_properties" << std::endl;
             // Create MixtureKey object
             py::object py_mixture_key = MixtureKey_class(py_properties);
-            std::cout << "Created mixturekey object" << std::endl;
 
         // Build datasets dict
         py::dict py_datasets;
@@ -582,8 +568,6 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
 
             py_datasets[py::cast(dataset_id)] = py_files;
         }
-        std::cout << "Built dataset dict." << std::endl;
-
         // Clear datasets map to free memory
         datasets.clear();
         datasets = DatasetFiles(); // Force deallocation (optional)
@@ -591,12 +575,9 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         // Add to chunker index
         py_chunker_index[py_mixture_key] = py_datasets;
 
-        std::cout << "Added to chunker index." << std::endl;
-
         // Update progress bar
         if (key_counter % update_interval == 0) {
-            std::cout << "Processed " << key_counter << " / " << total_keys << " keys...";
-            build_bar.tick();
+            build_bar.set_progress(key_counter);
         }
         ++key_counter;
         }
@@ -616,7 +597,6 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
         throw;
     }
 }
-
 
 
 PYBIND11_MODULE(chunker_extension, m) {
