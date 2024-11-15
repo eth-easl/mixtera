@@ -78,9 +78,17 @@ class TestQueryE2E(unittest.TestCase):
         args = QueryExecutionArgs(mixture=mixture)
         assert self.client.execute_query(query, args)
         res = list(iter(query.results))
-        for x in res:
-            self.assertEqual(x._result_index, {MixtureKey({"language": ["Go"]}): {1: {self.file1_id: [(0, 1)]}}})
-            break
+        # Note while this looks like a wrong order at first, it's actually ok:
+        # Across chunks, there is no need for intervals in the same file to be ordered
+        # The ordering here just depends on the hash function,
+        # since Go/Makefile and Go/CSS are equivalently good to use for Go.
+        self.assertEqual(
+            [x._result_index for x in res],
+            [
+                {MixtureKey({"language": ["Go"]}): {1: {self.file1_id: [(1, 2)]}}},
+                {MixtureKey({"language": ["Go"]}): {1: {self.file1_id: [(0, 1)]}}},
+            ],
+        )
 
     def test_union(self):
         mixture = ArbitraryMixture(1)
@@ -89,13 +97,12 @@ class TestQueryE2E(unittest.TestCase):
         assert self.client.execute_query(query, args)
         query_result = query.results
         res = list(iter(query_result))
-
         self.assertEqual(
             [x._result_index for x in res],
             [
-                {MixtureKey({"language": ["CSS", "Go"]}): {1: {self.file1_id: [(1, 2)]}}},
-                {MixtureKey({"language": ["ApacheConf", "CSS"]}): {1: {self.file2_id: [(0, 1)]}}},
                 {MixtureKey({"language": ["Go", "Makefile"]}): {1: {self.file1_id: [(0, 1)]}}},
+                {MixtureKey({"language": ["ApacheConf", "CSS"]}): {1: {self.file2_id: [(0, 1)]}}},
+                {MixtureKey({"language": ["CSS", "Go"]}): {1: {self.file1_id: [(1, 2)]}}},
             ],
         )
         # check metadata

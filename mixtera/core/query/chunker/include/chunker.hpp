@@ -46,11 +46,14 @@ class MixteraException : public std::exception {
 
 namespace py = pybind11;
 
+template <typename T1, typename T2>
+using MapT = std::map<T1, T2>;
+
 using MixtureKeyCpp = std::string;
 using Interval = std::pair<int64_t, int64_t>;
-using FileIntervals = absl::flat_hash_map<int64_t, std::vector<Interval>>;
-using DatasetFiles = absl::flat_hash_map<int64_t, FileIntervals>;
-using ChunkerIndexCpp = absl::flat_hash_map<MixtureKeyCpp, DatasetFiles>;
+using FileIntervals = MapT<int64_t, std::vector<Interval>>;
+using DatasetFiles = MapT<int64_t, FileIntervals>;
+using ChunkerIndexCpp = MapT<MixtureKeyCpp, DatasetFiles>;
 
 // Main function
 py::object create_chunker_index(py::object py_table, int num_threads);

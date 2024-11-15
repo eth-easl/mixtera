@@ -358,7 +358,8 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._window_size = 4  # Assuming a window size of 2 for this test
 
         # Expected data to be yielded from the iterator, considering the window size and distribution
-        expected_data = ["data6", "data1", "data4", "data2", "data3", "data5"]
+        # Note the ordering here depends on the hash function.
+        expected_data = ["data1", "data6", "data4", "data2", "data3", "data5"]
 
         # Collecting data from generator
         data_collected = list(result_chunk._iterate_window_mixture(active_iterators))

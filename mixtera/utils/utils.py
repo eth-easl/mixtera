@@ -9,9 +9,9 @@ from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, List, Optional, Type, Union
-import xxhash
 
 import numpy as np
+import xxhash
 from loguru import logger
 from tqdm import tqdm
 
@@ -93,58 +93,58 @@ def return_with_deepcopy_or_noop(to_return: Union[list, dict], copy: bool) -> Un
 def hash_list(string_list: list[str]) -> int:
     """
     Generate a hash from a list of strings using xxhash.
-    
+
     Args:
         string_list: A list of strings to be hashed.
-    
+
     Returns:
         An integer hash value.
     """
     # Sort the list of strings to ensure deterministic hashing
     string_list.sort()
-    
+
     # Concatenate the strings using a separator unlikely to occur in the strings
-    concatenated_string = '\0'.join(string_list)
-    
+    concatenated_string = "\0".join(string_list)
+
     # Compute the hash using xxhash
     hash_result = xxhash.xxh64_intdigest(concatenated_string)
-    
+
     return hash_result
 
 
 def hash_dict(d: dict[str, list[str]]) -> int:
     """
     Generate a hash from a dictionary with string keys and list of strings as values using xxhash.
-    
+
     Args:
         d: A dictionary to be hashed.
-    
+
     Returns:
         An integer hash value.
     """
     concatenated_items = []
-    
+
     # Process each key in sorted order for deterministic hashing
     for key in sorted(d.keys()):
         # Get and sort the list of strings associated with the key
         value_list = d[key]
         value_list.sort()
-        
+
         # Concatenate the sorted list of strings with a separator
-        concatenated_values = '\0'.join(value_list)
-        
+        concatenated_values = "\0".join(value_list)
+
         # Create a string representation of the key-value pair
         concatenated_item = f"{key}:{concatenated_values}"
-        
+
         # Add to the list of concatenated items
         concatenated_items.append(concatenated_item)
-    
+
     # Concatenate all key-value pair strings with a separator
-    concatenated_string = '\0'.join(concatenated_items)
-    
+    concatenated_string = "\0".join(concatenated_items)
+
     # Compute the hash using xxhash
     hash_result = xxhash.xxh64_intdigest(concatenated_string)
-    
+
     return hash_result
 
 

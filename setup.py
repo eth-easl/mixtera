@@ -3,12 +3,12 @@
 
 import io
 import os
-import subprocess
-from setuptools import find_packages, setup
-from setuptools import Extension
-from setuptools.command.build_ext import build_ext
-from pprint import pprint
 import pathlib
+import subprocess
+from pprint import pprint
+
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
 
 # Package meta-data.
 NAME = "mixtera"

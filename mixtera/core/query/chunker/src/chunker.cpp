@@ -5,6 +5,7 @@
 #include <arrow/python/pyarrow.h>
 #include <arrow/util/checked_cast.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <spdlog/spdlog.h>
@@ -106,6 +107,9 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
     }
 
     // Cast required arrays
+    // TODO(before merging): The integer typing here currently is a bit inconsistent. We should introduce some
+    // checks whether arrow returned 32 bit or 64 bit at runtime, and template all functions to support both,
+    // and then do a dispatch to the correct function during runtime.
     auto dataset_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(dataset_id_array);
     auto file_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(file_id_array);
     auto interval_start_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(interval_start_array);
@@ -261,7 +265,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
           }
         } catch (const std::exception& e) {
           spdlog::error(fmt::format("Exception at row {}, column {}: {}", i, col_name, e.what()));
-          throw e;
+          throw;
         }
       }
 
@@ -284,7 +288,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
 
   } catch (const std::exception& e) {
     spdlog::error(fmt::format("Exception in process_rows: {}", e.what()));
-    throw e;
+    throw;
   }
 }
 
@@ -317,6 +321,9 @@ std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, u
   const std::vector<std::string> property_columns = fetch_property_columns(*table);
   arrow::TableBatchReader batch_reader(*table);
   std::vector<ChunkerIndexCpp> thread_chunker_indices(num_threads);
+  std::atomic_bool exception_occurred{false};
+  std::exception_ptr thread_exception = nullptr;
+  std::mutex exception_mutex;
 
   // Read all record batches
   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
@@ -361,7 +368,12 @@ std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, u
           }
         } catch (const std::exception& e) {
           spdlog::error("Exception in thread {}: {}", t, e.what());
-          throw e;
+          {
+            std::lock_guard<std::mutex> lock(exception_mutex);
+            if (!exception_occurred.exchange(true)) {
+              thread_exception = std::current_exception();
+            }
+          }
         }
       });
     }
@@ -370,6 +382,11 @@ std::vector<ChunkerIndexCpp> calc_thread_chunker_indices(py::object& py_table, u
   // Wait for threads to finish
   for (auto& thread : threads) {
     thread.join();
+  }
+
+  if (thread_exception) {
+    spdlog::error("A thread encountered an error, rethrowing it and propagating to Python.");
+    std::rethrow_exception(thread_exception);
   }
 
   spdlog::info("All threads finished, clearing batches.");
@@ -516,6 +533,7 @@ py::object build_py_chunker_index(ChunkerIndexCpp* merged_chunker_index) {
 
     py::object py_mixture_key = MixtureKey_class(string_key_to_property_dict(key));
 
+    // The insertion order here is irrelevant. When we iterate over this in Python, we sort by keys.
     py::dict py_datasets;
     for (auto& [dataset_id, files] : datasets) {
       py::dict py_files;
@@ -570,8 +588,11 @@ py::object create_chunker_index(py::object py_table, int num_threads) {
     return result;
 
   } catch (const std::exception& e) {
-    spdlog::error(fmt::format("Exception occurred in create_chunker_index: {}", e.what()));
-    throw e;
+    const std::string error_msg = fmt::format("Exception occurred in create_chunker_index: {}", e.what());
+    spdlog::error(error_msg);
+    py::gil_scoped_acquire acquire;
+    PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
+    throw py::error_already_set();
   }
 }
 
