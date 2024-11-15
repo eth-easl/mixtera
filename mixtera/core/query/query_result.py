@@ -215,12 +215,9 @@ class QueryResult:
         # Here we shuffle the chunker index keys,
         # which determines the order of keys considered when two MixtureKeys are equal.
         # Hence, this depends on the hash function.
-        logger.info(f"raw keys: {chunker_index_keys}")
         seed_everything_from_list(chunker_index_keys)
         chunker_index_keys.sort()  # Otherwise, despite seeding, a shuffle is not reproducible.
-        logger.info(f"sorted keys: {chunker_index_keys}")
         random.shuffle(chunker_index_keys)
-        logger.info(f"shuffled keys: {chunker_index_keys}")
 
         # Initialize component iterators
         component_iterators = {
