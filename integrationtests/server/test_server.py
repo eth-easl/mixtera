@@ -17,7 +17,7 @@ from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import Query
-from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, Query, StaticMixture
+from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, StaticMixture
 
 TEST_SERVER_INSTANCE_COUNT = 1000
 TEST_SERVER_FILE_COUNT = 5
