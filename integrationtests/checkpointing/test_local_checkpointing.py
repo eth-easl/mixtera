@@ -9,7 +9,8 @@ from integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParse
 from loguru import logger
 from mixtera.core.client.mixtera_client import MixteraClient, QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, MixtureKey, Query, ResultChunk, StaticMixture
+from mixtera.core.query import Query, ResultChunk
+from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, StaticMixture
 
 TEST_LOCAL_INSTANCE_COUNT = 50
 TEST_LOCAL_FILE_COUNT = 1

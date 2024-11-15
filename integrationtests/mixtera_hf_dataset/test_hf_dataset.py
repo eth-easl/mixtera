@@ -13,7 +13,8 @@ from integrationtests.utils import TestMetadataParser, setup_test_dataset
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Query
+from mixtera.core.query import Query
+from mixtera.core.query.mixture import ArbitraryMixture
 from mixtera.hf import MixteraHFDataset
 from transformers import AutoTokenizer
 
