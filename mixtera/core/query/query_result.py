@@ -3,7 +3,6 @@ import os
 import pickle
 import random
 from collections import defaultdict
-from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
@@ -18,7 +17,6 @@ from mixtera.core.query.chunker import create_chunker_index as cpp_create
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import (
-    DummyPool,
     defaultdict_to_dict,
     deserialize_chunker_index,
     merge_sorted_lists,
@@ -26,7 +24,6 @@ from mixtera.utils.utils import (
     serialize_chunker_index,
 )
 from pyarrow import compute as pc
-from tqdm import tqdm
 
 
 class QueryResult:
@@ -49,9 +46,7 @@ class QueryResult:
         self._mixture = mixture
         logger.debug("Instantiating QueryResult..")
         logger.debug("Creating chunker index.")
-
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
-        logger.error(self._chunker_index)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
         self._mixture.inform(self._chunker_index)
 
@@ -108,123 +103,6 @@ class QueryResult:
         num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
         in_test = os.environ.get("PYTEST_CURRENT_TEST")
         return cpp_create(table, num_workers if not in_test else 1)
-
-    @staticmethod
-    def _create_chunker_index_legacy(table: pa.Table) -> ChunkerIndex:
-        """
-        Converts a PyArrow Table containing query results into a ChunkerIndex data structure.
-
-        The ChunkerIndex is a nested dictionary structure that organizes data intervals based on their properties,
-        enabling efficient chunking and data retrieval according to specified mixture criteria.
-
-        This method processes the input table in parallel by splitting it into batches.
-        Each batch is processed to build a partial ChunkerIndex,
-        and these partial indices are then merged into a single ChunkerIndex.
-
-        Args:
-            table (pa.Table): A PyArrow Table resulting from the query, containing intervals and associated properties.
-
-        Returns:
-            ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
-        """
-        logger.info("Converting to chunker index structure...")
-
-        # Identify property columns that define mixture keys
-        exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"}
-        property_columns = {col for col in table.column_names if col not in exclude_keys}
-
-        total_rows = table.num_rows
-        batches = table.to_batches()  # Split the table into record batches for parallel processing
-        # Determine the number of worker processes to use
-        num_cores = os.cpu_count() or 1
-        num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
-        # Use a dummy pool for testing, or a multiprocessing pool otherwise
-        in_test = os.environ.get("PYTEST_CURRENT_TEST")
-        pool_c = DummyPool if in_test else mp.Pool
-        core_string = "" if in_test else f" (using {num_workers} cores)"
-
-        with pool_c(num_workers) as pool:
-            process_func = partial(QueryResult._process_batch, property_columns=property_columns)
-            with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
-                results = []
-                for result, handled_rows in pool.imap_unordered(process_func, batches):
-                    results.append(result)
-                    pbar.update(handled_rows)
-
-        logger.info("Merging results...")
-        chunker_index = QueryResult._merge_chunker_indices(results)
-
-        logger.info("Chunker index creation completed")
-        return chunker_index
-
-    @staticmethod
-    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> tuple[dict, int]:
-        """
-        Processes a single batch of query results to build a partial ChunkerIndex.
-
-        Each batch represents a subset of the query results. This method iterates over each row in the batch,
-        extracts intervals and associated properties, and organizes them into a local ChunkerIndex that maps
-        mixture keys (combinations of property values) to data intervals.
-
-        Args:
-            batch (pa.RecordBatch): A PyArrow RecordBatch containing a portion of the query results.
-            property_columns (set): A set of column names considered as properties for mixture keys.
-
-        Returns:
-            tuple: A tuple containing:
-                - local_chunker_index (ChunkerIndex): The partial ChunkerIndex built from this batch.
-                - num_rows (int): The number of rows processed in the batch.
-        """
-        batch_dict = batch.to_pydict()
-        num_rows = len(batch_dict["dataset_id"])
-        local_chunker_index = create_chunker_index()
-
-        for i in range(num_rows):
-            dataset_id = batch_dict["dataset_id"][i]
-            file_id = batch_dict["file_id"][i]
-            interval_start = batch_dict["interval_start"][i]
-            interval_end = batch_dict["interval_end"][i]
-            interval = [interval_start, interval_end]
-            # Construct the MixtureKey based on the properties in the current row
-            key = MixtureKey(
-                {
-                    k: batch_dict[k][i] if isinstance(batch_dict[k][i], list) else [batch_dict[k][i]]
-                    for k in property_columns
-                    if batch_dict[k][i] is not None
-                    and not (isinstance(batch_dict[k][i], list) and len(batch_dict[k][i]) == 0)
-                }
-            )
-            local_chunker_index[key][dataset_id][file_id].append(interval)
-
-        return local_chunker_index, num_rows
-
-    @staticmethod
-    def _merge_chunker_indices(indices: list[ChunkerIndex]) -> ChunkerIndex:
-        """
-        Merges a list of partial ChunkerIndices into a single ChunkerIndex.
-
-        This method combines the partial ChunkerIndices produced from processing different batches
-        (potentially in parallel) into a comprehensive ChunkerIndex that maps mixture keys to all
-        associated intervals across the entire dataset.
-
-        Args:
-            indices (list[ChunkerIndex]): A list of partial ChunkerIndices to merge.
-
-        Returns:
-            ChunkerIndex: A merged ChunkerIndex containing entries from all partial indices.
-        """
-
-        merged_index = create_chunker_index()
-        for index in tqdm(indices, desc="Merging partial results"):
-            for mixture_key, datasets in index.items():
-                for dataset_id, files in datasets.items():
-                    for file_id, intervals in files.items():
-                        merged_index[mixture_key][dataset_id][file_id] = (
-                            intervals
-                            if file_id not in merged_index[mixture_key][dataset_id]
-                            else merge_sorted_lists(merged_index[mixture_key][dataset_id][file_id], intervals)
-                        )
-        return merged_index
 
     @staticmethod
     def _generate_per_mixture_component_chunks(
@@ -377,7 +255,6 @@ class QueryResult:
                     while remaining_sizes[mixture_key] > 0:
                         progress_made = False
                         for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
-                            logger.info(f"Checking key {component_key}")
                             if mixture_key == component_key:
                                 try:
                                     component_chunk: ChunkerIndexDatasetEntries = iterator.send(
