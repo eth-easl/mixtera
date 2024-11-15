@@ -62,7 +62,7 @@ message(STATUS "Searching for Python.")
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 message(STATUS "Searching for Arrow.")
 find_package(Arrow REQUIRED)
-message(STATUS "Gettng arrow include path.")
+message(STATUS "Gettng arrow include path using python: ${Python3_EXECUTABLE}")
 
 execute_process(
     COMMAND "${Python3_EXECUTABLE}" -c "import pyarrow, sys; sys.stdout.write(pyarrow.get_include())"
