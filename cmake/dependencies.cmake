@@ -56,6 +56,11 @@ FetchContent_Declare(
   )
 FetchContent_MakeAvailable(absl)
 
+# Required for GCC
+target_compile_options(absl_flat_hash_map INTERFACE -Wno-pedantic)
+target_compile_options(absl_base INTERFACE -Wno-pedantic)
+
+
 ################### Arrow ####################
 
 message(STATUS "Searching for Python.")
