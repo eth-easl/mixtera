@@ -336,8 +336,6 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
                          interval_start, i, file_id, dataset_id));
       }
 
-      spdlog::info(fmt::format("key {} dataset {} file {} interval start {} interval end {}", key, dataset_id, file_id, interval_start, interval_end));
-
       Interval interval = {interval_start, interval_end};
 
       // Store intervals in the local chunker index

@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import multiprocessing as mp
 import os
 import pickle
@@ -148,7 +147,7 @@ def hash_dict(d: dict[str, list[str]]) -> int:
     return hash_result
 
 
-def seed_everything_from_list(seed_list: List[Any]) -> None:
+def seed_everything_from_list(seed_list: list[Any]) -> None:
     """
     Generate a seed from a list of integers.
 

@@ -49,10 +49,7 @@ class QueryResult:
         self._mixture = mixture
         logger.debug("Instantiating QueryResult..")
         logger.debug("Creating chunker index.")
-        # logger.debug(results)
-        import polars as pl
 
-        # raise ValueError(pl.from_arrow(results))
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
         logger.error(self._chunker_index)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
@@ -337,10 +334,15 @@ class QueryResult:
         chunker_index_keys = list(self._chunker_index.keys())
         chunker_index_keys_idx = 0
         empty_key_idx: set[int] = set()
-        # Here we shuffle the chunker index keys, which determines the order of keys considered when two MixtureKeys are equal
+        # Here we shuffle the chunker index keys,
+        # which determines the order of keys considered when two MixtureKeys are equal.
         # Hence, this depends on the hash function.
+        logger.info(f"raw keys: {chunker_index_keys}")
         seed_everything_from_list(chunker_index_keys)
+        chunker_index_keys.sort()  # Otherwise, despite seeding, a shuffle is not reproducible.
+        logger.info(f"sorted keys: {chunker_index_keys}")
         random.shuffle(chunker_index_keys)
+        logger.info(f"shuffled keys: {chunker_index_keys}")
 
         # Initialize component iterators
         component_iterators = {
@@ -368,7 +370,8 @@ class QueryResult:
                     key: size for key, size in mixture.items()
                 }
 
-                for mixture_key in remaining_sizes.keys():
+                # Sort to guarantee same handling for semantically same mixtures
+                for mixture_key in sorted(remaining_sizes.keys()):
                     logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
 
                     while remaining_sizes[mixture_key] > 0:
