@@ -3,12 +3,12 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional, 
 
 import dill
 from loguru import logger
-from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.datacollection.datasets.dataset_type import DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.network_utils import (
     read_bytes_obj,
     read_int,

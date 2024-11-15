@@ -4,7 +4,6 @@ from typing import Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
@@ -13,6 +12,7 @@ from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Mixture, Query, QueryResult, ResultChunk
 from mixtera.core.query.chunk_distributor import ChunkDistributor
 from mixtera.core.query.query_cache import QueryCache
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.utils import wait_for_key_in_dict
 
 

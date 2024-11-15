@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
-from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Mixture, Query, ResultChunk
+from mixtera.network.client.client_feedback import ClientFeedback
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub

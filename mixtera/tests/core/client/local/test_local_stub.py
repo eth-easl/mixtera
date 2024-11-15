@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
@@ -12,6 +11,7 @@ from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import MixtureKey, Query, QueryResult, StaticMixture
 from mixtera.core.query.chunk_distributor import ChunkDistributor
+from mixtera.network.client.client_feedback import ClientFeedback
 
 
 class TestLocalStub(unittest.TestCase):

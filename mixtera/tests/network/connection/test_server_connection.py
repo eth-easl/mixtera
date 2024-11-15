@@ -5,10 +5,10 @@ from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import dill
-from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.connection.server_connection import ServerConnection
 from mixtera.network.server_task import ServerTask
 

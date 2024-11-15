@@ -3,13 +3,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
-from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
 from mixtera.core.query.mixture import ArbitraryMixture
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.connection import ServerConnection
 
 
