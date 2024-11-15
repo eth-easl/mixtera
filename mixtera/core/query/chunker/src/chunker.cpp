@@ -106,15 +106,6 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
       FAIL("One or more required columns are missing in batch.");
     }
 
-    // Cast required arrays
-    // TODO(before merging): The integer typing here currently is a bit inconsistent. We should introduce some
-    // checks whether arrow returned 32 bit or 64 bit at runtime, and template all functions to support both,
-    // and then do a dispatch to the correct function during runtime.
-    auto dataset_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(dataset_id_array);
-    auto file_id_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(file_id_array);
-    auto interval_start_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(interval_start_array);
-    auto interval_end_array_int32 = arrow::internal::checked_pointer_cast<arrow::Int32Array>(interval_end_array);
-
     // Prepare property arrays
     std::vector<std::shared_ptr<arrow::Array>> property_arrays;
     for (const std::string& col_name : property_columns) {
@@ -133,11 +124,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
         auto array = property_arrays[j];
         const std::string& col_name = property_columns[j];
 
-        if (!array) {
-          continue;
-        }
-
-        if (array->IsNull(i)) {
+        if (!array || array->IsNull(i)) {
           continue;
         }
 
@@ -151,19 +138,41 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
         auto type_id = array->type_id();
 
         try {
-          if (type_id == arrow::Type::STRING) {
-            const auto& str_array = arrow::internal::checked_pointer_cast<arrow::StringArray>(array);
-            std::string value = str_array->GetString(i);
-            key += value;
-          } else if (type_id == arrow::Type::LIST) {
-            const auto& list_array = arrow::internal::checked_pointer_cast<arrow::ListArray>(array);
-            if (list_array->IsNull(i)) {
-              continue;
+          // Handle STRING and LARGE_STRING types
+          if (type_id == arrow::Type::STRING || type_id == arrow::Type::LARGE_STRING) {
+            std::string value;
+            if (type_id == arrow::Type::STRING) {
+              auto str_array = arrow::internal::checked_pointer_cast<arrow::StringArray>(array);
+              value = str_array->GetString(i);
+            } else {
+              auto str_array = arrow::internal::checked_pointer_cast<arrow::LargeStringArray>(array);
+              value = str_array->GetString(i);
             }
+            key += value;
 
-            const int64_t offset = list_array->value_offset(i);
-            const int64_t length = list_array->value_length(i);
-            const auto& value_array = list_array->values();
+          // Handle LIST and LARGE_LIST types
+          } else if (type_id == arrow::Type::LIST || type_id == arrow::Type::LARGE_LIST) {
+            std::shared_ptr<arrow::Array> value_array;
+            int64_t offset = 0;
+            int64_t length = 0;
+
+            if (type_id == arrow::Type::LIST) {
+              auto list_array = arrow::internal::checked_pointer_cast<arrow::ListArray>(array);
+              if (list_array->IsNull(i)) {
+                continue;
+              }
+              offset = list_array->value_offset(i);
+              length = list_array->value_length(i);
+              value_array = list_array->values();
+            } else {
+              auto list_array = arrow::internal::checked_pointer_cast<arrow::LargeListArray>(array);
+              if (list_array->IsNull(i)) {
+                continue;
+              }
+              offset = list_array->value_offset(i);
+              length = list_array->value_length(i);
+              value_array = list_array->values();
+            }
 
             if (!value_array) {
               FAIL(fmt::format("Value array is null for LIST column '{}'", col_name));
@@ -177,26 +186,36 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
             std::string values_str;
             bool first_value = true;
 
-            if (value_array->type_id() == arrow::Type::STRING) {
-              auto str_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(value_array);
+            const auto value_type_id = value_array->type_id();
+
+            // Handle STRING and LARGE_STRING elements within the list
+            if (value_type_id == arrow::Type::STRING || value_type_id == arrow::Type::LARGE_STRING) {
               for (int64_t k = offset; k < offset + length; ++k) {
-                if (str_values->IsNull(k)) {
+                if (value_array->IsNull(k)) {
                   continue;
                 }
-                std::string val = str_values->GetString(k);
+                std::string val;
+                if (value_type_id == arrow::Type::STRING) {
+                  auto str_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(value_array);
+                  val = str_values->GetString(k);
+                } else {
+                  auto str_values = arrow::internal::checked_pointer_cast<arrow::LargeStringArray>(value_array);
+                  val = str_values->GetString(k);
+                }
                 if (!first_value) {
                   values_str += ",";
                 }
                 first_value = false;
                 values_str += val;
               }
-            } else if (value_array->type_id() == arrow::Type::DICTIONARY) {
-              const auto& dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(value_array);
+
+            // Handle DICTIONARY elements within the list
+            } else if (value_type_id == arrow::Type::DICTIONARY) {
+              auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(value_array);
               const auto& dict = dict_array->dictionary();
-              const auto& dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
               const auto& indices = dict_array->indices();
 
-              if (!dict_values || !indices) {
+              if (!dict || !indices) {
                 FAIL(fmt::format("Dictionary values or indices are null in LIST of DICTIONARY for column '{}'",
                                  col_name));
               }
@@ -212,18 +231,30 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
                                    col_name));
                 }
 
-                if (index < 0 || index >= dict_values->length()) {
+                if (index < 0 || index >= dict->length()) {
                   FAIL(fmt::format("Index out of bounds in dictionary values for LIST of DICTIONARY at position {} ",
                                    k));
                 }
 
-                const std::string& val = dict_values->GetString(index);
+                std::string val;
+                if (dict->type_id() == arrow::Type::STRING) {
+                  auto dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
+                  val = dict_values->GetString(index);
+                } else if (dict->type_id() == arrow::Type::LARGE_STRING) {
+                  auto dict_values = arrow::internal::checked_pointer_cast<arrow::LargeStringArray>(dict);
+                  val = dict_values->GetString(index);
+                } else {
+                  FAIL(fmt::format("Unsupported dictionary value type in LIST of DICTIONARY for column '{}'. Type: {}", col_name,
+                                   dict->type()->ToString()));
+                }
+
                 if (!first_value) {
                   values_str += ",";
                 }
                 first_value = false;
                 values_str += val;
               }
+
             } else {
               FAIL(fmt::format("Unsupported list element type in column '{}'. Type: {}", col_name,
                                value_array->type()->ToString()));
@@ -231,19 +262,18 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
 
             key += values_str;
 
+          // Handle DICTIONARY type
           } else if (type_id == arrow::Type::DICTIONARY) {
-            // Handle DICTIONARY type
-            const auto& dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(array);
+            auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(array);
 
             if (dict_array->IsNull(i)) {
               continue;
             }
 
             const auto& dict = dict_array->dictionary();
-            const auto& dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
             const auto& indices = dict_array->indices();
 
-            if (!dict_values || !indices) {
+            if (!dict || !indices) {
               FAIL(fmt::format("Dictionary values or indices are null in DICTIONARY column '{}'", col_name));
             }
 
@@ -252,11 +282,22 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
               FAIL(fmt::format("Failed to get index value at position {}  in DICTIONARY column '{}'", i, col_name));
             }
 
-            if (index < 0 || index >= dict_values->length()) {
+            if (index < 0 || index >= dict->length()) {
               FAIL(fmt::format("Index out of bounds in dictionary values for DICTIONARY at position {}", i));
             }
 
-            const std::string& value = dict_values->GetString(index);
+            std::string value;
+            if (dict->type_id() == arrow::Type::STRING) {
+              auto dict_values = arrow::internal::checked_pointer_cast<arrow::StringArray>(dict);
+              value = dict_values->GetString(index);
+            } else if (dict->type_id() == arrow::Type::LARGE_STRING) {
+              auto dict_values = arrow::internal::checked_pointer_cast<arrow::LargeStringArray>(dict);
+              value = dict_values->GetString(index);
+            } else {
+              FAIL(fmt::format("Unsupported dictionary value type in DICTIONARY column '{}'. Type: {}", col_name,
+                               dict->type()->ToString()));
+            }
+
             key += value;
 
           } else {
@@ -269,20 +310,37 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
         }
       }
 
-      int64_t dataset_id = dataset_id_array_int32->Value(i);
-      int64_t file_id = file_id_array_int32->Value(i);
-      int64_t interval_start = interval_start_array_int32->Value(i);
-      int64_t interval_end = interval_end_array_int32->Value(i);
+      // Retrieve interval data and store it
+      int64_t dataset_id = 0;
+      if (!GetIndexValue(dataset_id_array, i, dataset_id)) {
+        FAIL(fmt::format("Failed to get dataset_id at row {}", i));
+      }
+
+      int64_t file_id = 0;
+      if (!GetIndexValue(file_id_array, i, file_id)) {
+        FAIL(fmt::format("Failed to get file_id at row {}", i));
+      }
+
+      int64_t interval_start = 0;
+      if (!GetIndexValue(interval_start_array, i, interval_start)) {
+        FAIL(fmt::format("Failed to get interval_start at row {}", i));
+      }
+
+      int64_t interval_end = 0;
+      if (!GetIndexValue(interval_end_array, i, interval_end)) {
+        FAIL(fmt::format("Failed to get interval_end at row {}", i));
+      }
 
       if (interval_end < interval_start) {
         FAIL(fmt::format("interval_end = {} < interval_start = {} at row {} (file {}, dataset {})", interval_end,
                          interval_start, i, file_id, dataset_id));
       }
 
+      spdlog::info(fmt::format("key {} dataset {} file {} interval start {} interval end {}", key, dataset_id, file_id, interval_start, interval_end));
+
       Interval interval = {interval_start, interval_end};
 
       // Store intervals in the local chunker index
-      // No need to sort intervals within threads since data is already sorted (as threads process consecutive batches)
       local_chunker_index[key][dataset_id][file_id].push_back(interval);
     }
 

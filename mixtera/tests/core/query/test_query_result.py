@@ -371,11 +371,10 @@ class TestQueryResult(unittest.TestCase):
 
         query_result = QueryResult(self.client._mdc, self.create_simple_df(), ArbitraryMixture(1))
         chunker_index = query_result._chunker_index
-
         expected_chunker_index = {
-            MixtureKey({"language": ["french"]}): {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
-            MixtureKey({"language": ["english", "french"]}): {0: {0: [[50, 100]]}},
-            MixtureKey({"language": ["english"]}): {0: {0: [[100, 150]]}},
+            MixtureKey({"language": ["english"]}): {0: {0: [(100, 150)]}},
+            MixtureKey({"language": ["english", "french"]}): {0: {0: [(50, 100)]}},
+            MixtureKey({"language": ["french"]}): {0: {0: [(0, 50), (150, 200)], 1: [(0, 100)]}},
         }
 
         self.assertEqual(chunker_index, expected_chunker_index)
@@ -470,9 +469,9 @@ class TestQueryResult(unittest.TestCase):
         ]
 
         reference_chunker_index = {
-            MixtureKey({"language": ["french"]}): {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
-            MixtureKey({"language": ["english", "french"]}): {0: {0: [[50, 100]]}},
-            MixtureKey({"language": ["english"]}): {0: {0: [[100, 150]]}},
+            MixtureKey({"language": ["french"]}): {0: {0: [(0, 50), (150, 200)], 1: [(0, 100)]}},
+            MixtureKey({"language": ["english", "french"]}): {0: {0: [(50, 100)]}},
+            MixtureKey({"language": ["english"]}): {0: {0: [(100, 150)]}},
         }
 
         mixture_concentration = {
@@ -510,61 +509,61 @@ class TestQueryResult(unittest.TestCase):
 
         reference_chunks = [
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(0, 20)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(20, 25)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(100, 105)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(105, 110)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(0, 20)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(25, 45)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(45, 50)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(105, 110)]}},
-            },
-            {
-                MixtureKey({"language": ["french"]}): {0: {0: [(150, 170)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(170, 175)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(110, 115)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(115, 120)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(20, 40)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(175, 195)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(195, 200)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(115, 120)]}},
-            },
-            {
-                MixtureKey({"language": ["french"]}): {0: {1: [(0, 20)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {1: [(20, 25)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(120, 125)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(125, 130)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(40, 50), (150, 160)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(25, 45)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {1: [(45, 50)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(125, 130)]}},
-            },
-            {
-                MixtureKey({"language": ["french"]}): {0: {1: [(50, 70)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {1: [(70, 75)]}},
                 MixtureKey({"language": ["english"]}): {0: {0: [(130, 135)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(135, 140)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(160, 180)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {1: [(75, 95)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {1: [(95, 100)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(135, 140)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(140, 145)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(145, 150)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(180, 200)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(50, 70)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(140, 145)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(145, 150)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(50, 55)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(0, 5)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(5, 25)]}},
             },
             {
-                MixtureKey({"language": ["french"]}): {0: {0: [(70, 90)]}},
-                MixtureKey({"language": ["english", "french"]}): {0: {0: [(90, 95)]}},
-                MixtureKey({"language": ["english"]}): {0: {0: [(95, 100)]}},
+                MixtureKey({"language": ["english"]}): {0: {0: [(55, 60)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(25, 30)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(30, 50)]}},
+            },
+            {
+                MixtureKey({"language": ["english"]}): {0: {0: [(60, 65)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(50, 55)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(55, 75)]}},
+            },
+            {
+                MixtureKey({"language": ["english"]}): {0: {0: [(65, 70)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {1: [(75, 80)]}},
+                MixtureKey({"language": ["french"]}): {0: {1: [(80, 100)]}},
+            },
+            {
+                MixtureKey({"language": ["english"]}): {0: {0: [(70, 75)]}},
+                MixtureKey({"language": ["english", "french"]}): {0: {0: [(75, 80)]}},
+                MixtureKey({"language": ["french"]}): {0: {0: [(80, 100)]}},
             },
         ]
 
         reference_chunker_index = {
-            MixtureKey({"language": ["french"]}): {0: {0: [[0, 50], [150, 200]], 1: [[0, 100]]}},
-            MixtureKey({"language": ["english"]}): {0: {0: [[100, 150]]}},
-            MixtureKey({"language": ["english", "french"]}): {0: {0: [[50, 100]]}},
+            MixtureKey({"language": ["english"]}): {0: {0: [(100, 150)]}},
+            MixtureKey({"language": ["english", "french"]}): {0: {0: [(50, 100)]}},
+            MixtureKey({"language": ["french"]}): {0: {0: [(0, 50), (150, 200)], 1: [(0, 100)]}},
         }
 
         mixture = InferringMixture(30)
@@ -1104,9 +1103,12 @@ class TestQueryResult(unittest.TestCase):
                         count += base_range[1] - base_range[0]
             return count
 
-        for i, chunk in enumerate(chunks):
-            self.assertDictEqual(reference_chunks[i], chunk._result_index)
+        from loguru import logger
 
+        for i, chunk in enumerate(chunks):
+            # self.assertDictEqual(reference_chunks[i], chunk._result_index)
+            logger.error(chunk._result_index)
+        raise ValueError()
         expected_chunk_count = 175
         expected_error_count = 11
 
@@ -1143,8 +1145,8 @@ class TestQueryResult(unittest.TestCase):
         ]
 
         reference_chunker_index = {
-            MixtureKey({"language": ["english", "french"], "another_property": ["MIT"]}): {0: {0: [[0, 5]]}},
-            MixtureKey({"language": ["english", "german"], "another_property": ["CC"]}): {0: {0: [[5, 10]]}},
+            MixtureKey({"language": ["english", "french"], "another_property": ["MIT"]}): {0: {0: [(0, 5)]}},
+            MixtureKey({"language": ["english", "german"], "another_property": ["CC"]}): {0: {0: [(5, 10)]}},
         }
 
         mixture_concentration = {

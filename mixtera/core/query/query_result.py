@@ -6,9 +6,6 @@ from collections import defaultdict
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
-import numpy as np
-import multiprocessing.shared_memory
-
 
 import dill
 import pyarrow as pa
@@ -17,6 +14,7 @@ from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
+from mixtera.core.query.chunker import create_chunker_index as cpp_create
 from mixtera.core.query.mixture import Mixture, MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import (
@@ -51,10 +49,12 @@ class QueryResult:
         self._mixture = mixture
         logger.debug("Instantiating QueryResult..")
         logger.debug("Creating chunker index.")
-        #logger.debug(results)
-        #import polars as pl
-        #logger.debug(pl.from_arrow(results))
+        # logger.debug(results)
+        import polars as pl
+
+        # raise ValueError(pl.from_arrow(results))
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
+        logger.error(self._chunker_index)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
         self._mixture.inform(self._chunker_index)
 
@@ -87,136 +87,81 @@ class QueryResult:
             "file_path": {fid: mdc._get_file_path_by_id(fid) for fid in file_ids},
             "total_length": total_length,
         }
-    
+
     @staticmethod
-    def _worker_process_func(input_queue, output_queue, property_columns, worker_id):
+    def _create_chunker_index(table: pa.Table) -> ChunkerIndex:
         """
-        Worker function for processing batches from the input queue and putting results into the output queue.
+        Converts a PyArrow Table containing query results into a ChunkerIndex data structure.
+
+        The ChunkerIndex is a nested dictionary structure that organizes data intervals based on their properties,
+        enabling efficient chunking and data retrieval according to specified mixture criteria.
+
+        This method processes the input table in parallel by splitting it into batches.
+        Each batch is processed to build a partial ChunkerIndex,
+        and these partial indices are then merged into a single ChunkerIndex.
 
         Args:
-            input_queue (multiprocessing.Queue): Queue from which to get batches.
-            output_queue (multiprocessing.Queue): Queue to put processed results.
-            property_columns (set): Set of property column names used in processing.
+            table (pa.Table): A PyArrow Table resulting from the query, containing intervals and associated properties.
+
+        Returns:
+            ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
         """
-        logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Started worker!")
-        import time
-
-        num_batches = 0
-
-        while True:
-            num_batches += 1
-            start_get = time.time()
-            batch = input_queue.get()
-            if batch is None:
-                break            
-            start = time.time()
-            logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Obtained batch {num_batches} from queue in {start - start_get} seconds.")
-            entries, _ = QueryResult._process_batch(batch, property_columns)
-            end = time.time()
-            logger.debug(f"Process [{os.getpid()}][Worker {worker_id}] Processed batch in {end - start} seconds.")
-            # Process entries and prepare shared memory segments per batch
-            if entries:
-                # Extract data from entries
-                mixture_keys = []
-                dataset_ids = []
-                file_ids = []
-                interval_starts = []
-                interval_ends = []
-
-                for key, dataset_id, file_id, interval in entries:
-                    mixture_keys.append(key)  # Will serialize later
-                    dataset_ids.append(dataset_id)
-                    file_ids.append(file_id)
-                    interval_starts.append(interval[0])
-                    interval_ends.append(interval[1])
-
-                # Convert lists to numpy arrays
-                num_entries = len(entries)
-                dataset_ids_np = np.array(dataset_ids, dtype=np.int64)
-                file_ids_np = np.array(file_ids, dtype=np.int64)
-                interval_starts_np = np.array(interval_starts, dtype=np.int64)
-                interval_ends_np = np.array(interval_ends, dtype=np.int64)
-
-                # Serialize mixture keys
-                keys_serialized = [pickle.dumps(key) for key in mixture_keys]
-                # Calculate total size required for keys
-                key_sizes = [len(k) for k in keys_serialized]
-                key_offsets = np.cumsum([0] + key_sizes[:-1])
-                total_key_size = sum(key_sizes)
-
-                key_offsets_np = np.array(key_offsets, dtype=np.int64)
-                key_sizes_np = np.array(key_sizes, dtype=np.int64)
-
-                # Create shared memory segments
-                shm_dataset_ids = multiprocessing.shared_memory.SharedMemory(create=True, size=dataset_ids_np.nbytes)
-                shm_file_ids = multiprocessing.shared_memory.SharedMemory(create=True, size=file_ids_np.nbytes)
-                shm_interval_starts = multiprocessing.shared_memory.SharedMemory(create=True, size=interval_starts_np.nbytes)
-                shm_interval_ends = multiprocessing.shared_memory.SharedMemory(create=True, size=interval_ends_np.nbytes)
-                shm_key_offsets = multiprocessing.shared_memory.SharedMemory(create=True, size=key_offsets_np.nbytes)
-                shm_key_sizes = multiprocessing.shared_memory.SharedMemory(create=True, size=key_sizes_np.nbytes)
-                shm_keys = multiprocessing.shared_memory.SharedMemory(create=True, size=total_key_size)
-
-                # Copy data to shared memory
-                np_dataset_ids_shm = np.ndarray(dataset_ids_np.shape, dtype=dataset_ids_np.dtype, buffer=shm_dataset_ids.buf)
-                np_dataset_ids_shm[:] = dataset_ids_np[:]
-
-                np_file_ids_shm = np.ndarray(file_ids_np.shape, dtype=file_ids_np.dtype, buffer=shm_file_ids.buf)
-                np_file_ids_shm[:] = file_ids_np[:]
-
-                np_interval_starts_shm = np.ndarray(interval_starts_np.shape, dtype=interval_starts_np.dtype, buffer=shm_interval_starts.buf)
-                np_interval_starts_shm[:] = interval_starts_np[:]
-
-                np_interval_ends_shm = np.ndarray(interval_ends_np.shape, dtype=interval_ends_np.dtype, buffer=shm_interval_ends.buf)
-                np_interval_ends_shm[:] = interval_ends_np[:]
-
-                np_key_offsets_shm = np.ndarray(key_offsets_np.shape, dtype=key_offsets_np.dtype, buffer=shm_key_offsets.buf)
-                np_key_offsets_shm[:] = key_offsets_np[:]
-
-                np_key_sizes_shm = np.ndarray(key_sizes_np.shape, dtype=key_sizes_np.dtype, buffer=shm_key_sizes.buf)
-                np_key_sizes_shm[:] = key_sizes_np[:]
-
-                # Copy serialized keys into shared memory buffer
-                keys_buffer = shm_keys.buf
-                for offset, key_bytes in zip(key_offsets, keys_serialized):
-                    keys_buffer[offset:offset+len(key_bytes)] = key_bytes
-
-                # Package shared memory info to send back to main process
-                shared_memory_info = {
-                    'num_entries': num_entries,
-                    'shm_names': {
-                        'dataset_ids': shm_dataset_ids.name,
-                        'file_ids': shm_file_ids.name,
-                        'interval_starts': shm_interval_starts.name,
-                        'interval_ends': shm_interval_ends.name,
-                        'key_offsets': shm_key_offsets.name,
-                        'key_sizes': shm_key_sizes.name,
-                        'keys': shm_keys.name,
-                    },
-                    'entry_count': num_entries
-                }
-
-                # Put shared memory info into output queue for main process
-                output_queue.put(shared_memory_info)
-
-                # Close shared memory in worker (do not unlink yet)
-                shm_dataset_ids.close()
-                shm_file_ids.close()
-                shm_interval_starts.close()
-                shm_interval_ends.close()
-                shm_key_offsets.close()
-                shm_key_sizes.close()
-                shm_keys.close()
-            else:
-                # No data processed, inform main process
-                output_queue.put({'entry_count': 0})
-
-            end_put = time.time()
-            logger.debug(f"Process [{os.getpid()}]Worker {worker_id}: Put result into queue in {end_put - end} seconds.")
-
-        logger.debug(f"Process [{os.getpid()}] Exiting worker {worker_id}!")
+        logger.info("Converting to chunker index structure...")
+        num_cores = os.cpu_count() or 1
+        num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
+        in_test = os.environ.get("PYTEST_CURRENT_TEST")
+        return cpp_create(table, num_workers if not in_test else 1)
 
     @staticmethod
-    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> int:
+    def _create_chunker_index_legacy(table: pa.Table) -> ChunkerIndex:
+        """
+        Converts a PyArrow Table containing query results into a ChunkerIndex data structure.
+
+        The ChunkerIndex is a nested dictionary structure that organizes data intervals based on their properties,
+        enabling efficient chunking and data retrieval according to specified mixture criteria.
+
+        This method processes the input table in parallel by splitting it into batches.
+        Each batch is processed to build a partial ChunkerIndex,
+        and these partial indices are then merged into a single ChunkerIndex.
+
+        Args:
+            table (pa.Table): A PyArrow Table resulting from the query, containing intervals and associated properties.
+
+        Returns:
+            ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
+        """
+        logger.info("Converting to chunker index structure...")
+
+        # Identify property columns that define mixture keys
+        exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"}
+        property_columns = {col for col in table.column_names if col not in exclude_keys}
+
+        total_rows = table.num_rows
+        batches = table.to_batches()  # Split the table into record batches for parallel processing
+        # Determine the number of worker processes to use
+        num_cores = os.cpu_count() or 1
+        num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
+        # Use a dummy pool for testing, or a multiprocessing pool otherwise
+        in_test = os.environ.get("PYTEST_CURRENT_TEST")
+        pool_c = DummyPool if in_test else mp.Pool
+        core_string = "" if in_test else f" (using {num_workers} cores)"
+
+        with pool_c(num_workers) as pool:
+            process_func = partial(QueryResult._process_batch, property_columns=property_columns)
+            with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
+                results = []
+                for result, handled_rows in pool.imap_unordered(process_func, batches):
+                    results.append(result)
+                    pbar.update(handled_rows)
+
+        logger.info("Merging results...")
+        chunker_index = QueryResult._merge_chunker_indices(results)
+
+        logger.info("Chunker index creation completed")
+        return chunker_index
+
+    @staticmethod
+    def _process_batch(batch: pa.RecordBatch, property_columns: set) -> tuple[dict, int]:
         """
         Processes a single batch of query results to build a partial ChunkerIndex.
 
@@ -235,8 +180,7 @@ class QueryResult:
         """
         batch_dict = batch.to_pydict()
         num_rows = len(batch_dict["dataset_id"])
-        chunker_index = create_chunker_index()
-        entries = []
+        local_chunker_index = create_chunker_index()
 
         for i in range(num_rows):
             dataset_id = batch_dict["dataset_id"][i]
@@ -253,87 +197,9 @@ class QueryResult:
                     and not (isinstance(batch_dict[k][i], list) and len(batch_dict[k][i]) == 0)
                 }
             )
-            chunker_index[key][dataset_id][file_id].append(interval)
-            entries.append((key, dataset_id, file_id, interval))
+            local_chunker_index[key][dataset_id][file_id].append(interval)
 
-        return entries, num_rows
-    
-    @staticmethod
-    def _merge_entries_into_chunker_index(entries_list: list[dict]):
-        """
-        Merges a list of entries into the chunker_index.
-
-        Args:
-            entries_list (List[dict]): List of entries dictionaries from shared memory.
-            chunker_index: The ChunkerIndex to merge entries into.
-        """
-        chunker_index = create_chunker_index()
-        import time
-        for info in entries_list:
-            start = time.time()
-            num_entries = info['num_entries']
-            shm_names = info['shm_names']
-
-            # Access shared memory
-            shm_dataset_ids = multiprocessing.shared_memory.SharedMemory(name=shm_names['dataset_ids'])
-            dataset_ids = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_dataset_ids.buf)
-
-            shm_file_ids = multiprocessing.shared_memory.SharedMemory(name=shm_names['file_ids'])
-            file_ids = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_file_ids.buf)
-
-            shm_interval_starts = multiprocessing.shared_memory.SharedMemory(name=shm_names['interval_starts'])
-            interval_starts = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_interval_starts.buf)
-
-            shm_interval_ends = multiprocessing.shared_memory.SharedMemory(name=shm_names['interval_ends'])
-            interval_ends = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_interval_ends.buf)
-
-            shm_key_offsets = multiprocessing.shared_memory.SharedMemory(name=shm_names['key_offsets'])
-            key_offsets = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_key_offsets.buf)
-
-            shm_key_sizes = multiprocessing.shared_memory.SharedMemory(name=shm_names['key_sizes'])
-            key_sizes = np.ndarray((num_entries,), dtype=np.int64, buffer=shm_key_sizes.buf)
-
-            shm_keys = multiprocessing.shared_memory.SharedMemory(name=shm_names['keys'])
-            keys_buffer = shm_keys.buf
-
-            end1 = time.time()
-            logger.debug(f"Instantiated SHM objects in {end1 - start} seconds.")
-
-            # Reconstruct entries and build ChunkerIndex
-            for i in range(num_entries):
-                dataset_id = int(dataset_ids[i])
-                file_id = int(file_ids[i])
-                interval = [int(interval_starts[i]), int(interval_ends[i])]
-
-                offset = key_offsets[i]
-                size = key_sizes[i]
-                key = pickle.loads(keys_buffer[offset:offset+size])
-                chunker_index[key][dataset_id][file_id].append(interval) 
-
-            end2 = time.time()
-            logger.debug(f"Constructing the chunker index object took {end2-end1} seconds.")
-            del dataset_ids, file_ids, interval_starts, interval_ends, key_offsets, key_sizes, keys_buffer, key_bytes
-
-            # Clean up shared memory
-            shm_dataset_ids.close()
-            shm_dataset_ids.unlink()
-            shm_file_ids.close()
-            shm_file_ids.unlink()
-            shm_interval_starts.close()
-            shm_interval_starts.unlink()
-            shm_interval_ends.close()
-            shm_interval_ends.unlink()
-            shm_key_offsets.close()
-            shm_key_offsets.unlink()
-            shm_key_sizes.close()
-            shm_key_sizes.unlink()
-            shm_keys.close()
-            shm_keys.unlink()
-            end3 = time.time()
-            logger.debug(f"Cleanup took {end3-end2} seconds.")
-        
-        return chunker_index
-
+        return local_chunker_index, num_rows
 
     @staticmethod
     def _merge_chunker_indices(indices: list[ChunkerIndex]) -> ChunkerIndex:
@@ -362,97 +228,6 @@ class QueryResult:
                             else merge_sorted_lists(merged_index[mixture_key][dataset_id][file_id], intervals)
                         )
         return merged_index
-
-    @staticmethod
-    def _create_chunker_index(table: pa.Table) -> ChunkerIndex:
-        """
-        Converts a PyArrow Table containing query results into a ChunkerIndex data structure.
-
-        The ChunkerIndex is a nested dictionary structure that organizes data intervals based on their properties,
-        enabling efficient chunking and data retrieval according to specified mixture criteria.
-
-        This method processes the input table in parallel by splitting it into batches.
-        Each batch is processed to build a partial ChunkerIndex,
-        and these partial indices are then merged into a single ChunkerIndex.
-
-        Args:
-            table (pa.Table): A PyArrow Table resulting from the query, containing intervals and associated properties.
-
-        Returns:
-            ChunkerIndex: A nested dictionary mapping mixture keys to dataset IDs, file IDs, and intervals.
-        """
-        logger.info("Converting to chunker index structure...")
-        num_cores = os.cpu_count() or 1
-        num_workers = max(num_cores - 4, 1)  # TODO(#124): Make this configurable.
-
-        from mixtera.core.query.chunker import create_chunker_index as exttest
-        result = exttest(table, num_workers)
-
-        return result
-
-        # Identify property columns that define mixture keys
-        exclude_keys = {"dataset_id", "file_id", "group_id", "interval_start", "interval_end"}
-        property_columns = {col for col in table.column_names if col not in exclude_keys}
-
-        total_rows = table.num_rows
-        batches = table.to_batches()  # Split the table into record batches for parallel processing
-        # Determine the number of worker processes to use
-        # Use a dummy pool for testing, or a multiprocessing pool otherwise
-        in_test = os.environ.get("PYTEST_CURRENT_TEST")
-        core_string = "" if in_test else f" (using {num_workers} cores)"
-
-        # Create queues
-        input_queue = mp.Queue()
-        output_queue = mp.Queue()
-        import time
-        istart = time.time()
-        logger.debug("Begin inserting batches into queue.")
-        num_batches = 0
-        # Put the batches onto the input queue
-        for batch in tqdm(batches, desc="Inserting batches into input queue."):
-            input_queue.put(batch)
-            num_batches += 1
-        logger.debug(f"Inserted {num_batches} batches in {time.time() - istart} seconds.")
-
-        # Put 'None's to signal end of data
-        for _ in range(num_workers):
-            input_queue.put(None)
-
-        logger.debug(f"Starting {num_workers} worker processes.")
-        # Start worker processes
-        workers = []
-        for worker_id in range(num_workers):
-            p = mp.Process(
-                target=QueryResult._worker_process_func,
-                args=(input_queue, output_queue, property_columns, worker_id),
-            )
-            workers.append(p)
-            p.start()
-        logger.debug(f"Started {num_workers} worker processes.")
-        
-        chunker_index = create_chunker_index()
-
-        processed_batches = 0
-        indices = []
-        with tqdm(total=total_rows, desc=f"Building chunker index{core_string}") as pbar:
-            while processed_batches < num_batches:
-                # Get entries from output queue and merge into chunker_index
-                start = time.time()
-                shared_memory_info = output_queue.get()
-                end = time.time()
-                logger.debug(f"got an item from the queue in {end - start} seconds.")
-                if shared_memory_info.get('entry_count', 0) > 0:
-                    indices.append(QueryResult._merge_entries_into_chunker_index([shared_memory_info]))
-                end2 = time.time()
-                logger.debug(f"parsed the shared memory in {end2- end} seconds.")
-                handled_rows = shared_memory_info.get('entry_count', 0)
-                pbar.update(handled_rows)
-                processed_batches += 1
-
-        chunker_index = QueryResult._merge_chunker_indices(indices)
-
-        logger.info("Chunker index creation completed")
-        return chunker_index
 
     @staticmethod
     def _generate_per_mixture_component_chunks(
@@ -562,6 +337,8 @@ class QueryResult:
         chunker_index_keys = list(self._chunker_index.keys())
         chunker_index_keys_idx = 0
         empty_key_idx: set[int] = set()
+        # Here we shuffle the chunker index keys, which determines the order of keys considered when two MixtureKeys are equal
+        # Hence, this depends on the hash function.
         seed_everything_from_list(chunker_index_keys)
         random.shuffle(chunker_index_keys)
 
@@ -597,6 +374,7 @@ class QueryResult:
                     while remaining_sizes[mixture_key] > 0:
                         progress_made = False
                         for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
+                            logger.info(f"Checking key {component_key}")
                             if mixture_key == component_key:
                                 try:
                                     component_chunk: ChunkerIndexDatasetEntries = iterator.send(
