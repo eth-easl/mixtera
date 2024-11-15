@@ -501,7 +501,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_read_int.return_value = 1
         feedback = ClientFeedback(100)
 
-        success = await self.server_connection._receive_feedback(job_id, feedback.training_steps)
+        success = await self.server_connection._receive_feedback(job_id, feedback)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
