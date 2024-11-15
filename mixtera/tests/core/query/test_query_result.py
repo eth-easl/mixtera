@@ -304,6 +304,7 @@ class TestQueryResult(unittest.TestCase):
                     ["english", "french"],
                     ["english", "german"],
                 ],
+                "another_property": ["MIT", "CC"],
             }
         ).to_arrow()
 
@@ -1123,8 +1124,8 @@ class TestQueryResult(unittest.TestCase):
         ]
 
         reference_chunker_index = {
-            MixtureKey({"language": ["english", "french"]}): {0: {0: [[0, 5]]}},
-            MixtureKey({"language": ["english", "german"]}): {0: {0: [[5, 10]]}},
+            MixtureKey({"language": ["english", "french"], "another_property": ["MIT"]}): {0: {0: [[0, 5]]}},
+            MixtureKey({"language": ["english", "german"], "another_property": ["CC"]}): {0: {0: [[5, 10]]}},
         }
 
         mixture_concentration = {
