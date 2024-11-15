@@ -150,7 +150,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
             }
             key += value;
 
-          // Handle LIST and LARGE_LIST types
+            // Handle LIST and LARGE_LIST types
           } else if (type_id == arrow::Type::LIST || type_id == arrow::Type::LARGE_LIST) {
             std::shared_ptr<arrow::Array> value_array;
             int64_t offset = 0;
@@ -209,7 +209,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
                 values_str += val;
               }
 
-            // Handle DICTIONARY elements within the list
+              // Handle DICTIONARY elements within the list
             } else if (value_type_id == arrow::Type::DICTIONARY) {
               auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(value_array);
               const auto& dict = dict_array->dictionary();
@@ -244,8 +244,8 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
                   auto dict_values = arrow::internal::checked_pointer_cast<arrow::LargeStringArray>(dict);
                   val = dict_values->GetString(index);
                 } else {
-                  FAIL(fmt::format("Unsupported dictionary value type in LIST of DICTIONARY for column '{}'. Type: {}", col_name,
-                                   dict->type()->ToString()));
+                  FAIL(fmt::format("Unsupported dictionary value type in LIST of DICTIONARY for column '{}'. Type: {}",
+                                   col_name, dict->type()->ToString()));
                 }
 
                 if (!first_value) {
@@ -262,7 +262,7 @@ void process_batch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
 
             key += values_str;
 
-          // Handle DICTIONARY type
+            // Handle DICTIONARY type
           } else if (type_id == arrow::Type::DICTIONARY) {
             auto dict_array = arrow::internal::checked_pointer_cast<arrow::DictionaryArray>(array);
 
@@ -625,6 +625,7 @@ py::object build_py_chunker_index(ChunkerIndexCpp* merged_chunker_index) {
 
 py::object create_chunker_index(py::object py_table, int num_threads) {
   try {
+    spdlog::set_pattern("[%Y-%m-%d:%H:%M:%S] [%s:%#] [%l] [p%P:t%t] %v");
     spdlog::info("Entered C++ extension for building chunker index.");
     if (num_threads < 0) {
       FAIL(fmt::format("num_threads = {} < 0. Need at least 0 (1) threads.", num_threads));

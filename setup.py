@@ -55,9 +55,6 @@ class CMakeExtension(Extension):
 
 
 class CMakeBuild(build_ext):
-    #def copy_extensions_to_source(self) -> None:
-    #    pass
-
     def build_extension(self, ext):
         try:
             subprocess.check_output(['cmake', '--version'])
