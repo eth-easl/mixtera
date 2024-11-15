@@ -11,7 +11,7 @@ from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query, QueryResult, ResultChunk
 from mixtera.core.query.chunk_distributor import ChunkDistributor
-from mixtera.core.query.mixture.mixture import Mixture
+from mixtera.core.query.mixture import Mixture
 from mixtera.core.query.query_cache import QueryCache
 from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.utils import wait_for_key_in_dict

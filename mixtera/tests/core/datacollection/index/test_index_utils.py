@@ -1,8 +1,7 @@
 import unittest
 
 from mixtera.core.datacollection.index import infer_mixture_from_chunkerindex
-from mixtera.core.query.mixture import StaticMixture
-from mixtera.core.query.mixture.mixture_key import MixtureKey
+from mixtera.core.query.mixture import MixtureKey, StaticMixture
 
 
 class TestIndexUtils(unittest.TestCase):

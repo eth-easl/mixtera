@@ -12,7 +12,8 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, MixtureKey, Query, StaticMixture
+from mixtera.core.query import Query
+from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, StaticMixture
 
 TEST_LOCAL_INSTANCE_COUNT = 1000
 TEST_LOCAL_FILE_COUNT = 5

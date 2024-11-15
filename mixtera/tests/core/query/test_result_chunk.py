@@ -4,7 +4,7 @@ from queue import Empty
 from unittest.mock import MagicMock, patch
 
 from mixtera.core.client.server import ServerStub
-from mixtera.core.query.mixture.mixture_key import MixtureKey
+from mixtera.core.query.mixture import MixtureKey
 from mixtera.core.query.result_chunk import END_OF_STREAM_OBJECT, ResultChunk
 
 
