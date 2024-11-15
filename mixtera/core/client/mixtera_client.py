@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Type
 
-from mixtera.core.client.mixtera_client_feedback import ClientFeedback
+from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -376,6 +376,6 @@ class MixteraClient(ABC):
     @abstractmethod
     def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         """
-        This function sends the training feedback to the server for the mixture schedules .
+        This function sends the training feedback to the server, e.g., for the mixture schedule.
         """
         raise NotImplementedError()

@@ -3,8 +3,8 @@ from typing import Any, Callable, Generator, Type
 
 from loguru import logger
 from mixtera.core.client import MixteraClient
+from mixtera.core.client.client_feedback import ClientFeedback
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
-from mixtera.core.client.mixtera_client_feedback import ClientFeedback
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
@@ -73,11 +73,11 @@ class ServerStub(MixteraClient):
         return True
 
     def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
-        if not self.server_connection.receive_feedback(job_id, feedback.training_steps):
+        if not self.server_connection.receive_feedback(job_id, feedback):
             logger.error("Could not send the message to the server!")
             return False
 
-        logger.info("Send the feedback to the server!")
+        logger.info("Sent the feedback to the server!")
         return True
 
     def _stream_result_chunks(
