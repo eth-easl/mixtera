@@ -14,7 +14,7 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.query import Query
-from mixtera.core.query.mixture import Mixture
+from mixtera.core.query.mixture.mixture import Mixture
 from numpy.typing import NDArray
 from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable=import-error,no-name-in-module
 

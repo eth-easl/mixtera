@@ -2,7 +2,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from mixtera.core.datacollection.index import infer_mixture_from_chunkerindex
-from mixtera.core.query.mixture import Mixture, MixtureKey
+from mixtera.core.query.mixture.mixture import Mixture
+from mixtera.core.query.mixture.mixture_key import MixtureKey
 from mixtera.core.query.mixture.static_mixture import StaticMixture
 
 if TYPE_CHECKING:

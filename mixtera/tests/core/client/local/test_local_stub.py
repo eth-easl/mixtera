@@ -11,7 +11,8 @@ from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query, QueryResult
 from mixtera.core.query.chunk_distributor import ChunkDistributor
-from mixtera.core.query.mixture import MixtureKey, StaticMixture
+from mixtera.core.query.mixture import StaticMixture
+from mixtera.core.query.mixture.mixture_key import MixtureKey
 from mixtera.network.client.client_feedback import ClientFeedback
 
 

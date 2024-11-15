@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List
 
-from mixtera.core.query.mixture import Mixture, MixtureKey
+from mixtera.core.query.mixture.mixture import Mixture
+from mixtera.core.query.mixture.mixture_key import MixtureKey
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.index import ChunkerIndex

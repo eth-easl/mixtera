@@ -1,6 +1,7 @@
 import unittest
 
-from mixtera.core.query.mixture import Component, HierarchicalStaticMixture, MixtureKey, MixtureNode
+from mixtera.core.query.mixture import Component, HierarchicalStaticMixture, MixtureNode
+from mixtera.core.query.mixture.mixture_key import MixtureKey
 
 
 class TestMixture(unittest.TestCase):

@@ -6,7 +6,7 @@ from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.query_plan import QueryPlan
 from mixtera.core.query.query_result import QueryResult
 
-from .mixture import Mixture
+from .mixture.mixture import Mixture
 
 
 class Query:

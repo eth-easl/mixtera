@@ -14,7 +14,8 @@ from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
-from mixtera.core.query.mixture import Mixture, MixtureKey
+from mixtera.core.query.mixture.mixture import Mixture
+from mixtera.core.query.mixture.mixture_key import MixtureKey
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import (
     DummyPool,

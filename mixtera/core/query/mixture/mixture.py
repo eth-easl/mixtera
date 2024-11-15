@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from mixtera.core.query.mixture import MixtureKey
+from mixtera.core.query.mixture.mixture_key import MixtureKey
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.index import ChunkerIndex
