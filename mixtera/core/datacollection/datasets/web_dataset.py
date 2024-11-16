@@ -1,9 +1,6 @@
-import tarfile
-from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
-import wids
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset, DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser

@@ -1,7 +1,7 @@
 import gzip
 import io
 from functools import partial
-from typing import Dict, Any
+from typing import Any, Dict
 
 from wids.wids import group_by_key, splitname
 from wids.wids_mmtar import MMIndexedTar
@@ -23,31 +23,31 @@ def decode(sample: Dict[str, Any], decode_image: bool = True):
             extension = extensions[-2]
         if key.startswith("__"):
             continue
-        elif extension in ["txt", "text"]:
+        if extension in ["txt", "text"]:
             value = stream.read()
             sample[key] = value.decode("utf-8")
         elif extension in ["cls", "cls2"]:
             value = stream.read()
             sample[key] = int(value.decode("utf-8"))
         elif extension in ["jpg", "png", "ppm", "pgm", "pbm", "pnm"] and decode_image:
-            import PIL.Image
+            import PIL.Image  # pylint: disable=import-outside-toplevel
 
             sample[key] = PIL.Image.open(stream)
         elif extension == "json":
-            import json
+            import json  # pylint: disable=import-outside-toplevel
 
             value = stream.read()
             sample[key] = json.loads(value)
         elif extension == "npy":
-            import numpy as np
+            import numpy as np  # pylint: disable=import-outside-toplevel
 
             sample[key] = np.load(stream)
         elif extension in ["pt", "pth"]:
-            import torch
+            import torch  # pylint: disable=import-outside-toplevel
 
             sample[key] = torch.load(stream)
         elif extension in ["pickle", "pkl"]:
-            import pickle
+            import pickle  # pylint: disable=import-outside-toplevel
 
             sample[key] = pickle.load(stream)
     return sample
