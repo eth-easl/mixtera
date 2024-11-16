@@ -21,3 +21,4 @@ dependencies:
     - duckdb
     - polars
     - webdataset
+    - pillow
