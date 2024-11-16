@@ -631,5 +631,6 @@ variable-naming-style=snake_case
 # naming style.
 #variable-rgx=
 
+# Resolves import issues that can sometimes be encountered in local runs.
 [MASTER]
 init-hook='import sys; sys.path.append(".")'
