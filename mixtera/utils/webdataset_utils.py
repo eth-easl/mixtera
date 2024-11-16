@@ -1,12 +1,13 @@
 import gzip
 import io
 from functools import partial
-from typing import Any, TypeVar, Iterator
+from typing import Any, Iterator, TypeVar
 
 from wids.wids import group_by_key, splitname
 from wids.wids_mmtar import MMIndexedTar
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 def decode(sample: dict[str, Any], decode_image: bool = True) -> dict[str, Any]:
     sample = dict(sample)
@@ -57,7 +58,7 @@ class IndexedTarSamples:
         decode_images: bool = True,
     ):
         self.path = path
-        self.stream = open(self.path, "rb") # pylint: disable=consider-using-with
+        self.stream = open(self.path, "rb")  # pylint: disable=consider-using-with
         self.reader = MMIndexedTar(self.stream)
 
         self.decoder = partial(decode, decode_image=decode_images)
