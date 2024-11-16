@@ -9,6 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import Query, ResultChunk
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.connection import ServerConnection
 
 
@@ -69,6 +70,14 @@ class ServerStub(MixteraClient):
 
         logger.info(f"Registered query for job {query.job_id} at server!")
 
+        return True
+
+    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
+        if not self.server_connection.receive_feedback(job_id, feedback):
+            logger.error("Could not send the message to the server!")
+            return False
+
+        logger.info("Sent the feedback to the server!")
         return True
 
     def _stream_result_chunks(

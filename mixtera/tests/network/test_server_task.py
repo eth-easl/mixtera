@@ -48,10 +48,14 @@ class TestServerTask(unittest.TestCase):
         self.assertEqual(ServerTask.ADD_PROPERTY, 10)
         self.assertEqual(ServerTask(10), ServerTask.ADD_PROPERTY)
 
+    def test_receive_feedback(self):
+        self.assertEqual(ServerTask.RECEIVE_FEEDBACK, 14)
+        self.assertEqual(ServerTask(14), ServerTask.RECEIVE_FEEDBACK)
+
     def test_unique_values(self):
         values = set(member.value for member in ServerTask)
         self.assertEqual(len(values), len(ServerTask))
 
     def test_invalid_value(self):
         with self.assertRaises(ValueError):
-            ServerTask(14)
+            ServerTask(15)

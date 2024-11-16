@@ -6,3 +6,4 @@ class DatasetType(IntEnum):
     JSONL_DATASET = auto()
     CROISSANT_DATASET = auto()
     WEB_DATASET = auto()
+    PARQUET_DATASET = auto()

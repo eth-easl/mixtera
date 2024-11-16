@@ -32,6 +32,12 @@ class Dataset(ABC):
                 from mixtera.core.datacollection.datasets import WebDataset  # pylint: disable=import-outside-toplevel
 
                 return WebDataset
+            if dataset_type == DatasetType.PARQUET_DATASET:
+                from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
+                    ParquetDataset,
+                )
+
+                return ParquetDataset
             if dataset_type == DatasetType.GENERIC_DATASET:
                 return Dataset
 

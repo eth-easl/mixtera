@@ -81,6 +81,36 @@ class ImagenetWebDatasetMetadataParser(MetadataParser):
         self.add_metadata(sample_id=line_number, class_label=class_label)
 
 
+class FineWebMetadataParser(MetadataParser):
+
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(name="id", dtype="STRING", multiple=False, nullable=False),
+            MetadataProperty(name="dump", dtype="STRING", multiple=False, nullable=False),
+            MetadataProperty(name="url", dtype="STRING", multiple=False, nullable=False),
+            MetadataProperty(name="date", dtype="STRING", multiple=False, nullable=False),
+            MetadataProperty(name="language", dtype="ENUM", enum_options=["en"], multiple=False, nullable=False),
+        ]
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        id_ = payload.get("id", "").strip("<>")
+        language = payload.get("language")
+        url = payload.get("url", "").strip("<>")
+        dump = payload.get("dump")
+        date = payload.get("date")
+
+        metadata = {
+            "id": id_,
+            "dump": dump,
+            "url": url,
+            "date": date,
+            "language": language,
+        }
+
+        self.add_metadata(sample_id=line_number, **metadata)
+
+
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
 
@@ -90,6 +120,7 @@ class MetadataParserFactory:
             "RED_PAJAMA": RedPajamaMetadataParser,
             "SLIM_PAJAMA": SlimPajamaMetadataParser,
             "IMAGENET_WEB_DATASET": ImagenetWebDatasetMetadataParser,
+            "FINEWEB": FineWebMetadataParser,
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:

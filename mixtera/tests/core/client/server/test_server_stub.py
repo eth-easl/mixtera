@@ -9,6 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
 from mixtera.core.query.mixture import ArbitraryMixture
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.connection import ServerConnection
 
 
@@ -201,3 +202,12 @@ class TestServerStub(unittest.TestCase):
         self.server_stub.restore_checkpoint(job_id, chkpnt_id)
 
         mock_restore_checkpoint.assert_called_once_with(job_id, chkpnt_id)
+
+    @patch.object(ServerConnection, "receive_feedback")
+    def test_send_feedback(self, mock_receive_feedback):
+        job_id = "test_job_id"
+        feedback = ClientFeedback(100)
+        result = self.server_stub.send_feedback(job_id, feedback)
+
+        mock_receive_feedback.assert_called_once_with(job_id, feedback)
+        self.assertTrue(result)
