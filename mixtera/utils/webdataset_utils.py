@@ -1,13 +1,14 @@
 import gzip
 import io
 from functools import partial
-from typing import Any, Dict
+from typing import Any, TypeVar, Iterator
 
 from wids.wids import group_by_key, splitname
 from wids.wids_mmtar import MMIndexedTar
 
+T = TypeVar('T')
 
-def decode(sample: Dict[str, Any], decode_image: bool = True):
+def decode(sample: dict[str, Any], decode_image: bool = True) -> dict[str, Any]:
     sample = dict(sample)
     for key, stream in sample.items():
         extensions = key.split(".")
@@ -42,10 +43,6 @@ def decode(sample: Dict[str, Any], decode_image: bool = True):
             import numpy as np  # pylint: disable=import-outside-toplevel
 
             sample[key] = np.load(stream)
-        elif extension in ["pt", "pth"]:
-            import torch  # pylint: disable=import-outside-toplevel
-
-            sample[key] = torch.load(stream)
         elif extension in ["pickle", "pkl"]:
             import pickle  # pylint: disable=import-outside-toplevel
 
@@ -60,7 +57,7 @@ class IndexedTarSamples:
         decode_images: bool = True,
     ):
         self.path = path
-        self.stream = open(self.path, "rb")
+        self.stream = open(self.path, "rb") # pylint: disable=consider-using-with
         self.reader = MMIndexedTar(self.stream)
 
         self.decoder = partial(decode, decode_image=decode_images)
@@ -69,15 +66,15 @@ class IndexedTarSamples:
 
         self.samples = group_by_key(all_files)
 
-    def close(self):
+    def close(self) -> None:
         self.reader.close()
         if not self.stream.closed:
             self.stream.close()
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         indexes = self.samples[idx]
         sample = {}
         key = None
@@ -93,6 +90,6 @@ class IndexedTarSamples:
         sample["__key__"] = key
         return self.decoder(sample)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[dict[str, Any]]:
         for idx in range(len(self)):
             yield self[idx]
