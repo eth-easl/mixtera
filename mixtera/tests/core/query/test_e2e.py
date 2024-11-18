@@ -7,8 +7,8 @@ from pathlib import Path
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, MixtureKey, Query
-from mixtera.core.query.mixture import StaticMixture
+from mixtera.core.query import Query
+from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, StaticMixture
 
 
 def directory_is_empty(directory: str) -> bool:

@@ -9,9 +9,11 @@ from mixtera.core.datacollection import MixteraDataCollection, PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Mixture, Query, QueryResult, ResultChunk
+from mixtera.core.query import Query, QueryResult, ResultChunk
 from mixtera.core.query.chunk_distributor import ChunkDistributor
+from mixtera.core.query.mixture import Mixture
 from mixtera.core.query.query_cache import QueryCache
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.utils import wait_for_key_in_dict
 
 
@@ -32,6 +34,9 @@ class LocalStub(MixteraClient):
         self._training_query_map_lock = mp.Lock()
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
         self._query_cache = QueryCache(self.directory / "querycache", self._mdc)
+
+        self.feedback_queue_map: dict[str, list[ClientFeedback]] = {}
+        self._feedback_queue_map_lock = mp.Lock()
 
     def register_dataset(
         self,
@@ -193,3 +198,22 @@ class LocalStub(MixteraClient):
                 query,
                 mixture if mixture is not None else distri._query_result._mixture,
             )
+
+    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
+        if job_id not in self._training_query_map:
+            logger.warning(f"There is no job with the id: {job_id}!")
+            return False
+
+        with self._feedback_queue_map_lock:
+            if job_id not in self.feedback_queue_map:
+                self.feedback_queue_map[job_id] = [feedback]
+            else:
+                self.feedback_queue_map[job_id].append(feedback)
+            return True
+
+    def process_feedback(self, job_id: str) -> ClientFeedback | None:
+        with self._feedback_queue_map_lock:
+            if job_id not in self.feedback_queue_map or len(self.feedback_queue_map) == 0:
+                return None
+
+            return self.feedback_queue_map[job_id].pop(0)

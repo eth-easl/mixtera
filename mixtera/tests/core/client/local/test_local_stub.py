@@ -9,8 +9,10 @@ from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import MixtureKey, Query, QueryResult, StaticMixture
+from mixtera.core.query import Query, QueryResult
 from mixtera.core.query.chunk_distributor import ChunkDistributor
+from mixtera.core.query.mixture import MixtureKey, StaticMixture
+from mixtera.network.client.client_feedback import ClientFeedback
 
 
 class TestLocalStub(unittest.TestCase):
@@ -241,6 +243,24 @@ class TestLocalStub(unittest.TestCase):
         )
         self.assertIn(self.job_id, self.local_stub._training_query_map)
         self.assertEqual(self.local_stub._training_query_map[self.job_id][0], mock_chunk_distributor)
+
+    def test_send_feedback(self):
+        self.local_stub._training_query_map["feedback_job"] = (None, None, 100)
+        for steps in range(100):
+            feedback = ClientFeedback(steps)
+            result = self.local_stub.send_feedback("feedback_job", feedback)
+            self.assertTrue(result)
+
+    def test_process_feedback(self):
+        self.local_stub._training_query_map["feedback_job"] = (None, None, 100)
+        # First sending feedbacks.
+        for steps in range(100):
+            self.local_stub.send_feedback("feedback_job", ClientFeedback(steps))
+
+        # Then checking if we can process them.
+        for steps in range(100):
+            feedback = self.local_stub.process_feedback("feedback_job")
+            self.assertEqual(feedback.training_steps, steps, "The received feedback is wrong.")
 
 
 if __name__ == "__main__":
