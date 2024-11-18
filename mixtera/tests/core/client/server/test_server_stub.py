@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
-from mixtera.core.client.mixtera_client_feedback import ClientFeedback
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode

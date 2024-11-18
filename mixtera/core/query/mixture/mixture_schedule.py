@@ -30,11 +30,11 @@ class MixtureSchedule(Mixture):
         super().__init__(chunk_size)
         if len(schedule) == 0:
             logger.error("An empty schedule is tried to be set.")
-            return 
+            return
         for entry in reversed(self.schedule):
             if entry.mixture.chunk_size != self.chunk_size:
                 logger.error("The chunk size of the mixtures does not match.")
-                return        
+                return
         self.schedule = sorted(schedule, key=lambda entry: entry.start_step)
         self.current_step = 0
 
