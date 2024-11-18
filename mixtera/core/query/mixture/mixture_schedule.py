@@ -31,7 +31,7 @@ class MixtureSchedule(Mixture):
         if len(schedule) == 0:
             logger.error("An empty schedule is tried to be set.")
             return
-        for entry in reversed(schedule):
+        for entry in schedule:
             if entry.mixture.chunk_size != self.chunk_size:
                 logger.error("The chunk size of the mixtures does not match.")
                 return
