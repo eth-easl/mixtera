@@ -8,6 +8,7 @@ import dill
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.connection.server_connection import ServerConnection
 from mixtera.network.server_task import ServerTask
 
@@ -498,16 +499,16 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_writer = create_mock_writer()
         mock_connect_to_server.return_value = mock_reader, mock_writer
         mock_read_int.return_value = 1
-        training_steps = 100
+        feedback = ClientFeedback(100)
 
-        success = await self.server_connection._receive_feedback(job_id, training_steps)
+        success = await self.server_connection._receive_feedback(job_id, feedback)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
         mock_write_int.assert_has_calls(
             [call(int(ServerTask.RECEIVE_FEEDBACK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
         )
-        mock_write_int.assert_has_calls([call(training_steps, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
+        mock_write_int.assert_has_calls([call(feedback.training_steps, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_write_utf8_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
 
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)

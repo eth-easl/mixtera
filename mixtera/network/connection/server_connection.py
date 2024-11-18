@@ -8,6 +8,7 @@ from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.network_utils import (
     read_bytes_obj,
     read_int,
@@ -660,10 +661,10 @@ class ServerConnection:
         else:
             logger.info("Successfully restored from checkpoint at server.")
 
-    def receive_feedback(self, job_id: str, training_steps: int) -> bool:
-        return run_async_until_complete(self._receive_feedback(job_id, training_steps))
+    def receive_feedback(self, job_id: str, feedback: "ClientFeedback") -> bool:
+        return run_async_until_complete(self._receive_feedback(job_id, feedback))
 
-    async def _receive_feedback(self, job_id: str, training_steps: int) -> bool:
+    async def _receive_feedback(self, job_id: str, feedback: "ClientFeedback") -> bool:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -674,6 +675,6 @@ class ServerConnection:
 
         # Announce the training steps and the job id.
         await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
-        await write_int(training_steps, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(feedback.training_steps, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))

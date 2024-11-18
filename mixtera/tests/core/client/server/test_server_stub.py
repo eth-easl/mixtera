@@ -10,6 +10,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query
 from mixtera.core.query.mixture import ArbitraryMixture
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.connection import ServerConnection
 
 
@@ -209,5 +210,5 @@ class TestServerStub(unittest.TestCase):
         feedback = ClientFeedback(100)
         result = self.server_stub.send_feedback(job_id, feedback)
 
-        mock_receive_feedback.assert_called_once_with(job_id, feedback.training_steps)
+        mock_receive_feedback.assert_called_once_with(job_id, feedback)
         self.assertTrue(result)

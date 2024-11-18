@@ -9,8 +9,8 @@ from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Query
-from mixtera.core.query.mixture import InferringMixture
+from mixtera.core.query import Query
+from mixtera.core.query.mixture import ArbitraryMixture, InferringMixture
 from mixtera.torch import MixteraTorchDataset
 
 TEST_PYTORCH_INSTANCE_COUNT = 1000

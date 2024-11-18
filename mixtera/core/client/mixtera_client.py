@@ -9,7 +9,9 @@ from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
-from mixtera.core.query import Mixture, Query, ResultChunk
+from mixtera.core.query import Query, ResultChunk
+from mixtera.core.query.mixture import Mixture
+from mixtera.network.client.client_feedback import ClientFeedback
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
@@ -376,6 +378,6 @@ class MixteraClient(ABC):
     @abstractmethod
     def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         """
-        This function sends the training feedback to the server for the mixture schedules .
+        This function sends the training feedback to the server, e.g., for the mixture schedule.
         """
         raise NotImplementedError()
