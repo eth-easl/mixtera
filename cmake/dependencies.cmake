@@ -67,7 +67,7 @@ message(STATUS "Searching for Python.")
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 message(STATUS "Searching for Arrow.")
 find_package(Arrow REQUIRED)
-message(STATUS "Gettng arrow include path using python: ${Python3_EXECUTABLE}")
+message(STATUS "Getting arrow include path using python: ${Python3_EXECUTABLE}")
 
 execute_process(
     COMMAND "${Python3_EXECUTABLE}" -c "import pyarrow, sys; sys.stdout.write(pyarrow.get_include())"
@@ -83,7 +83,7 @@ endif()
 message(STATUS "Found Pyarrow include path: ${PYARROW_INCLUDE_DIR}")
 target_compile_options(Arrow::arrow_shared INTERFACE -Wno-shadow -Wno-unused-parameter -Wno-shadow-field -Wno-extra-semi -Wno-potentially-evaluated-expression)
 
-message(STATUS "Gettng pyarrow library dirctory.")
+message(STATUS "Getting pyarrow library dirctory.")
 execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import pyarrow as pa; print(';'.join(pa.get_library_dirs()))"
     OUTPUT_VARIABLE PYARROW_LIBRARY_DIRS

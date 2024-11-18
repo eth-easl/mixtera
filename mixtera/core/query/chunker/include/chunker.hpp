@@ -49,6 +49,7 @@ namespace py = pybind11;
 template <typename T1, typename T2>
 using MapT = absl::flat_hash_map<T1, T2>;
 
+// TODO(#142): We should template this in the integer type.
 using MixtureKeyCpp = std::string;
 using Interval = std::pair<int64_t, int64_t>;
 using FileIntervals = MapT<int64_t, std::vector<Interval>>;
