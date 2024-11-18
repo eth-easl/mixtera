@@ -18,9 +18,8 @@ class TestMixtureSchedule(unittest.TestCase):
 
         # Testing that it gives the corresponding mixture for a training step.
         mixture_schedule.current_step = 0
-        current_mixture = mixture_schedule.current_mixture()
         assert (
-            current_mixture.mixture_in_rows()[MixtureKey({"language": ["JavaScript"]})] == 5
+            mixture_schedule.current_mixture.mixture_in_rows()[MixtureKey({"language": ["JavaScript"]})] == 5
         ), "Wrong mixture is used from the schedule."
 
         mixture_schedule.current_step = 300
