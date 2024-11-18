@@ -39,47 +39,41 @@ class MixtureKey:
 
     #  Mixture keys with multiple values for the same property are "greater" than those with a single value
     #  Where we count the number of values for each property (compare per property)
-    def __lt__(self, other: object) -> bool:
+    def __lt__(self, other: "MixtureKey") -> bool:
         if not isinstance(other, MixtureKey):
             return NotImplemented
 
-        is_less_than, is_greater_than = self._compare_properties(other)
+        # Compare number of properties
+        len_self_properties = len(self.properties)
+        len_other_properties = len(other.properties)
+        if len_self_properties != len_other_properties:
+            return len_self_properties < len_other_properties
 
-        if is_less_than and not is_greater_than:
-            return True
-        if is_greater_than and not is_less_than:
-            return False
+        # Number of properties is equal
+        # Get sorted list of property keys
+        self_keys = sorted(self.properties)
+        other_keys = sorted(other.properties)
 
-        # If equal in all shared keys, compare the total number of properties
-        return len(self.properties) < len(other.properties)
+        # Compare property keys
+        for self_key, other_key in zip(self_keys, other_keys):
+            if self_key != other_key:
+                return self_key < other_key
 
-    def __gt__(self, other: object) -> bool:
-        if not isinstance(other, MixtureKey):
-            return NotImplemented
+            # Property names are the same, compare number of values
+            len_self_values = len(self.properties[self_key])
+            len_other_values = len(other.properties[other_key])
+            if len_self_values != len_other_values:
+                return len_self_values < len_other_values
 
-        is_less_than, is_greater_than = self._compare_properties(other)
+        # Compare property values lexicographically
+        for key in self_keys:
+            self_values = sorted(map(str, self.properties[key]))
+            other_values = sorted(map(str, other.properties[key]))
+            if self_values != other_values:
+                return self_values < other_values
 
-        if is_greater_than and not is_less_than:
-            return True
-        if is_less_than and not is_greater_than:
-            return False
-
-        # If equal in all shared keys, compare the total number of properties
-        return len(self.properties) > len(other.properties)
-
-    def _compare_properties(self, other: "MixtureKey") -> tuple[bool, bool]:
-        is_less_than = False
-        is_greater_than = False
-
-        for k, v in self.properties.items():
-            if k not in other.properties:
-                continue
-            if len(v) < len(other.properties[k]):
-                is_less_than = True
-            elif len(v) > len(other.properties[k]):
-                is_greater_than = True
-
-        return is_less_than, is_greater_than
+        # All properties and values are equal, compare string representations
+        return str(self) < str(other)
 
     def __hash__(self) -> int:
         #  Since we are want to use this class as a key in a dictionary, we need to implement the __hash__ method
