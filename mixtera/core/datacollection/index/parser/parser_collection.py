@@ -62,18 +62,15 @@ class FineWebMetadataParser(MetadataParser):
     @classmethod
     def get_properties(cls) -> list[MetadataProperty]:
         return [
-            MetadataProperty(name="id", dtype="STRING", multiple=False, nullable=False),
             MetadataProperty(name="dump", dtype="STRING", multiple=False, nullable=False),
             MetadataProperty(name="language", dtype="ENUM", enum_options=["en"], multiple=False, nullable=False),
         ]
 
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
-        id_ = payload.get("id", "").strip("<>")
         language = payload.get("language")
         dump = payload.get("dump")
 
         metadata = {
-            "id": id_,
             "dump": dump,
             "language": language,
         }
