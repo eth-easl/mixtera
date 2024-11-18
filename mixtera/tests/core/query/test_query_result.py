@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import polars as pl
 from mixtera.core.client import MixteraClient
-from mixtera.core.query import ArbitraryMixture, Query
-from mixtera.core.query.mixture import InferringMixture, MixtureKey, StaticMixture
+from mixtera.core.query import Query
+from mixtera.core.query.mixture import ArbitraryMixture, InferringMixture, MixtureKey, StaticMixture
 from mixtera.core.query.query_result import QueryResult
 from mixtera.utils.utils import defaultdict_to_dict
 

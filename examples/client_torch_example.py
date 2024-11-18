@@ -23,7 +23,8 @@ from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreami
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty
-from mixtera.core.query import ArbitraryMixture, Mixture, Query
+from mixtera.core.query import Query
+from mixtera.core.query.mixture import ArbitraryMixture, Mixture
 from mixtera.torch import MixteraTorchDataset
 
 
