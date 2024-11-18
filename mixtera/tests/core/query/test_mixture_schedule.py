@@ -1,7 +1,6 @@
 import unittest
 
-from mixtera.core.client.schedule import MixtureSchedule, ScheduleEntry
-from mixtera.core.query.mixture import MixtureKey, StaticMixture
+from mixtera.core.query.mixture import MixtureKey, MixtureSchedule, ScheduleEntry, StaticMixture
 
 
 class TestMixtureSchedule(unittest.TestCase):
