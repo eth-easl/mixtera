@@ -78,6 +78,8 @@ class QueryResult:
         with self._index.get_lock():
             curr_chunk_idx = self._index.get_obj().value
 
+        logger.debug("Persisting mixture log to disk...")
+
         with open(self._mixture_log_file, "w", encoding="utf-8") as fp:
             json.dump(
                 {
@@ -88,6 +90,8 @@ class QueryResult:
                 indent=4,
                 sort_keys=True,
             )
+
+        logger.debug("Mixture log persisted.")
 
     def _parse_meta(self, mdc: MixteraDataCollection, results: pa.Table) -> dict:
         dataset_ids = set(pc.unique(results["dataset_id"]).to_pylist())
