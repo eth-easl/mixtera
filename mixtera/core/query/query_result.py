@@ -1,3 +1,4 @@
+import json
 import multiprocessing as mp
 import os
 import pickle
@@ -35,7 +36,9 @@ class QueryResult:
     dataset/file ids to their respective types, paths and parsing functions.
     """
 
-    def __init__(self, mdc: MixteraDataCollection, results: pa.Table, mixture: Mixture) -> None:
+    def __init__(
+        self, mdc: MixteraDataCollection, results: pa.Table, mixture: Mixture, mixture_log: Path | None = None
+    ) -> None:
         """
         Args:
             mdc (MixteraDataCollection): The MixteraDataCollection object.
@@ -66,6 +69,25 @@ class QueryResult:
         logger.debug("QueryResult instantiated.")
 
         self._mixture_log: list[tuple[int, Mixture]] = []
+        self._mixture_log_file = mixture_log
+
+    def _persist_mixture_log(self) -> None:
+        if self._mixture_log_file is None:
+            return
+
+        with self._index.get_lock():
+            curr_chunk_idx = self._index.get_obj().value
+
+        with open(self._mixture_log_file, "w", encoding="utf-8") as fp:
+            json.dump(
+                {
+                    "log:": {chk_id: mixture.stringified_mixture() for chk_id, mixture in self._mixture_log},
+                    "curr_chunk_idx": curr_chunk_idx,
+                },
+                fp,
+                indent=4,
+                sort_keys=True,
+            )
 
     def _parse_meta(self, mdc: MixteraDataCollection, results: pa.Table) -> dict:
         dataset_ids = set(pc.unique(results["dataset_id"]).to_pylist())
@@ -239,6 +261,7 @@ class QueryResult:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     previous_mixture = mixture
                     self._mixture_log.append((current_chunk_index, base_mixture))
+                self._persist_mixture_log()
 
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
@@ -329,6 +352,7 @@ class QueryResult:
                     logger.debug("Obtained new None mixture.")
                     previous_mixture = None
                     self._mixture_log.append((current_chunk_index, base_mixture))
+                self._persist_mixture_log()
 
                 chunk = None
                 while len(empty_key_idx) < len(chunker_index_keys) and chunk is None:

@@ -30,6 +30,9 @@ class LocalStub(MixteraClient):
         self.checkpoint_directory = self.directory / "checkpoints"
         self.checkpoint_directory.mkdir(exist_ok=True)
 
+        self.mixture_log_directory = self.directory / "mixture_logs"
+        self.mixture_log_directory.mkdir(exist_ok=True)
+
         self._mdc = MixteraDataCollection(self.directory)
         self._training_query_map_lock = mp.Lock()
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
@@ -84,8 +87,9 @@ class LocalStub(MixteraClient):
                 query.results._num_returns_gen == 0
             ), "We cached a query that already has returned items, this should not happen!"
             query.results.update_mixture(args.mixture)
+            query.results._mixture_log_file = self.mixture_log_directory / f"{query.job_id}.log"
         else:
-            query.execute(self._mdc, args.mixture)
+            query.execute(self._mdc, args.mixture, self.mixture_log_directory / f"{query.job_id}.log")
             cache_path = self._query_cache.cache_query(query)
         return self._register_query(
             query, args.mixture, args.dp_groups, args.nodes_per_group, args.num_workers, cache_path
@@ -192,7 +196,12 @@ class LocalStub(MixteraClient):
                 query = self._training_query_map[job_id][1]
                 mixture = self._training_query_map[job_id][2]
 
-            distri = ChunkDistributor.from_checkpoint(self.checkpoint_directory / job_id, chkpnt_id, job_id)
+            distri = ChunkDistributor.from_checkpoint(
+                self.checkpoint_directory / job_id,
+                chkpnt_id,
+                job_id,
+                self.mixture_log_directory / f"{job_id}.log",
+            )
             self._training_query_map[job_id] = (
                 distri,
                 query,
