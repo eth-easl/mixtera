@@ -50,7 +50,7 @@ class ParquetDataset(Dataset):
         parsing_func: Callable[[dict], str],
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
-        del server_connection  # TODO: Implement server connection handling if needed
+        del server_connection  # TODO(#137): We need a open interface with a regular file object to use that.
 
         with open(file, "rb") as f:
             parquet_file = pq.ParquetFile(f)
@@ -66,37 +66,55 @@ class ParquetDataset(Dataset):
 
             # Map ranges to row groups
             # Create a mapping from row group index to list of (start_row, end_row) tuples
-            row_group_ranges = {}
-            for start_row, end_row in range_list:
-                for rg_index, (rg_start, rg_end) in enumerate(row_group_offsets):
-                    # Check if the range overlaps with the row group
-                    if end_row <= rg_start:
-                        # Range ends before this row group starts
-                        break  # Since row groups are in order, no need to check further
-                    if start_row >= rg_end:
-                        # Range starts after this row group ends
-                        continue
-                    # Overlap exists
-                    rg_start_row = max(start_row, rg_start)
-                    rg_end_row = min(end_row, rg_end)
-                    if rg_index not in row_group_ranges:
-                        row_group_ranges[rg_index] = []
-                    row_group_ranges[rg_index].append((rg_start_row - rg_start, rg_end_row - rg_start))
+
+            row_group_ranges: dict[int, list[tuple[int, int]]] = {}
+            range_idx = 0
+            rg_idx = 0
+            n_ranges = len(range_list)
+            n_row_groups = len(row_group_offsets)
+
+            while range_idx < n_ranges and rg_idx < n_row_groups:
+                start_row, end_row = range_list[range_idx]
+                rg_start, rg_end = row_group_offsets[rg_idx]
+
+                if end_row <= rg_start:
+                    # Range ends before the row group starts; move to next range
+                    range_idx += 1
+                elif start_row >= rg_end:
+                    # Range starts after the row group ends; move to next row group
+                    rg_idx += 1
+                else:
+                    # Overlap exists between range and row group
+                    rg_overlap_start = max(start_row, rg_start)
+                    rg_overlap_end = min(end_row, rg_end)
+
+                    # Compute the relative start and end within the row group
+                    relative_start = rg_overlap_start - rg_start
+                    relative_end = rg_overlap_end - rg_start
+
+                    if rg_idx not in row_group_ranges:
+                        row_group_ranges[rg_idx] = []
+                    row_group_ranges[rg_idx].append((relative_start, relative_end))
+
+                    # Decide which pointer to advance
+                    if end_row <= rg_end:
+                        # Range ends before or at the end of the row group; move to next range
+                        range_idx += 1
+                    else:
+                        # Row group ends before the range; move to next row group
+                        rg_idx += 1
 
             # Read and process relevant row groups
             for rg_index, ranges in row_group_ranges.items():
-                # Read only the necessary columns if possible
                 table = parquet_file.read_row_group(rg_index)
                 for start, end in ranges:
                     length = end - start
                     sliced_table = table.slice(start, length)
 
-                    # Use iter_batches() to limit memory usage
-                    for batch in sliced_table.to_batches(max_chunksize=32000): 
+                    for batch in sliced_table.to_batches(max_chunksize=32000):
                         struct_array = batch.to_struct_array()
                         for record in struct_array:
                             yield parsing_func(record.as_py())
-
 
     @staticmethod
     def _is_valid_parquet(path: str) -> bool:
