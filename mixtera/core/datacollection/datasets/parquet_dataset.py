@@ -50,12 +50,13 @@ class ParquetDataset(Dataset):
         parsing_func: Callable[[dict], str],
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
-        del server_connection  # TODO(#137): We need a open interface with a regular file object to use that.
+        del server_connection  # TODO: Implement server connection handling if needed
         with open(file, "rb") as f:
             parquet_file = pq.ParquetFile(f)
 
             range_iter = iter(range_list)
-            if (current_range := next(range_iter, None)) is None:
+            current_range = next(range_iter, None)
+            if current_range is None:
                 return  # No ranges to process
 
             start_row, end_row = current_range  # Ranges are [start_row, end_row)
@@ -66,37 +67,55 @@ class ParquetDataset(Dataset):
                 batch_start_row = row_id
                 batch_end_row = row_id + batch_size
 
-                if batch_end_row <= start_row:
-                    # Skip the entire batch
-                    row_id += batch_size
-                    continue
-
-                if batch_start_row >= end_row:
-                    # Move to the next range
-                    if (current_range := next(range_iter, None)) is None:
-                        return
-                    start_row, end_row = current_range
+                while True:
+                    # Skip batches that end before the start of the current range
                     if batch_end_row <= start_row:
-                        # Skip the batch if it doesn't overlap with the new range
-                        row_id += batch_size
-                        continue
+                        break  # Proceed to next batch
 
-                batch_records = batch.to_pylist()
-                for i, record in enumerate(batch_records):
-                    current_row_id = batch_start_row + i
+                    # If the batch starts after the current range ends, move to the next range
+                    if batch_start_row >= end_row:
+                        # Move to the next range
+                        current_range = next(range_iter, None)
+                        if current_range is None:
+                            return  # No more ranges
+                        start_row, end_row = current_range
+                        continue  # Re-enter the loop with the new range
 
-                    if current_row_id >= end_row:
-                        # We've reached the end of the current range
-                        if (current_range := next(range_iter, None)) is None:
+                    # Calculate overlap between batch and current range
+                    overlap_start_row = max(batch_start_row, start_row)
+                    overlap_end_row = min(batch_end_row, end_row)
+
+                    if overlap_end_row <= overlap_start_row:
+                        # No overlap, move to the next range
+                        current_range = next(range_iter, None)
+                        if current_range is None:
                             return
                         start_row, end_row = current_range
+                        continue  # Re-enter the loop with the new range
 
-                        if current_row_id < start_row:
-                            # Skip records until we reach the start of the next range
-                            continue
+                    # Slice the batch to only include overlapping rows
+                    overlap_start_in_batch = overlap_start_row - batch_start_row
+                    overlap_length = overlap_end_row - overlap_start_row
+                    overlap_batch = batch.slice(overlap_start_in_batch, overlap_length)
 
-                    if start_row <= current_row_id < end_row:
-                        yield parsing_func(record)
+                    # Convert the overlap_batch to a StructArray
+                    struct_array = overlap_batch.to_struct_array()
+
+                    # Process the overlapping batch
+                    for record in struct_array:
+                        yield parsing_func(record.as_py())
+
+                    # Check if we've reached the end of the current range
+                    if overlap_end_row == end_row:
+                        # Move to the next range
+                        current_range = next(range_iter, None)
+                        if current_range is None:
+                            return  # No more ranges
+                        start_row, end_row = current_range
+                    else:
+                        # Proceed to the next batch
+                        break
+
                 row_id += batch_size
 
     @staticmethod
