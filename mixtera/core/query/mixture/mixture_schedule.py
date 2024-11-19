@@ -45,8 +45,7 @@ class MixtureSchedule(Mixture):
         Returns:
             The mixture dictionary for the current training step.
         """
-        current_mixture = self._get_current_mixture()
-        return current_mixture.mixture_in_rows()
+        return self.current_mixture.mixture_in_rows()
 
     def inform(self, chunker_index: "ChunkerIndex") -> None:
         """
