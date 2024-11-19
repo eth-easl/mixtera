@@ -51,72 +51,52 @@ class ParquetDataset(Dataset):
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
         del server_connection  # TODO: Implement server connection handling if needed
+
         with open(file, "rb") as f:
             parquet_file = pq.ParquetFile(f)
+            total_row_groups = parquet_file.num_row_groups
 
-            range_iter = iter(range_list)
-            current_range = next(range_iter, None)
-            if current_range is None:
-                return  # No ranges to process
+            # Collect row group offsets
+            row_group_offsets = []
+            current_row = 0
+            for i in range(total_row_groups):
+                num_rows = parquet_file.metadata.row_group(i).num_rows
+                row_group_offsets.append((current_row, current_row + num_rows))
+                current_row += num_rows
 
-            start_row, end_row = current_range  # Ranges are [start_row, end_row)
-            row_id = 0
+            # Map ranges to row groups
+            # Create a mapping from row group index to list of (start_row, end_row) tuples
+            row_group_ranges = {}
+            for start_row, end_row in range_list:
+                for rg_index, (rg_start, rg_end) in enumerate(row_group_offsets):
+                    # Check if the range overlaps with the row group
+                    if end_row <= rg_start:
+                        # Range ends before this row group starts
+                        break  # Since row groups are in order, no need to check further
+                    if start_row >= rg_end:
+                        # Range starts after this row group ends
+                        continue
+                    # Overlap exists
+                    rg_start_row = max(start_row, rg_start)
+                    rg_end_row = min(end_row, rg_end)
+                    if rg_index not in row_group_ranges:
+                        row_group_ranges[rg_index] = []
+                    row_group_ranges[rg_index].append((rg_start_row - rg_start, rg_end_row - rg_start))
 
-            for batch in parquet_file.iter_batches():
-                batch_size = len(batch)
-                batch_start_row = row_id
-                batch_end_row = row_id + batch_size
+            # Read and process relevant row groups
+            for rg_index, ranges in row_group_ranges.items():
+                # Read only the necessary columns if possible
+                table = parquet_file.read_row_group(rg_index)
+                for start, end in ranges:
+                    length = end - start
+                    sliced_table = table.slice(start, length)
 
-                while True:
-                    # Skip batches that end before the start of the current range
-                    if batch_end_row <= start_row:
-                        break  # Proceed to next batch
+                    # Use iter_batches() to limit memory usage
+                    for batch in sliced_table.to_batches(max_chunksize=32000): 
+                        struct_array = batch.to_struct_array()
+                        for record in struct_array:
+                            yield parsing_func(record.as_py())
 
-                    # If the batch starts after the current range ends, move to the next range
-                    if batch_start_row >= end_row:
-                        # Move to the next range
-                        current_range = next(range_iter, None)
-                        if current_range is None:
-                            return  # No more ranges
-                        start_row, end_row = current_range
-                        continue  # Re-enter the loop with the new range
-
-                    # Calculate overlap between batch and current range
-                    overlap_start_row = max(batch_start_row, start_row)
-                    overlap_end_row = min(batch_end_row, end_row)
-
-                    if overlap_end_row <= overlap_start_row:
-                        # No overlap, move to the next range
-                        current_range = next(range_iter, None)
-                        if current_range is None:
-                            return
-                        start_row, end_row = current_range
-                        continue  # Re-enter the loop with the new range
-
-                    # Slice the batch to only include overlapping rows
-                    overlap_start_in_batch = overlap_start_row - batch_start_row
-                    overlap_length = overlap_end_row - overlap_start_row
-                    overlap_batch = batch.slice(overlap_start_in_batch, overlap_length)
-
-                    # Convert the overlap_batch to a StructArray
-                    struct_array = overlap_batch.to_struct_array()
-
-                    # Process the overlapping batch
-                    for record in struct_array:
-                        yield parsing_func(record.as_py())
-
-                    # Check if we've reached the end of the current range
-                    if overlap_end_row == end_row:
-                        # Move to the next range
-                        current_range = next(range_iter, None)
-                        if current_range is None:
-                            return  # No more ranges
-                        start_row, end_row = current_range
-                    else:
-                        # Proceed to the next batch
-                        break
-
-                row_id += batch_size
 
     @staticmethod
     def _is_valid_parquet(path: str) -> bool:
