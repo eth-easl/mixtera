@@ -86,8 +86,9 @@ class LocalStub(MixteraClient):
             assert (
                 query.results._num_returns_gen == 0
             ), "We cached a query that already has returned items, this should not happen!"
-            query.results.update_mixture(args.mixture)
             query.results._query_log_dir = self.mixture_log_directory / query.job_id
+            query.results._query_log_dir.mkdir(exist_ok=True)
+            query.results.update_mixture(args.mixture)
         else:
             query.execute(self._mdc, args.mixture, self.mixture_log_directory / query.job_id)
             cache_path = self._query_cache.cache_query(query)
