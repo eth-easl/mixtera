@@ -46,21 +46,18 @@ class WebDataset(Dataset):
         parsing_func: Callable[[dict], str],
         server_connection: Optional[ServerConnection],  # pylint: disable=unused-argument
     ) -> Iterable[str]:
-        samples = IndexedTarSamples(file)
+        with IndexedTarSamples(file) as samples:
+            last_line_read = 0
+            last_r_start = -1
+            for r_start, r_end in range_list:
+                if r_start < last_r_start:
+                    raise RuntimeError(f"Ranges not sorted by start ({last_r_start} vs {r_start})")
 
-        last_line_read = 0
-        last_r_start = -1
-        for r_start, r_end in range_list:
-            if r_start < last_r_start:
-                raise RuntimeError(f"Ranges not sorted by start ({last_r_start} vs {r_start})")
+                if last_line_read > r_start:
+                    raise RuntimeError(f"Overlapping ranges: start at {r_start} but previous ended at {last_line_read}")
 
-            if last_line_read > r_start:
-                raise RuntimeError(f"Overlapping ranges: start at {r_start} but previous ended at {last_line_read}")
+                last_r_start = r_start
 
-            last_r_start = r_start
+                yield from (parsing_func(samples[line]) for line in range(r_start, r_end))
 
-            yield from (parsing_func(samples[line]) for line in range(r_start, r_end))
-
-            last_line_read = r_end
-
-        samples.close()
+                last_line_read = r_end
