@@ -15,7 +15,7 @@ class TestParquetDataset(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def create_sample_parquet_file(self, file_path, num_rows=10, start_id=0, schema=None):
+    def create_sample_parquet_file(self, file_path, num_rows=10, start_id=0, row_group_size=None, schema=None):
         ids = [start_id + i for i in range(num_rows)]
         data = {"id": ids, "value": [f"value_{i}" for i in ids]}
 
@@ -25,7 +25,12 @@ class TestParquetDataset(unittest.TestCase):
                     data[col] = [f"{col}_{i}" for i in ids]
 
         table = pa.Table.from_pydict(data)
-        pq.write_table(table, file_path)
+
+        # Write the table with specified row group size
+        write_table_kwargs = {}
+        if row_group_size:
+            write_table_kwargs["row_group_size"] = row_group_size
+        pq.write_table(table, file_path, **write_table_kwargs)
 
     def test_iterate_files_directory(self):
         parquet_file1 = self.directory / "file1.parquet"
@@ -110,9 +115,6 @@ class TestParquetDataset(unittest.TestCase):
         self.assertEqual(results, expected_records)
 
     def test_read_ranges_with_no_data(self):
-        """
-        Test reading ranges that result in no data (e.g., start row equals end row).
-        """
         # Create a sample Parquet file
         file_path = self.directory / "file.parquet"
         self.create_sample_parquet_file(file_path, num_rows=5, start_id=1)
@@ -129,9 +131,6 @@ class TestParquetDataset(unittest.TestCase):
         self.assertEqual(results, [])
 
     def test_inform_metadata_parser(self):
-        """
-        Test the inform_metadata_parser function.
-        """
         file_path = self.directory / "file.parquet"
         self.create_sample_parquet_file(file_path, num_rows=5, start_id=1)
 
@@ -154,3 +153,146 @@ class TestParquetDataset(unittest.TestCase):
         ]
 
         self.assertEqual(metadata_parser.records, expected_records)
+
+    def test_read_full_overlap_with_row_groups(self):
+        file_path = self.directory / "row_group_overlap.parquet"
+        # Create a parquet file with 10 rows and row groups of size 5
+        self.create_sample_parquet_file(file_path, num_rows=10, start_id=1, row_group_size=5)
+
+        # Define ranges that align exactly with row group boundaries
+        ranges_per_file = {
+            str(file_path): [(0, 5), (5, 10)],  # Valid, increasing, non-overlapping
+        }
+
+        expected_records = []
+        for i in range(1, 11):
+            expected_records.append({"id": i, "value": f"value_{i}"})
+
+        def parsing_func(record):
+            return record
+
+        results = list(ParquetDataset.read_ranges_from_files(ranges_per_file, parsing_func, None))
+        self.assertEqual(results, expected_records)
+
+    def test_read_partial_overlap_with_row_groups(self):
+        file_path = self.directory / "partial_row_group_overlap.parquet"
+        # Create a parquet file with 15 rows and row groups of size 5
+        self.create_sample_parquet_file(file_path, num_rows=15, start_id=1, row_group_size=5)
+
+        ranges_per_file = {
+            str(file_path): [(3, 8)],  # Overlaps with the first and second row groups
+        }
+
+        # Expected IDs are from 4 to 8 inclusive
+        expected_records = []
+        for i in range(4, 9):
+            expected_records.append({"id": i, "value": f"value_{i}"})
+
+        def parsing_func(record):
+            return record
+
+        results = list(ParquetDataset.read_ranges_from_files(ranges_per_file, parsing_func, None))
+        self.assertEqual(results, expected_records)
+
+    def test_read_ranges_at_data_bounds(self):
+        file_path = self.directory / "data_bounds.parquet"
+        self.create_sample_parquet_file(file_path, num_rows=10, start_id=1)
+
+        # Define ranges at the very start and end of the data
+        ranges_per_file = {
+            str(file_path): [(0, 1), (9, 10)],  # Rows 0 and 9
+        }
+
+        expected_records = [
+            {"id": 1, "value": "value_1"},  # Row 0
+            {"id": 10, "value": "value_10"},  # Row 9
+        ]
+
+        def parsing_func(record):
+            return record
+
+        results = list(ParquetDataset.read_ranges_from_files(ranges_per_file, parsing_func, None))
+        self.assertEqual(results, expected_records)
+
+    def test_read_adjacent_ranges(self):
+        file_path = self.directory / "adjacent_ranges.parquet"
+        self.create_sample_parquet_file(file_path, num_rows=10, start_id=1, row_group_size=5)
+
+        # Define adjacent ranges that touch but do not overlap
+        ranges_per_file = {
+            str(file_path): [(0, 5), (5, 10)],
+        }
+
+        expected_records = []
+        for i in range(1, 11):
+            expected_records.append({"id": i, "value": f"value_{i}"})
+
+        def parsing_func(record):
+            return record
+
+        # The expected records are the same as the full dataset
+        results = list(ParquetDataset.read_ranges_from_files(ranges_per_file, parsing_func, None))
+        self.assertEqual(results, expected_records)
+
+    def test_read_single_row_ranges(self):
+        file_path = self.directory / "single_row_ranges.parquet"
+        self.create_sample_parquet_file(file_path, num_rows=10, start_id=1, row_group_size=1000)
+
+        # Define valid, increasing, non-overlapping single-row ranges
+        ranges_per_file = {
+            str(file_path): [(2, 3), (5, 6), (8, 9)],  # Rows 2, 5, and 8
+        }
+
+        expected_records = [
+            {"id": 3, "value": "value_3"},
+            {"id": 6, "value": "value_6"},
+            {"id": 9, "value": "value_9"},
+        ]
+
+        def parsing_func(record):
+            return record
+
+        results = list(ParquetDataset.read_ranges_from_files(ranges_per_file, parsing_func, None))
+        self.assertEqual(results, expected_records)
+
+    def test_read_range_spanning_all_row_groups(self):
+        file_path = self.directory / "all_row_groups.parquet"
+        # Create a parquet file with 20 rows and row groups of size 5
+        self.create_sample_parquet_file(file_path, num_rows=20, start_id=1, row_group_size=5)
+
+        # Define a range that spans all row groups
+        ranges_per_file = {
+            str(file_path): [(0, 20)],
+        }
+
+        expected_records = []
+        for i in range(1, 21):
+            expected_records.append({"id": i, "value": f"value_{i}"})
+
+        def parsing_func(record):
+            return record
+
+        # The expected records are the full dataset
+        results = list(ParquetDataset.read_ranges_from_files(ranges_per_file, parsing_func, None))
+        self.assertEqual(results, expected_records)
+
+    def test_read_range_at_row_group_boundary(self):
+        file_path = self.directory / "boundary_ranges.parquet"
+        # Create a parquet file with 15 rows and row groups of size 5
+        self.create_sample_parquet_file(file_path, num_rows=15, start_id=1, row_group_size=5)
+
+        # Define a range that starts at a row group boundary and ends within the next row group
+        ranges_per_file = {
+            str(file_path): [(5, 8)],  # Starts at index 5 (row group boundary)
+        }
+
+        expected_records = []
+        for i in range(6, 9):
+            expected_records.append({"id": i, "value": f"value_{i}"})
+
+        def parsing_func(record):
+            return record
+
+        # Expected to read records with IDs 6, 7, and 8 (because start_id=1)
+        results = list(ParquetDataset.read_ranges_from_files(ranges_per_file, parsing_func, None))
+        self.assertEqual(results, expected_records)
