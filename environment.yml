@@ -22,5 +22,7 @@ dependencies:
   - xxhash
   - pip: # Both duckdb and polars recommend their pip build over conda
     - duckdb
-    - polars 
+    - polars
+    - webdataset
+    - pillow
     - pybind11
