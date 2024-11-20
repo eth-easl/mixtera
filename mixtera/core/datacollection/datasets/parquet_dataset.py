@@ -51,53 +51,70 @@ class ParquetDataset(Dataset):
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str]:
         del server_connection  # TODO(#137): We need a open interface with a regular file object to use that.
+
         with open(file, "rb") as f:
             parquet_file = pq.ParquetFile(f)
+            total_row_groups = parquet_file.num_row_groups
 
-            range_iter = iter(range_list)
-            if (current_range := next(range_iter, None)) is None:
-                return  # No ranges to process
+            # Collect row group offsets
+            row_group_offsets = []
+            current_row = 0
+            for i in range(total_row_groups):
+                num_rows = parquet_file.metadata.row_group(i).num_rows
+                row_group_offsets.append((current_row, current_row + num_rows))
+                current_row += num_rows
 
-            start_row, end_row = current_range  # Ranges are [start_row, end_row)
-            row_id = 0
+            # Map ranges to row groups
+            # Create a mapping from row group index to list of (start_row, end_row) tuples
 
-            for batch in parquet_file.iter_batches():
-                batch_size = len(batch)
-                batch_start_row = row_id
-                batch_end_row = row_id + batch_size
+            row_group_ranges: dict[int, list[tuple[int, int]]] = {}
+            range_idx = 0
+            rg_idx = 0
+            n_ranges = len(range_list)
+            n_row_groups = len(row_group_offsets)
 
-                if batch_end_row <= start_row:
-                    # Skip the entire batch
-                    row_id += batch_size
-                    continue
+            while range_idx < n_ranges and rg_idx < n_row_groups:
+                start_row, end_row = range_list[range_idx]
+                rg_start, rg_end = row_group_offsets[rg_idx]
 
-                if batch_start_row >= end_row:
-                    # Move to the next range
-                    if (current_range := next(range_iter, None)) is None:
-                        return
-                    start_row, end_row = current_range
-                    if batch_end_row <= start_row:
-                        # Skip the batch if it doesn't overlap with the new range
-                        row_id += batch_size
-                        continue
+                if end_row <= rg_start:
+                    # Range ends before the row group starts; move to next range
+                    range_idx += 1
+                elif start_row >= rg_end:
+                    # Range starts after the row group ends; move to next row group
+                    rg_idx += 1
+                else:
+                    # Overlap exists between range and row group
+                    rg_overlap_start = max(start_row, rg_start)
+                    rg_overlap_end = min(end_row, rg_end)
 
-                batch_records = batch.to_pylist()
-                for i, record in enumerate(batch_records):
-                    current_row_id = batch_start_row + i
+                    # Compute the relative start and end within the row group
+                    relative_start = rg_overlap_start - rg_start
+                    relative_end = rg_overlap_end - rg_start
 
-                    if current_row_id >= end_row:
-                        # We've reached the end of the current range
-                        if (current_range := next(range_iter, None)) is None:
-                            return
-                        start_row, end_row = current_range
+                    if rg_idx not in row_group_ranges:
+                        row_group_ranges[rg_idx] = []
+                    row_group_ranges[rg_idx].append((relative_start, relative_end))
 
-                        if current_row_id < start_row:
-                            # Skip records until we reach the start of the next range
-                            continue
+                    # Decide which pointer to advance
+                    if end_row <= rg_end:
+                        # Range ends before or at the end of the row group; move to next range
+                        range_idx += 1
+                    else:
+                        # Row group ends before the range; move to next row group
+                        rg_idx += 1
 
-                    if start_row <= current_row_id < end_row:
-                        yield parsing_func(record)
-                row_id += batch_size
+            # Read and process relevant row groups
+            for rg_index, ranges in row_group_ranges.items():
+                table = parquet_file.read_row_group(rg_index)
+                for start, end in ranges:
+                    length = end - start
+                    sliced_table = table.slice(start, length)
+
+                    for batch in sliced_table.to_batches(max_chunksize=32000):
+                        struct_array = batch.to_struct_array()
+                        for record in struct_array:
+                            yield parsing_func(record.as_py())
 
     @staticmethod
     def _is_valid_parquet(path: str) -> bool:
