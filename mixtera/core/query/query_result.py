@@ -620,6 +620,9 @@ class QueryResult:
 
         logger.debug("Loaded chunker index.")
 
+        if query_result._query_log_dir is not None:
+            query_result._query_log_dir.mkdir(exist_ok=True)
+
         if num_chunks_replay > 0 and replay:
             query_result.replay(num_chunks_replay)
 
