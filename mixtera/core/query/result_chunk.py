@@ -15,7 +15,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
 from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
-from mixtera.utils import is_on_github_actions, seed_everything_from_list
+from mixtera.utils import PrefetchFirstItemIterator, is_on_github_actions, seed_everything_from_list
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
@@ -84,6 +84,7 @@ class ResultChunk:
         parsing_func_dict: dict[int, Callable[[str], str]],
         chunk_size: int,
         mixture: Optional[dict[MixtureKey, int]] = None,
+        prefetch_first_sample: bool = True,
     ) -> None:
         allow_daemon_spawn()
 
@@ -94,6 +95,7 @@ class ResultChunk:
         self._chunk_size = chunk_size
         self._mixture = mixture
         self._samples_to_skip = 0  # TODO(#87): Supply this from server to skip first samples to support interruptions.
+        self._prefetch_first_sample = prefetch_first_sample  # TODO(#147): Make this configurable for a query.
 
         self._server_connection: ServerConnection | None = None
         self._degree_of_parallelism: int = 1
@@ -212,6 +214,12 @@ class ResultChunk:
                 property_name: self._get_iterator_for_workload_mt(process)
                 for property_name, process in processes.items()
             }
+
+        if self._prefetch_first_sample:
+            # In some cases, loading the first sample may be expensive (e.g., opening a big parquet file)
+            # We support prefetching the very first sample via a separate thread. While we're GIL-bound pre Python 3.13,
+            # we still observe a performance increase.
+            return {property_name: PrefetchFirstItemIterator(it) for property_name, it in active_iterators.items()}
 
         return active_iterators
 
