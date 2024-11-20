@@ -142,6 +142,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             None,
+            prefetch_first_sample=False,
         )
         result_chunk._degree_of_parallelism = 1
         mock_workloads = {"property1": "workload1", "property2": "workload2"}
@@ -165,6 +166,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             None,
+            prefetch_first_sample=False,
         )
         result_chunk._degree_of_parallelism = 2  # Trigger the mt path
         mock_workloads = {"property1": "workload1", "property2": "workload2"}
