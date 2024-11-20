@@ -9,7 +9,8 @@ from loguru import logger
 from mixtera.core.client.mixtera_client import MixteraClient, QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.client.server.server_stub import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset
-from mixtera.core.query import ArbitraryMixture, Query, ResultChunk
+from mixtera.core.query import Query, ResultChunk
+from mixtera.core.query.mixture import ArbitraryMixture
 
 TEST_SERVER_INSTANCE_COUNT = 1000
 TEST_SERVER_FILE_COUNT = 5
