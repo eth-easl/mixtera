@@ -87,9 +87,9 @@ class LocalStub(MixteraClient):
                 query.results._num_returns_gen == 0
             ), "We cached a query that already has returned items, this should not happen!"
             query.results.update_mixture(args.mixture)
-            query.results._mixture_log_file = self.mixture_log_directory / f"{query.job_id}.log"
+            query.results._query_log_dir = self.mixture_log_directory / query.job_id
         else:
-            query.execute(self._mdc, args.mixture, self.mixture_log_directory / f"{query.job_id}.log")
+            query.execute(self._mdc, args.mixture, self.mixture_log_directory / query.job_id)
             cache_path = self._query_cache.cache_query(query)
         return self._register_query(
             query, args.mixture, args.dp_groups, args.nodes_per_group, args.num_workers, cache_path
@@ -200,7 +200,7 @@ class LocalStub(MixteraClient):
                 self.checkpoint_directory / job_id,
                 chkpnt_id,
                 job_id,
-                self.mixture_log_directory / f"{job_id}.log",
+                self.mixture_log_directory / job_id,
             )
             self._training_query_map[job_id] = (
                 distri,

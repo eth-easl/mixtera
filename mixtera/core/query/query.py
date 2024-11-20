@@ -13,7 +13,7 @@ from .mixture import Mixture
 class Query:
     def __init__(self, job_id: str) -> None:
         self.query_plan = QueryPlan()
-        self.results: Any | None = None
+        self.results: QueryResult | None = None
         self.job_id = job_id
 
     def is_empty(self) -> bool:
@@ -69,7 +69,7 @@ class Query:
     def __str__(self) -> str:
         return str(self.query_plan)
 
-    def execute(self, mdc: MixteraDataCollection, mixture: Mixture, mixture_log: Path | None = None) -> None:
+    def execute(self, mdc: MixteraDataCollection, mixture: Mixture, query_log_dir: Path | None = None) -> None:
         """
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
@@ -150,7 +150,10 @@ class Query:
         """
 
         self.results = QueryResult(
-            mdc, mdc._connection.execute(full_query, parameters).fetch_arrow_table(), mixture, mixture_log=mixture_log
+            mdc,
+            mdc._connection.execute(full_query, parameters).fetch_arrow_table(),
+            mixture,
+            query_log_dir=query_log_dir,
         )
 
         logger.debug(f"Results:\n{self.results}")

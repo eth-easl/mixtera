@@ -37,7 +37,7 @@ class QueryResult:
     """
 
     def __init__(
-        self, mdc: MixteraDataCollection, results: pa.Table, mixture: Mixture, mixture_log: Path | None = None
+        self, mdc: MixteraDataCollection, results: pa.Table, mixture: Mixture, query_log_dir: Path | None = None
     ) -> None:
         """
         Args:
@@ -69,10 +69,12 @@ class QueryResult:
         logger.debug("QueryResult instantiated.")
 
         self._mixture_log: list[tuple[int, Mixture]] = []
-        self._mixture_log_file = mixture_log
+        self._query_log_dir = query_log_dir
+        if query_log_dir is not None:
+            query_log_dir.mkdir(exist_ok=True)
 
     def _persist_mixture_log(self) -> None:
-        if self._mixture_log_file is None:
+        if self._query_log_dir is None:
             return
 
         with self._index.get_lock():
@@ -80,7 +82,7 @@ class QueryResult:
 
         logger.debug("Persisting mixture log to disk...")
 
-        with open(self._mixture_log_file, "w", encoding="utf-8") as fp:
+        with open(self._query_log_dir / "mixture.log", "w", encoding="utf-8") as fp:
             json.dump(
                 {
                     "log:": {chk_id: mixture.stringified_mixture() for chk_id, mixture in self._mixture_log},
@@ -92,6 +94,13 @@ class QueryResult:
             )
 
         logger.debug("Mixture log persisted.")
+
+    def _persist_chunk_idx(self, current_chunk_index: int) -> None:
+        if self._query_log_dir is None:
+            return
+
+        with open(self._query_log_dir / "chunk.idx", "w", encoding="utf-8") as fp:
+            fp.write(str(current_chunk_index))
 
     def _parse_meta(self, mdc: MixteraDataCollection, results: pa.Table) -> dict:
         dataset_ids = set(pc.unique(results["dataset_id"]).to_pylist())
@@ -265,7 +274,7 @@ class QueryResult:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     previous_mixture = mixture
                     self._mixture_log.append((current_chunk_index, base_mixture))
-                self._persist_mixture_log()
+                    self._persist_mixture_log()
 
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
@@ -335,6 +344,7 @@ class QueryResult:
                 if all(size == 0 for size in remaining_sizes.values()):
                     if current_chunk_index == target_chunk_index:
                         logger.debug("Yielding a chunk.")
+                        self._persist_chunk_idx(current_chunk_index)
                         base_mixture, target_chunk_index = yield ResultChunk(
                             defaultdict_to_dict(chunk),
                             self.dataset_type,
@@ -356,7 +366,7 @@ class QueryResult:
                     logger.debug("Obtained new None mixture.")
                     previous_mixture = None
                     self._mixture_log.append((current_chunk_index, base_mixture))
-                self._persist_mixture_log()
+                    self._persist_mixture_log()
 
                 chunk = None
                 while len(empty_key_idx) < len(chunker_index_keys) and chunk is None:
@@ -380,6 +390,7 @@ class QueryResult:
                 # Chunk has been successfully generated
                 if current_chunk_index == target_chunk_index:
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
+                    self._persist_chunk_idx(current_chunk_index)
                     base_mixture, target_chunk_index = yield ResultChunk(
                         chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, None
                     )

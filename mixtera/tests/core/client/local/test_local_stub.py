@@ -83,9 +83,7 @@ class TestLocalStub(unittest.TestCase):
         self.local_stub._register_query = MagicMock(return_value=True)
         args = QueryExecutionArgs(mixture=mixture)
         result = self.local_stub.execute_query(query, args)
-        query.execute.assert_called_once_with(
-            mock_mdc, mixture, self.local_stub.mixture_log_directory / f"{self.job_id}.log"
-        )
+        query.execute.assert_called_once_with(mock_mdc, mixture, self.local_stub.mixture_log_directory / self.job_id)
         self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1, None)
         self.assertTrue(result)
 
@@ -102,9 +100,7 @@ class TestLocalStub(unittest.TestCase):
         args = QueryExecutionArgs(mixture=mixture)
         result = self.local_stub.execute_query(query, args)
 
-        query.execute.assert_called_once_with(
-            mock_mdc, mixture, self.local_stub.mixture_log_directory / f"{self.job_id}.log"
-        )
+        query.execute.assert_called_once_with(mock_mdc, mixture, self.local_stub.mixture_log_directory / self.job_id)
         self.local_stub._register_query.assert_called_once_with(query, mixture, 1, 1, 1, None)
         self.assertFalse(result)
 
@@ -246,7 +242,7 @@ class TestLocalStub(unittest.TestCase):
             self.local_stub.checkpoint_directory / self.job_id,
             chkpnt_id,
             self.job_id,
-            self.local_stub.mixture_log_directory / f"{self.job_id}.log",
+            self.local_stub.mixture_log_directory / self.job_id,
         )
         self.assertIn(self.job_id, self.local_stub._training_query_map)
         self.assertEqual(self.local_stub._training_query_map[self.job_id][0], mock_chunk_distributor)
