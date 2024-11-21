@@ -35,12 +35,12 @@ else
     exit 1
 fi
 
-# if pylint mixtera ; then
-#     echo "No pylint errors"
-# else
-#     echo "pylint errors"
-#     exit 1
-# fi
+if pylint mixtera ; then
+    echo "No pylint errors"
+else
+    echo "pylint errors"
+    exit 1
+fi
 
 echo "Running tests"
 
