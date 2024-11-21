@@ -248,6 +248,8 @@ class TestLocalStub(unittest.TestCase):
         self.assertEqual(self.local_stub._training_query_map[self.job_id][0], mock_chunk_distributor)
 
     def test_process_feedback(self):
+        query = MagicMock(spec=Query)
+        query.results = MagicMock(spec=QueryResult)
         chunk_size = 200
         schedule = MixtureSchedule(
             chunk_size,
@@ -258,7 +260,7 @@ class TestLocalStub(unittest.TestCase):
             ],
         )
 
-        self.local_stub._training_query_map["feedback_job"] = (None, None, schedule)
+        self.local_stub._training_query_map["feedback_job"] = (None, query, schedule)
 
         # First sending feedbacks.
         for steps in [0, 100, 200]:
