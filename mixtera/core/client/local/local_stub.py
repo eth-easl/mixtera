@@ -11,7 +11,7 @@ from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query, QueryResult, ResultChunk
 from mixtera.core.query.chunk_distributor import ChunkDistributor
-from mixtera.core.query.mixture import Mixture
+from mixtera.core.query.mixture import Mixture, MixtureSchedule
 from mixtera.core.query.query_cache import QueryCache
 from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.utils import wait_for_key_in_dict
@@ -209,7 +209,7 @@ class LocalStub(MixteraClient):
                 mixture if mixture is not None else distri._query_result._mixture,
             )
 
-    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
+    def process_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         if job_id not in self._training_query_map:
             logger.warning(f"There is no job with the id: {job_id}!")
             return False
@@ -219,11 +219,11 @@ class LocalStub(MixteraClient):
                 self.feedback_queue_map[job_id] = [feedback]
             else:
                 self.feedback_queue_map[job_id].append(feedback)
+
+            received_feedback = self.feedback_queue_map[job_id].pop(0)
+
+        with self._training_query_map_lock:
+            mixture = self._training_query_map[job_id][2]
+            assert isinstance(mixture, MixtureSchedule), "The expected mixture is not an instance of MixtureSchedule."
+            mixture.inform_training_step(received_feedback.training_steps)
             return True
-
-    def process_feedback(self, job_id: str) -> ClientFeedback | None:
-        with self._feedback_queue_map_lock:
-            if job_id not in self.feedback_queue_map or len(self.feedback_queue_map) == 0:
-                return None
-
-            return self.feedback_queue_map[job_id].pop(0)

@@ -375,7 +375,7 @@ class MixteraClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
+    def process_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         """
         This function sends the training feedback to the server, e.g., for the mixture schedule.
         """
