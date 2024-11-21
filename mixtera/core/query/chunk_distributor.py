@@ -536,10 +536,7 @@ class ChunkDistributor:
 
     @classmethod
     def from_checkpoint(
-        cls,
-        chkpnt_dir: Path,
-        checkpoint_id: str,
-        job_id: str,
+        cls, chkpnt_dir: Path, checkpoint_id: str, job_id: str, query_log_dir: Path | None
     ) -> "ChunkDistributor":
         """
         Create a ChunkDistributor instance from a saved checkpoint.
@@ -584,6 +581,9 @@ class ChunkDistributor:
         logger.debug("Loading QueryResult.")
         query_result = QueryResult.from_cache(query_dir, replay=False)
         query_result._mixture_log = query_result_state["mixture_log"]
+        query_result._query_log_dir = query_log_dir
+        if query_log_dir is not None:
+            query_log_dir.mkdir(exist_ok=True)
         query_result.replay(query_result_state["num_returns_gen"])
 
         logger.debug("Instantiating class.")

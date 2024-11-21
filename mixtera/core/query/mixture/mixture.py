@@ -50,3 +50,9 @@ class Mixture(ABC):
         the overall distribution in the QueryResult.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
+
+    def stringified_mixture(self) -> dict[str, int]:
+        """
+        Helper fuction that returns the current mixture representation using string keys.
+        """
+        return {str(key): val for key, val in self.mixture_in_rows().items()}

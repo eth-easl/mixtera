@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -12,7 +13,7 @@ from .mixture import Mixture
 class Query:
     def __init__(self, job_id: str) -> None:
         self.query_plan = QueryPlan()
-        self.results: Any | None = None
+        self.results: QueryResult | None = None
         self.job_id = job_id
 
     def is_empty(self) -> bool:
@@ -68,12 +69,13 @@ class Query:
     def __str__(self) -> str:
         return str(self.query_plan)
 
-    def execute(self, mdc: MixteraDataCollection, mixture: Mixture) -> None:
+    def execute(self, mdc: MixteraDataCollection, mixture: Mixture, query_log_dir: Path | None = None) -> None:
         """
         This method executes the query and returns the resulting indices, in the form of a QueryResult object.
         Args:
             mdc: The MixteraDataCollection object required to execute the query
             mixture: A mixture object defining the mixture to be reflected in the chunks.
+            mixture_log: A path where the mixture over time should be logged
         """
         logger.debug(f"Executing query locally with chunk size {mixture.chunk_size}")
         conn = mdc._connection
@@ -147,7 +149,12 @@ class Query:
         ORDER BY {', '.join(group_cols)}, interval_start
         """
 
-        self.results = QueryResult(mdc, mdc._connection.execute(full_query, parameters).fetch_arrow_table(), mixture)
+        self.results = QueryResult(
+            mdc,
+            mdc._connection.execute(full_query, parameters).fetch_arrow_table(),
+            mixture,
+            query_log_dir=query_log_dir,
+        )
 
         logger.debug(f"Results:\n{self.results}")
         logger.debug("Query executed.")

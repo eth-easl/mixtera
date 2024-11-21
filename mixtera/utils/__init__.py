@@ -2,6 +2,7 @@
 This submodule contains general utility functions
 """
 
+from .prefetch_iterator import PrefetchFirstItemIterator
 from .utils import (  # noqa: F401
     DummyPool,
     defaultdict_to_dict,
@@ -32,4 +33,5 @@ __all__ = [
     "DummyPool",
     "serialize_chunker_index",
     "deserialize_chunker_index",
+    "PrefetchFirstItemIterator",
 ]
