@@ -104,11 +104,11 @@ class FileSystem(ABC):
     @classmethod
     def get_all_files_with_exts(cls, dir_path: str, extensions: list[str]) -> Generator[str, None, None]:
         """
-        Implements a generator that iterates over all files with a specific extension in a given directory.
+        Implements a generator that iterates over all files with specific extensions in a given directory.
         Since this is only run from a LocalDataCollection, this does not over a remote server interface.
 
         Args:
-            dir_path (str ): The path in which all files checked for the extension.
+            dir_path (str): The path in which all files checked for the extensions.
 
         Returns:
             An iterable over the matching files.
