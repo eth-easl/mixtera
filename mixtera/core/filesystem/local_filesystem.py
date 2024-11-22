@@ -1,13 +1,19 @@
+import os
 from pathlib import Path
 from typing import Generator, Iterable
 
 from mixtera.core.filesystem import FileSystem
+from xopen import xopen
 
 
 class LocalFileSystem(FileSystem):
     @classmethod
     def get_file_iterable(cls, file_path: str) -> Iterable[str]:
-        with open(file_path, "r", encoding="utf-8") as f:
+        num_cores = os.cpu_count() or 1
+        num_cores = max(num_cores - 4, 1)
+        num_cores = min(16, num_cores)
+
+        with xopen(file_path, "r", encoding="utf-8", threads=num_cores) as f:
             yield from f
 
     @classmethod

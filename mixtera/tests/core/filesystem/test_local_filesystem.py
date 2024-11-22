@@ -6,12 +6,14 @@ from mixtera.core.filesystem import LocalFileSystem
 
 
 class TestLocalFileSystem(unittest.TestCase):
-    def test_get_file_iterable(self):
+    @patch("os.cpu_count", return_value=8)
+    def test_get_file_iterable(self, test_cpu_count):
+        del test_cpu_count
         file_path = "testfile.txt"
         mock_file_data = "local line 1\nlocal line 2\n"
-        with patch("builtins.open", mock_open(read_data=mock_file_data)) as mock_file:
+        with patch("mixtera.core.filesystem.local_filesystem.xopen", mock_open(read_data=mock_file_data)) as mock_file:
             lines = list(LocalFileSystem.get_file_iterable(file_path))
-            mock_file.assert_called_once_with(file_path, "r", encoding="utf-8")
+            mock_file.assert_called_once_with(file_path, "r", encoding="utf-8", threads=4)
             self.assertEqual(lines, ["local line 1\n", "local line 2\n"])
 
     def test_is_dir_true(self):
