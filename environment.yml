@@ -20,6 +20,7 @@ dependencies:
   - conda-forge::pyarrow
   - cmake
   - xxhash
+  - gzip
   - pip: # Both duckdb and polars recommend their pip build over conda
     - duckdb
     - polars

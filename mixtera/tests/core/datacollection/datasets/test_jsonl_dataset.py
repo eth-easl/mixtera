@@ -1,3 +1,4 @@
+import gzip
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,7 +55,7 @@ class TestJSONLDataset(unittest.TestCase):
         def side_effect(*args, **kwargs):  # pylint:disable=unused-argument
             return mock_open(read_data=file_contents[args[0]]).return_value
 
-        with patch("builtins.open", side_effect=side_effect):
+        with patch("mixtera.core.filesystem.local_filesystem.xopen", side_effect=side_effect):
             result = list(JSONLDataset.read_ranges_from_files(ranges_per_file, lambda x: x.strip(), None))
             self.assertEqual(result, expected)
 
@@ -75,6 +76,29 @@ class TestJSONLDataset(unittest.TestCase):
         # For file1, we select the first two lines, skip one, then take the next two lines
         # For file2, we select only the first line
         ranges_per_file = {
+            file1_path: [(0, 2), (3, 5)],
+            file2_path: [(0, 1)],
+        }
+        expected = ['{"id": "1"}', '{"id": "2"}', '{"id": "4"}', '{"id": "5"}', '{"id": "6"}']
+
+        # Test
+        result = list(JSONLDataset.read_ranges_from_files(ranges_per_file, lambda x: x.strip(), None))
+        self.assertEqual(result, expected)
+
+    def test_read_ranges_from_files_e2e_compressed(self):
+        file1_content = '{"id": "1"}\n{"id": "2"}\n{"id": "3"}\n{"id": "4"}\n{"id": "5"}\n'
+        file2_content = '{"id": "6"}\n{"id": "7"}\n{"id": "8"}\n'
+
+        file1_path = f"{self.temp_dir.name}/temp_file1.json.gz"
+        file2_path = f"{self.temp_dir.name}/temp_file2.json.gz"
+
+        # Write content to compressed files
+        with gzip.open(file1_path, "wt", encoding="utf-8") as f:
+            f.write(file1_content)
+        with gzip.open(file2_path, "wt", encoding="utf-8") as f:
+            f.write(file2_content)
+
+        ranges_per_file = {  # As before
             file1_path: [(0, 2), (3, 5)],
             file2_path: [(0, 1)],
         }
