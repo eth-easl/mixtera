@@ -29,12 +29,16 @@ class MixtureSchedule(Mixture):
         """
         super().__init__(chunk_size)
         if len(schedule) == 0:
-            logger.error("An empty schedule is tried to be set.")
-            return
-        for entry in schedule:
+            raise RuntimeError("An empty schedule is tried to be set.")
+
+        for idx, entry in enumerate(schedule):
             if entry.mixture.chunk_size != self.chunk_size:
-                logger.error("The chunk size of the mixtures does not match.")
-                return
+                logger.warning(
+                    "The chunk size of mixture"
+                    f"{idx}({entry.mixture.chunk_size}) does not match the schedule chunk size. Adjusting it."
+                )
+                entry.mixture.chunk_size = self.chunk_size
+
         self.schedule = sorted(schedule, key=lambda entry: entry.start_step)
         self.current_step = 0
 
