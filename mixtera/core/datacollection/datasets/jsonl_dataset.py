@@ -23,7 +23,9 @@ class JSONLDataset(Dataset):
 
             yield loc
 
-        yield from FileSystem.get_all_files_with_ext(loc, "jsonl")
+        yield from FileSystem.get_all_files_with_exts(
+            loc, ["jsonl", "jsonl.gz", "jsonl.zst", "jsonl.xz", "jsonl.bz2", "jsonl.z"]
+        )
 
     @staticmethod
     def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:

@@ -7,7 +7,7 @@ channels:
   - huggingface
 
 dependencies:
-  - python==3.11
+  - python==3.10
   - pip
   - tqdm
   - loguru
@@ -20,6 +20,8 @@ dependencies:
   - conda-forge::pyarrow
   - cmake
   - xxhash
+  - gzip
+  - xopen
   - pip: # Both duckdb and polars recommend their pip build over conda
     - duckdb
     - polars
