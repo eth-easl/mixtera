@@ -161,6 +161,16 @@ class ResultChunk:
                 logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
+        if self._mixture is not None:
+            if any(value == 0 for value in self._mixture.values()):
+                logger.warning(
+                    "Note that you have zero-valued keys in your mixture."
+                    + "This might be the result of choosing a chunk size "
+                    + "that is potentially too small for your data distribution."
+                )
+                logger.warning(f"This is the mixture:\n\n{self._mixture}\n\n")
+                self._mixture = {key: value for key, value in self._mixture.items() if value > 0}
+
         # If we have a mixture, ensure that the mixture supports the chunk
         if self._mixture is not None and (not self._mixture.keys() == self._result_index.keys()):
             raise RuntimeError(
