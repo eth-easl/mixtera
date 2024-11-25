@@ -33,9 +33,9 @@ def decode(sample: dict[str, Any], decode_image: bool = True) -> dict[str, Any]:
             value = stream.read()
             sample[key] = int(value.decode("utf-8"))
         elif extension in ["jpg", "png", "ppm", "pgm", "pbm", "pnm"] and decode_image:
-            import PIL.Image  # pylint: disable=import-outside-toplevel
+            from torchvision.io import decode_image# pylint: disable=import-outside-toplevel
 
-            sample[key] = PIL.Image.open(stream)
+            sample[key] = decode_image(stream, mode="RGB")
         elif extension == "json":
             import json  # pylint: disable=import-outside-toplevel
 
