@@ -17,7 +17,6 @@ from mixtera.core.query import Query
 from mixtera.core.query.mixture import Mixture
 from numpy.typing import NDArray
 from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable=import-error,no-name-in-module
-import torch.distributed as dist
 
 _shared_memory_names: set[str] = set()
 
@@ -95,7 +94,6 @@ class MixteraTorchDataset(IterableDataset):
                     + f"Restoring checkpoint {checkpoint_id} for job {query.job_id}!"
                 )
                 self._client.restore_checkpoint(query.job_id, checkpoint_id)
-
 
     def _init_status_shm(self) -> None:
         # This function intiailizes a shared memory segment

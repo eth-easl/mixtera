@@ -101,6 +101,7 @@ class FineWebMetadataParser(MetadataParser):
 
         self.add_metadata(sample_id=line_number, **metadata)
 
+
 class MsCocoParser(MetadataParser):
     @classmethod
     def get_properties(cls) -> list[MetadataProperty]:
