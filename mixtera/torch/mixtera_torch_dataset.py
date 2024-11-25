@@ -219,7 +219,7 @@ class MixteraTorchDataset(IterableDataset):
             logger.error(f"Error while fetching worker status from shm: {e}")
             return None
 
-    def __iter__(self) -> Generator[str, None, None]:
+    def __iter__(self) -> Generator[tuple[int, str], None, None]:
         assert self._comp_shm is not None and self._status_shm is not None, "SharedMemory objects are None."
 
         try:
@@ -235,9 +235,9 @@ class MixteraTorchDataset(IterableDataset):
             completion_array[self.worker_id] = 0
             self._res_str_args.worker_id = self.worker_id
 
-            for sample_chnk_idx, sample in self._client.stream_results(self._res_str_args):
+            for sample_chnk_idx, key_id, sample in self._client.stream_results(self._res_str_args):
                 status_array[self.worker_id] = sample_chnk_idx
-                yield sample
+                yield key_id, sample
 
             with self.completion_lock:
                 completion_array[self.worker_id] = 1

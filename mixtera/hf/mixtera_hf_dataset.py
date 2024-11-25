@@ -119,8 +119,8 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         datasets.logging.set_verbosity_debug()
         self.validate_state()
         idx = -1
-        for idx, sample in enumerate(MixteraTorchDataset.__iter__(self)):
-            yield (f"{self._dp_group_id}-{self._node_id}-{self.worker_id}-{idx}", {"text": sample})
+        for idx, key_id, sample in enumerate(MixteraTorchDataset.__iter__(self)):
+            yield (f"{self._dp_group_id}-{self._node_id}-{self.worker_id}-{idx}", {"text": sample, "key_id": key_id})
 
         logger.info(f"[{self._dp_group_id}-{self._node_id}-{self.worker_id}] Reached EOS after sample {idx}")
 
