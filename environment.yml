@@ -15,6 +15,7 @@ dependencies:
   - numpy==1.26.4 # Numpy 2.0 leads to a mypy crash: https://github.com/python/mypy/issues/17396
   - dill
   - pytorch::pytorch # TODO(#9): We need proper packaging. This should be an optional dependency
+  - pytorch::torchvision
   - huggingface::datasets
   - conda-forge::transformers
   - conda-forge::pyarrow
