@@ -46,6 +46,8 @@ class MixteraTorchDataset(IterableDataset):
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
         checkpoint_path: Path | None = None,
+        # Note that you most likely need a custom collate_fn if you use return_key_id with a PyTorch Dataloader
+        return_key_id: bool = False,
         execute_query: bool = True,
         _status_shm: shared_memory.SharedMemory | None = None,
         _comp_shm: shared_memory.SharedMemory | None = None,
@@ -61,6 +63,11 @@ class MixteraTorchDataset(IterableDataset):
         self._comp_shm = _comp_shm
         self._checkpoint_path = checkpoint_path
         self.requires_callback = False
+        self._return_key_id = return_key_id
+        if self._return_key_id:
+            self._yield_func = lambda key_id, sample: (key_id, sample)
+        else:
+            self._yield_func = lambda _, sample: sample
 
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
@@ -220,7 +227,7 @@ class MixteraTorchDataset(IterableDataset):
             logger.error(f"Error while fetching worker status from shm: {e}")
             return None
 
-    def __iter__(self) -> Generator[tuple[int, str], None, None]:
+    def __iter__(self) -> Generator[tuple[int, str] | str, None, None]:
         assert self._comp_shm is not None and self._status_shm is not None, "SharedMemory objects are None."
 
         try:
@@ -238,7 +245,7 @@ class MixteraTorchDataset(IterableDataset):
 
             for sample_chnk_idx, key_id, sample in self._client.stream_results(self._res_str_args):
                 status_array[self.worker_id] = sample_chnk_idx
-                yield key_id, sample
+                yield self._yield_func(key_id, sample)
 
             with self.completion_lock:
                 completion_array[self.worker_id] = 1

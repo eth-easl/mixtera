@@ -78,7 +78,7 @@ def test_filter_javascript(
     assert (
         len(result_samples) == expected_samples
     ), f"Got {len(result_samples)} samples instead of the expected 500 * {query_exec_args.nodes_per_group} = {expected_samples}!"
-    for _, sample in result_samples:
+    for sample in result_samples:
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
 
@@ -98,7 +98,7 @@ def test_filter_html(
     assert (
         len(result_samples) == expected_samples
     ), f"Got {len(result_samples)} samples instead of the expected 500 * {query_exec_args.nodes_per_group} = {expected_samples}!"
-    for _, sample in result_samples:
+    for sample in result_samples:
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
 
@@ -118,7 +118,7 @@ def test_filter_both(
     assert (
         len(result_samples) == expected_samples
     ), f"Got {len(result_samples)} samples instead of the expected 1000 * {query_exec_args.nodes_per_group} = {expected_samples}!"
-    for _, sample in result_samples:
+    for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
@@ -139,7 +139,7 @@ def test_filter_license(
     assert (
         len(result_samples) == expected_samples
     ), f"Got {len(result_samples)} samples instead of the expected 500 * {query_exec_args.nodes_per_group} = {expected_samples}!"
-    for _, sample in result_samples:
+    for sample in result_samples:
         assert 0 <= int(sample) < 1000, f"Sample {sample} should not appear"
 
 
@@ -174,7 +174,7 @@ def test_filter_license_and_html(
     assert (
         len(result_samples) == expected_samples
     ), f"Got {len(result_samples)} samples instead of the expected 750 * {query_exec_args.nodes_per_group} = {expected_samples}!"
-    for _, sample in result_samples:
+    for sample in result_samples:
         assert 0 <= int(sample) < 750, f"Sample {sample} should not appear"
 
 
