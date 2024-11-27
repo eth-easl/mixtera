@@ -18,6 +18,7 @@ class Mixture(ABC):
             chunk_size: the size of a chunk in number of instances
         """
         self.chunk_size = chunk_size
+        self.current_step = 0
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
@@ -58,6 +59,9 @@ class Mixture(ABC):
         Args:
             training_steps: The current training step of the model.
         """
+        assert self.current_step <= training_steps, "The mixture schedule is beyond the received feedback."
+
+        self.current_step = training_steps
         return True
 
     def stringified_mixture(self) -> dict[str, int]:
