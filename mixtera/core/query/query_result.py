@@ -4,6 +4,7 @@ import os
 import pickle
 import random
 from collections import defaultdict
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
@@ -51,7 +52,7 @@ class QueryResult:
         logger.debug("Creating chunker index.")
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
         logger.debug("Chunker index created, informing mixture and parsing metadata.")
-        self._mixture.inform(self._chunker_index)
+        self._mixture.process_index(self._chunker_index)
 
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc, results)
@@ -87,6 +88,7 @@ class QueryResult:
         if initial_setup:
             # This allows us to have a ID available whenever we switch to a None mixture.
             keys.update(set(self._chunker_index.keys()))
+            updated = True
 
         for key in sorted(keys):
             if key not in self._key_id_map:
@@ -95,6 +97,7 @@ class QueryResult:
                 updated = True
 
         if updated:
+            self._mixture.process_id_map(self._key_id_map)
             logger.debug(f"Updated key-id-map:\n{self._key_id_map}\n")
 
     def _persist_mixture_log(self) -> None:
@@ -256,7 +259,7 @@ class QueryResult:
         """
         with self._lock:
             self._mixture = mixture
-            self._mixture.inform(self._chunker_index)
+            self._mixture.process_index(self._chunker_index)
             self._update_key_id_map()
 
     def _chunk_generator(self) -> Generator[ResultChunk, tuple[Mixture, int], None]:
@@ -298,7 +301,7 @@ class QueryResult:
                 if previous_mixture != mixture:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     previous_mixture = mixture
-                    self._mixture_log.append((current_chunk_index, base_mixture))
+                    self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
                     self._persist_mixture_log()
 
                 chunk: ChunkerIndex = create_chunker_index()
