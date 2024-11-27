@@ -75,7 +75,7 @@ class MixtureSchedule(Mixture):
         # Default to the first mixture if current_step is before any start_step
         return self.schedule[0].mixture
 
-    def inform_training_step(self, training_steps: int) -> None:
+    def inform_training_step(self, training_steps: int) -> bool:
         """
         Updates the current mixture according to the received training step information.
 

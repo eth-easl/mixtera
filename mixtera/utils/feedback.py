@@ -21,5 +21,5 @@ def handle_mixture_schedule_update(
     if dp_group_id == 0 and node_id == 0:
         logger.debug(f"[DP Group {dp_group_id}][Node {node_id}] Training step is {training_steps}")
         success = torch_dataset._client.process_feedback(job_id, feedback)
-        if success:
-            logger.info("The mixture schedule is updated.")
+        if not success:
+            logger.error("The mixture schedule could not be updated.")
