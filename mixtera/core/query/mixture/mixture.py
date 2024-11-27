@@ -54,14 +54,14 @@ class Mixture(ABC):
 
     def inform_training_step(self, training_steps: int) -> bool:
         """
-        Updates the current mixture according to the received training step information.
+        Updates the current training step according to the received feedback.
+        The training steps can only increase.
 
         Args:
             training_steps: The current training step of the model.
         """
-        assert self.current_step <= training_steps, "The mixture schedule is beyond the received feedback."
-
-        self.current_step = training_steps
+        if self.current_step <= training_steps:
+            self.current_step = training_steps
         return True
 
     def stringified_mixture(self) -> dict[str, int]:
