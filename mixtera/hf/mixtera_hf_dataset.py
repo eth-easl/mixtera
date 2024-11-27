@@ -119,7 +119,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         datasets.logging.set_verbosity_debug()
         self.validate_state()
         idx = -1
-        for idx, key_id, sample in enumerate(MixteraTorchDataset.__iter__(self)):
+        for idx, (key_id, sample) in enumerate(MixteraTorchDataset.__iter__(self)):
             yield (f"{self._dp_group_id}-{self._node_id}-{self.worker_id}-{idx}", {"text": sample, "key_id": key_id})
 
         logger.info(f"[{self._dp_group_id}-{self._node_id}-{self.worker_id}] Reached EOS after sample {idx}")
@@ -139,7 +139,9 @@ class MixteraHFDataset(datasets.IterableDataset):
                 client, query, query_execution_args, result_streaming_args, checkpoint_path=checkpoint_path
             )
         )
-        self.info.features = datasets.Features({"text": datasets.Value(dtype="string")})
+        self.info.features = datasets.Features(
+            {"text": datasets.Value(dtype="string"), "key_id": datasets.Value(dtype="int32")}
+        )
         self._ex_iterable: _MixteraHFIterable
 
     def __iter__(self) -> Generator[Any | dict, Any, None]:

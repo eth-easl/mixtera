@@ -60,6 +60,7 @@ class MixteraTorchDataset(IterableDataset):
         self._status_shm = _status_shm
         self._comp_shm = _comp_shm
         self._checkpoint_path = checkpoint_path
+        self.requires_callback = False
 
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group

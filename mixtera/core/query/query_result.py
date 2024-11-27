@@ -83,7 +83,7 @@ class QueryResult:
         current_id = 0 if initial_setup else max(self._key_id_map.values()) + 1
 
         keys = set(self._mixture.mixture_in_rows().keys())
-        
+
         if initial_setup:
             # This allows us to have a ID available whenever we switch to a None mixture.
             keys.update(set(self._chunker_index.keys()))
@@ -93,10 +93,9 @@ class QueryResult:
                 self._key_id_map[key] = current_id
                 current_id += 1
                 updated = True
-        
+
         if updated:
             logger.debug(f"Updated key-id-map:\n{self._key_id_map}\n")
-
 
     def _persist_mixture_log(self) -> None:
         if self._query_log_dir is None:
@@ -419,7 +418,13 @@ class QueryResult:
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
                     self._persist_chunk_idx(current_chunk_index)
                     base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, self._key_id_map, mixture=None
+                        chunk,
+                        self.dataset_type,
+                        self.file_path,
+                        self.parsing_func,
+                        base_mixture.chunk_size,
+                        self._key_id_map,
+                        mixture=None,
                     )
             current_chunk_index += 1
 
