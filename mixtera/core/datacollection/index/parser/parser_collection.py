@@ -102,6 +102,24 @@ class FineWebMetadataParser(MetadataParser):
         self.add_metadata(sample_id=line_number, **metadata)
 
 
+class MsCocoParser(MetadataParser):
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="parity",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+            )
+        ]
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        parity = str(int(line_number % 3))
+
+        self.add_metadata(sample_id=line_number, parity=parity)
+
+
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
 
@@ -112,6 +130,7 @@ class MetadataParserFactory:
             "SLIM_PAJAMA": SlimPajamaMetadataParser,
             "IMAGENET_WEB_DATASET": ImagenetWebDatasetMetadataParser,
             "FINEWEB": FineWebMetadataParser,
+            "MSCOCO": MsCocoParser,
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
