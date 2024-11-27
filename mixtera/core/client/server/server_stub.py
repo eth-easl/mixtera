@@ -15,7 +15,6 @@ from mixtera.network.connection import ServerConnection
 
 class ServerStub(MixteraClient):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__()
         if len(args) == 1 and isinstance(args[0], tuple):
             host, port = args[0]
         elif len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], int):

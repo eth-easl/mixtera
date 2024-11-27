@@ -9,7 +9,7 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query, ResultChunk
-from mixtera.core.query.mixture import Mixture, MixtureKey
+from mixtera.core.query.mixture import Mixture
 from mixtera.network.client.client_feedback import ClientFeedback
 
 if TYPE_CHECKING:
@@ -103,9 +103,6 @@ class MixteraClient(ABC):
         from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
 
         return ServerStub(host, port)
-
-    def __init__(self) -> None:
-        self.id_to_key: dict[int, MixtureKey] = {}
 
     @abstractmethod
     def register_dataset(
@@ -227,7 +224,6 @@ class MixteraClient(ABC):
                 client=self,
                 args=args,
             )
-            self.id_to_key = {val: key for key, val in result_chunk._key_id_map.items()}
             yield from result_chunk
 
     @abstractmethod
