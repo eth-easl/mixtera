@@ -60,8 +60,7 @@ class Mixture(ABC):
         Args:
             training_steps: The current training step of the model.
         """
-        if self.current_step <= training_steps:
-            self.current_step = training_steps
+        self.current_step = max(self.current_step, training_steps)
         return True
 
     def stringified_mixture(self) -> dict[str, int]:
