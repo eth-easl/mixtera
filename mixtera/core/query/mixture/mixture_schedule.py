@@ -85,6 +85,7 @@ class MixtureSchedule(Mixture):
         assert self.current_step <= training_steps, "The mixture schedule is beyond the received feedback."
 
         self.current_step = training_steps
+        return True
 
     def __str__(self) -> str:
         """

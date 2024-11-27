@@ -249,6 +249,7 @@ class TestLocalStub(unittest.TestCase):
 
     def test_process_feedback(self):
         query = MagicMock(spec=Query)
+        query.job_id = "feedback_job"
         query.results = MagicMock(spec=QueryResult)
         chunk_size = 200
         schedule = MixtureSchedule(
@@ -259,7 +260,7 @@ class TestLocalStub(unittest.TestCase):
                 ScheduleEntry(200, StaticMixture(chunk_size, {MixtureKey({"any": ["some"]}): 1.0})),
             ],
         )
-
+        query.results._mixture = schedule
         self.local_stub._training_query_map["feedback_job"] = (None, query, schedule)
 
         # First sending feedbacks.

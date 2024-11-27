@@ -225,5 +225,5 @@ class LocalStub(MixteraClient):
         with self._training_query_map_lock:
             mixture = self._training_query_map[job_id][2]
             mixture.inform_training_step(received_feedback.training_steps)
-            self._get_query_result(job_id)._mixture.inform_training_step()
+            self._get_query_result(job_id)._mixture.inform_training_step(received_feedback.training_steps)
             return True
