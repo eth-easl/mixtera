@@ -10,15 +10,15 @@ from integrationtests.utils import (
     setup_func,
     setup_test_dataset,
 )
-from mixtera.core.client import MixteraClient
 from loguru import logger
+from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.client.server import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import Query
-from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, StaticMixture, MixtureSchedule, ScheduleEntry
+from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, MixtureSchedule, ScheduleEntry, StaticMixture
 from mixtera.network.client.client_feedback import ClientFeedback
 
 TEST_SERVER_INSTANCE_COUNT = 1000
@@ -206,28 +206,32 @@ def test_reproducibility(
     for i in range(1, REPRODUCIBILITY_ITERATIONS):
         assert result_list[i] == result_list[i - 1], "Results are not reproducible"
 
+
 def test_mixture_schedule(client: ServerStub, result_streaming_args: ResultStreamingArgs):
     job_id = f"server_feedback_test"
     query = Query.for_job(job_id).select(None)
 
     chunk_size = 10
     mixture_schedule = MixtureSchedule(
-            chunk_size,
-            [
-                ScheduleEntry(0, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 1.0})),
-                ScheduleEntry(100, StaticMixture(chunk_size, {MixtureKey({"language": ["HTML"]}): 1.0})),
-                ScheduleEntry(200, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 0.5, MixtureKey({"language": ["HTML"]}): 0.5})),
-            ],
-        )
-    
+        chunk_size,
+        [
+            ScheduleEntry(0, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 1.0})),
+            ScheduleEntry(100, StaticMixture(chunk_size, {MixtureKey({"language": ["HTML"]}): 1.0})),
+            ScheduleEntry(
+                200,
+                StaticMixture(
+                    chunk_size, {MixtureKey({"language": ["JavaScript"]}): 0.5, MixtureKey({"language": ["HTML"]}): 0.5}
+                ),
+            ),
+        ],
+    )
+
     query_execution_args = QueryExecutionArgs(
         mixture=mixture_schedule,
     )
 
     assert client.execute_query(query, query_execution_args)
-    logger.info(
-        f"Executed query for job {job_id} for mixture schedule."
-    )
+    logger.info(f"Executed query for job {job_id} for mixture schedule.")
 
     result_samples = []
 
@@ -248,7 +252,7 @@ def test_mixture_schedule(client: ServerStub, result_streaming_args: ResultStrea
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
     feedback = ClientFeedback(200)
-    client.process_feedback(job_id, feedback)    
+    client.process_feedback(job_id, feedback)
 
     result_samples = []
     for sample in client.stream_results(result_streaming_args):
@@ -260,6 +264,7 @@ def test_mixture_schedule(client: ServerStub, result_streaming_args: ResultStrea
     ), f"Got {len(result_samples)} samples instead of the expected {expected_samples}!"
 
     logger.info("Successfully trained with schedule.")
+
 
 def test_check_dataset_exists(client: ServerStub):
     assert client.check_dataset_exists("ldc_integrationtest_dataset"), "Dataset does not exist!"

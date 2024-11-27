@@ -50,15 +50,14 @@ class Mixture(ABC):
         the overall distribution in the QueryResult.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
-    
-    @abstractmethod
-    def inform_training_step(self, training_step: int) -> bool:
+
+    def inform_training_step(self, training_steps: int) -> bool:
         """
         Updates the current mixture according to the received training step information.
 
         Args:
             training_steps: The current training step of the model.
-        """ 
+        """
         return True
 
     def stringified_mixture(self) -> dict[str, int]:
