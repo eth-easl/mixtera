@@ -208,7 +208,7 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, args: ResultStreamingArgs) -> Generator[tuple[int, str], None, None]:
+    def stream_results(self, args: ResultStreamingArgs) -> Generator[tuple[int, int, str], None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:

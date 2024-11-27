@@ -56,6 +56,10 @@ class QueryResult:
         # Set up the auxiliary data structures
         self._meta = self._parse_meta(mdc, results)
 
+        # Setup global key => ID map for all IDs in the chunker index
+        self._key_id_map: dict[MixtureKey, int] = {}
+        self._update_key_id_map()
+
         # A process holding a QueryResult might fork (e.g., for dataloaders).
         # Hence, we need to store the locks etc in shared memory.
 
@@ -72,6 +76,26 @@ class QueryResult:
         self._query_log_dir = query_log_dir
         if query_log_dir is not None:
             query_log_dir.mkdir(exist_ok=True)
+
+    def _update_key_id_map(self) -> None:
+        updated = False
+        initial_setup = len(self._key_id_map.keys()) == 0
+        current_id = 0 if initial_setup else max(self._key_id_map.values()) + 1
+
+        keys = set(self._mixture.mixture_in_rows().keys())
+
+        if initial_setup:
+            # This allows us to have a ID available whenever we switch to a None mixture.
+            keys.update(set(self._chunker_index.keys()))
+
+        for key in sorted(keys):
+            if key not in self._key_id_map:
+                self._key_id_map[key] = current_id
+                current_id += 1
+                updated = True
+
+        if updated:
+            logger.debug(f"Updated key-id-map:\n{self._key_id_map}\n")
 
     def _persist_mixture_log(self) -> None:
         if self._query_log_dir is None:
@@ -233,6 +257,7 @@ class QueryResult:
         with self._lock:
             self._mixture = mixture
             self._mixture.inform(self._chunker_index)
+            self._update_key_id_map()
 
     def _chunk_generator(self) -> Generator[ResultChunk, tuple[Mixture, int], None]:
         """
@@ -351,7 +376,8 @@ class QueryResult:
                             self.file_path,
                             self.parsing_func,
                             base_mixture.chunk_size,
-                            mixture,
+                            self._key_id_map,
+                            mixture=mixture,
                         )
                     else:
                         logger.debug(
@@ -392,7 +418,13 @@ class QueryResult:
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
                     self._persist_chunk_idx(current_chunk_index)
                     base_mixture, target_chunk_index = yield ResultChunk(
-                        chunk, self.dataset_type, self.file_path, self.parsing_func, base_mixture.chunk_size, None
+                        chunk,
+                        self.dataset_type,
+                        self.file_path,
+                        self.parsing_func,
+                        base_mixture.chunk_size,
+                        self._key_id_map,
+                        mixture=None,
                     )
             current_chunk_index += 1
 

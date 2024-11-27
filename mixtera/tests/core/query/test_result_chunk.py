@@ -30,6 +30,7 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
+            {"key1": 0, "key2": 1, "key3": 2},
             None,
         )
 
@@ -52,6 +53,7 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
+            {"key1": 0, "key2": 1, "key3": 2},
             None,
         )
 
@@ -82,7 +84,8 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
-            None,
+            {MixtureKey({"property1": ["value1"]}): 0, MixtureKey({"property2": ["value2"]}): 1},
+            mixture=None,
         )
 
         mixture = result_chunk._infer_mixture()
@@ -97,7 +100,8 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
-            None,
+            {"key1": 0, "key2": 1, "key3": 2},
+            mixture=None,
         )
 
         result_chunk._per_window_mixture = True
@@ -105,12 +109,12 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._init_active_iterators = MagicMock()
         result_chunk._init_active_iterators.return_value = mock_iterators
         result_chunk._iterate_window_mixture = MagicMock()
-        result_chunk._iterate_window_mixture.return_value = iter(["sample1", "sample2"])
+        result_chunk._iterate_window_mixture.return_value = iter([(42, "sample1"), (43, "sample2")])
 
         results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_window_mixture.assert_called_once_with(mock_iterators)
-        self.assertEqual(results, [(0, "sample1"), (1, "sample2")])
+        self.assertEqual(results, [(0, 42, "sample1"), (1, 43, "sample2")])
 
     def test_iterate_samples_per_window_mixture_false(self):
         result_chunk = ResultChunk(
@@ -119,7 +123,8 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
-            None,
+            {"key1": 0, "key2": 1, "key3": 2},
+            mixture=None,
         )
 
         result_chunk._per_window_mixture = False
@@ -127,12 +132,12 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._init_active_iterators = MagicMock()
         result_chunk._init_active_iterators.return_value = mock_iterators
         result_chunk._iterate_overall_mixture = MagicMock()
-        result_chunk._iterate_overall_mixture.return_value = iter(["sample3", "sample4"])
+        result_chunk._iterate_overall_mixture.return_value = iter([(0, "sample3"), (1, "sample4")])
 
         results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_overall_mixture.assert_called_once_with(mock_iterators)
-        self.assertEqual(results, [(0, "sample3"), (1, "sample4")])
+        self.assertEqual(results, [(0, 0, "sample3"), (1, 1, "sample4")])
 
     def test_get_active_iterators_st(self):
         result_chunk = ResultChunk(
@@ -141,7 +146,8 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
-            None,
+            {"key1": 0, "key2": 1, "key3": 2},
+            mixture=None,
             prefetch_first_sample=False,
         )
         result_chunk._degree_of_parallelism = 1
@@ -165,7 +171,8 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
-            None,
+            {"key1": 0, "key2": 1, "key3": 2},
+            mixture=None,
             prefetch_first_sample=False,
         )
         result_chunk._degree_of_parallelism = 2  # Trigger the mt path
@@ -199,7 +206,8 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
-            None,
+            {"key1": 0, "key2": 1, "key3": 2},
+            mixture=None,
         )
         result_chunk._degree_of_parallelism = 4  # Trigger the mt path
         result_chunk._mixture = {"property1": 5, "property2": 5}
@@ -219,6 +227,7 @@ class TestResultChunk(unittest.TestCase):
             file_path_dict={1: "path/to/file1", 2: "path/to/file2"},
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
+            key_id_map={},
         )
 
         workload = [(1, 1, ["range1", "range2"]), (2, 2, ["range3"])]
@@ -257,6 +266,7 @@ class TestResultChunk(unittest.TestCase):
             file_path_dict={1: "path/to/file1", 2: "path/to/file2"},
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
+            key_id_map={},
         )
 
         # Collecting data from generator
@@ -284,6 +294,7 @@ class TestResultChunk(unittest.TestCase):
             file_path_dict={1: "path/to/file1", 2: "path/to/file2"},
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
+            key_id_map={},
         )
 
         with self.assertRaises(RuntimeError) as context:
@@ -310,6 +321,7 @@ class TestResultChunk(unittest.TestCase):
             file_path_dict={1: "path/to/file1", 2: "path/to/file2"},
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
+            key_id_map={},
         )
 
         # Collecting data from generator
@@ -322,6 +334,7 @@ class TestResultChunk(unittest.TestCase):
             file_path_dict={1: "path/to/file1", 2: "path/to/file2"},
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
+            key_id_map={"prop1": 0, "prop2": 1},
         )
 
         # Mocking the active_iterators
@@ -331,7 +344,7 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._get_element_counts = MagicMock(return_value=[("prop1", 2), ("prop2", 1)])
 
         # Expected data to be yielded from the iterator
-        expected_data = ["data1", "data3", "data2"]
+        expected_data = [(0, "data1"), (1, "data3"), (0, "data2")]
 
         # Collecting data from generator
         data_collected = list(result_chunk._iterate_window_mixture(active_iterators))
@@ -345,6 +358,7 @@ class TestResultChunk(unittest.TestCase):
             file_path_dict={1: "path/to/file1", 2: "path/to/file2", 3: "path/to/file3"},
             parsing_func_dict={1: MagicMock(), 2: MagicMock(), 3: MagicMock()},
             chunk_size=MagicMock(),
+            key_id_map={"prop1": 0, "prop2": 1, "prop3": 2},
         )
 
         # Mocking the active_iterators with more data to test multiple windows
@@ -361,7 +375,7 @@ class TestResultChunk(unittest.TestCase):
 
         # Expected data to be yielded from the iterator, considering the window size and distribution
         # Note the ordering here depends on the hash function.
-        expected_data = ["data1", "data6", "data4", "data2", "data3", "data5"]
+        expected_data = [(0, "data1"), (2, "data6"), (1, "data4"), (0, "data2"), (0, "data3"), (1, "data5")]
 
         # Collecting data from generator
         data_collected = list(result_chunk._iterate_window_mixture(active_iterators))
@@ -375,6 +389,7 @@ class TestResultChunk(unittest.TestCase):
             file_path_dict={1: "path/to/file1", 2: "path/to/file2", 3: "path/to/file3"},
             parsing_func_dict={1: MagicMock(), 2: MagicMock(), 3: MagicMock()},
             chunk_size=MagicMock(),
+            key_id_map={"prop1": 0, "prop2": 1, "prop3": 2},
         )
 
         # Mocking the active_iterators with different lengths to simulate varied data sources
@@ -395,7 +410,7 @@ class TestResultChunk(unittest.TestCase):
         ):
 
             # Expected data to be yielded from the iterator, considering the mocked shuffle (sort)
-            expected_data = ["data1", "data4", "data5", "data2", "data6", "data3"]
+            expected_data = [(0, "data1"), (1, "data4"), (2, "data5"), (0, "data2"), (2, "data6"), (0, "data3")]
 
             # Collecting data from generator
             data_collected = list(result_chunk._iterate_overall_mixture(active_iterators))
@@ -416,7 +431,8 @@ class TestResultChunk(unittest.TestCase):
             mock_file_path_dict,
             mock_parsing_func_dict,
             self.chunk_size,
-            mock_mixture,
+            {},
+            mixture=mock_mixture,
         )
         result_chunk._window_size = 10  # Assuming a window size of 10 for this test
 
@@ -441,20 +457,23 @@ class TestResultChunk(unittest.TestCase):
             self.file_path_dict,
             self.parsing_func_dict,
             self.chunk_size,
-            None,
+            {"key1": 0, "key2": 1, "key3": 2},
+            mixture=None,
         )
 
         result_chunk._samples_to_skip = 2
         result_chunk._per_window_mixture = False
-        mock_iterators = [("property2", iter(["sample1", "sample2", "sample3", "sample4"]))]
+        mock_iterators = [("property2", iter([(42, "sample1"), (43, "sample2"), (42, "sample3"), (44, "sample4")]))]
         result_chunk._init_active_iterators = MagicMock(return_value=mock_iterators)
         result_chunk._iterate_overall_mixture = MagicMock()
-        result_chunk._iterate_overall_mixture.return_value = iter(["sample1", "sample2", "sample3", "sample4"])
+        result_chunk._iterate_overall_mixture.return_value = iter(
+            [(42, "sample1"), (43, "sample2"), (42, "sample3"), (44, "sample4")]
+        )
 
         results = list(result_chunk._iterate_samples())
 
         result_chunk._iterate_overall_mixture.assert_called_once_with(mock_iterators)
-        self.assertEqual(results, [(2, "sample3"), (3, "sample4")])
+        self.assertEqual(results, [(2, 42, "sample3"), (3, 44, "sample4")])
 
 
 if __name__ == "__main__":
