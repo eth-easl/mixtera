@@ -303,7 +303,7 @@ class QueryResult:
 
         previous_mixture = None
         base_mixture, target_chunk_index = yield
-        # We alllow to re-query the latest chunk after not being able to generate one,
+        # We allow to re-query the latest chunk after not being able to generate one,
         # e.g., due to dynamic mixture changes.
         # However, after a certain limit, we raise a StopIteration to avoid deadlocks.
         no_success_counter = 0
