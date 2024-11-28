@@ -44,7 +44,7 @@ class DynamicMixture(Mixture):
             {
                 "mixture": "dynamic_mixture",
                 "chunk_size": self.chunk_size,
-                "algo": str(self.mixing_alg),
+                "algo": str(self._mixing_alg),
                 "current_mixture": str(self._current_mixture),
             }
         )
