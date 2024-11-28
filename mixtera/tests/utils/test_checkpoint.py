@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, patch
 
 from mixtera.hf import MixteraHFDataset
 from mixtera.torch import MixteraTorchDataset
-from mixtera.utils.checkpoint import _get_mixtera_hf_dataset_or_client_from_iterabledataset, handle_mixtera_checkpoint
+from mixtera.utils.checkpoint import handle_mixtera_checkpoint
+from mixtera.utils.dataset_utils import _get_mixtera_hf_dataset_or_client_from_iterabledataset
 
 
 class TestCheckpointHelpers(unittest.TestCase):

@@ -38,16 +38,25 @@ class QueryResult:
     """
 
     def __init__(
-        self, mdc: MixteraDataCollection, results: pa.Table, mixture: Mixture, query_log_dir: Path | None = None
+        self,
+        mdc: MixteraDataCollection,
+        results: pa.Table,
+        mixture: Mixture,
+        query_log_dir: Path | None = None,
+        stop_on_none: bool = True,
     ) -> None:
         """
         Args:
             mdc (MixteraDataCollection): The MixteraDataCollection object.
             results (pl.DataFrame): The results of the query.
             mixture: A mixture object defining the mixture to be reflected in the chunks.
+            stop_on_none: Typically, the QueryResult is consumed by the ChunkDistributor,
+              in which case we allow multiple tries to generate a chunk (e.g., with a new mixture).
+              However some consumers (e.g., tests) need to iterate once over all data and be done with it.
         """
         # Prepare chunker index for iterable chunking
         self._mixture = mixture
+        self.stop_on_none = stop_on_none
         logger.debug("Instantiating QueryResult..")
         logger.debug("Creating chunker index.")
         self._chunker_index: ChunkerIndex = QueryResult._create_chunker_index(results)
@@ -294,15 +303,25 @@ class QueryResult:
 
         previous_mixture = None
         base_mixture, target_chunk_index = yield
+        # We allow to re-query the latest chunk after not being able to generate one,
+        # e.g., due to dynamic mixture changes.
+        # However, after a certain limit, we raise a StopIteration to avoid deadlocks.
+        no_success_counter = 0
 
         while True:
+            if no_success_counter > 10:
+                logger.error("Hard-stopping chunk generation after 10 unsucessful tries.")
+                return
+
             mixture = base_mixture.mixture_in_rows()
+            chunk_success = False
             if mixture:
                 if previous_mixture != mixture:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     previous_mixture = mixture
                     self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
                     self._persist_mixture_log()
+                    self._update_key_id_map()
 
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
@@ -311,9 +330,10 @@ class QueryResult:
 
                 # Sort to guarantee same handling for semantically same mixtures
                 for mixture_key in sorted(remaining_sizes.keys()):
-                    logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+                    # logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
 
-                    while remaining_sizes[mixture_key] > 0:
+                    progress_made = True
+                    while remaining_sizes[mixture_key] > 0 and progress_made:
                         progress_made = False
                         for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
                             if mixture_key == component_key:
@@ -334,9 +354,9 @@ class QueryResult:
                                     ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
                                     remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
 
-                                    logger.debug(
-                                        f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
-                                    )
+                                    # logger.debug(
+                                    #    f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
+                                    # )
 
                                     # Merge the component chunk into the main chunk
                                     for dataset_id, files in component_chunk.items():
@@ -354,24 +374,24 @@ class QueryResult:
                                     progress_made = True
 
                                     if remaining_sizes[mixture_key] == 0:
-                                        logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
+                                        # logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
                                         break  # Do not consider another iterator if we're done
 
                                 except StopIteration:
-                                    logger.debug("Continuing on StopIteration")
                                     continue
 
                         # No matching components found or all are exhausted, unable to complete the chunk
                         if not progress_made:
                             logger.debug("Did not make progress, unable to complete chunk.")
-                            return
 
                 # Check if we have enough data for all mixture keys
                 # TODO(#111): Make it possible to support best effort here.
                 # Right now, if we cannot fulfill the mixture for that chunk, we stop.
                 if all(size == 0 for size in remaining_sizes.values()):
+                    chunk_success = True
+                    no_success_counter = 0
                     if current_chunk_index == target_chunk_index:
-                        logger.debug("Yielding a chunk.")
+                        logger.debug(f"Yielding chunk {current_chunk_index}.")
                         self._persist_chunk_idx(current_chunk_index)
                         base_mixture, target_chunk_index = yield ResultChunk(
                             defaultdict_to_dict(chunk),
@@ -389,7 +409,8 @@ class QueryResult:
                 # Not enough data to complete the chunk, end generation
                 else:
                     logger.debug("Not enough data, ending chunk generation")
-                    return
+                    no_success_counter += 1
+                    yield None
             else:
                 if previous_mixture is not None or current_chunk_index == 0:
                     logger.debug("Obtained new None mixture.")
@@ -411,10 +432,9 @@ class QueryResult:
                     except StopIteration:
                         # The current key is exhausted; will need to produce chunks from the next available key
                         empty_key_idx.add(chunker_index_keys_idx)
-
+                chunk_success = True
                 if chunk is None:
-                    # There were no more available chunks; we mark the end of this query result with StopIteration
-                    return
+                    return  # No need to yield None, if ArbitraryMixture is exhausted, we will never be able to continue
 
                 # Chunk has been successfully generated
                 if current_chunk_index == target_chunk_index:
@@ -429,7 +449,9 @@ class QueryResult:
                         self._key_id_map,
                         mixture=None,
                     )
-            current_chunk_index += 1
+
+            if chunk_success:
+                current_chunk_index += 1
 
     @property
     def chunk_size(self) -> int:
@@ -468,9 +490,20 @@ class QueryResult:
                 ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
 
             self._num_returns_gen += 1
-            return self._generator.send((self._mixture, chunk_target_index))
+            result = self._generator.send((self._mixture, chunk_target_index))
+            if result is None:
+                # In case we reach end of chunks (for now),
+                # next time (e.g. due to updated mixture) we try again to fetch the same ID.
+                with self._index.get_lock():
+                    self._index.get_obj().value -= 1
+
+                if self.stop_on_none:
+                    raise StopIteration
+
+            return result
 
     # SERIALIZATION ##
+
     def __getstate__(self) -> dict:
         logger.debug("Starting to pickle a Queryresult.")
         state = self.__dict__.copy()

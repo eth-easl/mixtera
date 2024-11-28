@@ -10,6 +10,7 @@ from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query.chunk_distributor import ChunkDistributor
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
+from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.network_utils import (
     read_float,
     read_int,
@@ -289,6 +290,16 @@ class MixteraServer:
         success = True
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
+    async def _process_feedback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        training_steps = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        feedback = ClientFeedback(training_steps)
+
+        self._local_stub.process_feedback(job_id, feedback)
+
+        success = True
+        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+
     async def _dispatch_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
         Dispatches client requests to the appropriate handlers based on the task ID.
@@ -332,6 +343,8 @@ class MixteraServer:
                 await self._checkpoint_completed(reader, writer)
             elif task == ServerTask.RESTORE_CHECKPOINT:
                 await self._restore_checkpoint(reader, writer)
+            elif task == ServerTask.RECEIVE_FEEDBACK:
+                await self._process_feedback(reader, writer)
             else:
                 logger.error(f"Client sent unsupport task {task}")
 

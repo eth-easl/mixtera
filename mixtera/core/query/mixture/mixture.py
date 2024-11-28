@@ -19,6 +19,7 @@ class Mixture(ABC):
             chunk_size: the size of a chunk in number of instances
         """
         self.chunk_size = chunk_size
+        self.current_step = 0
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
@@ -51,6 +52,17 @@ class Mixture(ABC):
         the overall distribution in the QueryResult.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
+
+    def inform_training_step(self, training_steps: int) -> bool:
+        """
+        Updates the current training step according to the received feedback.
+        The training steps can only increase.
+
+        Args:
+            training_steps: The current training step of the model.
+        """
+        self.current_step = max(self.current_step, training_steps)
+        return True
 
     def stringified_mixture(self) -> dict[str, int]:
         """
