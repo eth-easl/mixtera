@@ -1,19 +1,23 @@
 # pylint: disable=attribute-defined-outside-init
 
 import asyncio
+import io
 import struct
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call
 
 import dill
+import numpy as np
 from mixtera.network.network_utils import (
     read_bytes,
     read_float,
     read_int,
+    read_numpy_array,
     read_pickeled_object,
     read_utf8_string,
     write_float,
     write_int,
+    write_numpy_array,
     write_pickeled_object,
     write_utf8_string,
 )
@@ -144,3 +148,72 @@ class TestNetworkUtils(unittest.IsolatedAsyncioTestCase):
         self.reader.read = AsyncMock(side_effect=[b"\x00\x00\x00\x04", b""])
         with self.assertRaises(ConnectionError):
             await read_float(self.reader, self.timeout)
+
+    async def test_write_numpy_array_none(self):
+        array = None
+        id_bytes = 1
+        size_bytes = 4
+        await write_numpy_array(array, id_bytes, size_bytes, self.writer)
+        # Check that the writer.write was called with the correct flag
+        expected_flag = (0).to_bytes(id_bytes, byteorder="big", signed=False)
+        self.writer.write.assert_called_with(expected_flag)
+        self.writer.drain.assert_awaited_once()
+
+    async def test_write_numpy_array_non_none(self):
+        array = np.array([1, 2, 3], dtype=np.float32)
+        id_bytes = 1
+        size_bytes = 4
+        await write_numpy_array(array, id_bytes, size_bytes, self.writer)
+        # Check that the writer.write was called with the correct flag and data
+        calls = self.writer.write.call_args_list
+        # First call writes the not_none_flag
+        not_none_flag = (1).to_bytes(id_bytes, byteorder="big", signed=False)
+        self.assertEqual(calls[0][0][0], not_none_flag)
+        # Next, it writes the data length and data bytes
+        # We can extract the data length from the next write
+        bytes_io = io.BytesIO()
+        np.save(bytes_io, array, allow_pickle=False)
+        data_bytes = bytes_io.getvalue()
+        data_length_bytes = len(data_bytes).to_bytes(size_bytes, byteorder="big", signed=False)
+        self.assertEqual(calls[1][0][0], data_length_bytes)
+        self.assertEqual(calls[2][0][0], data_bytes)
+        self.writer.drain.assert_awaited_once()
+
+    async def test_read_numpy_array_none(self):
+        id_bytes = 1
+        size_bytes = 4
+        not_none_flag = (0).to_bytes(id_bytes, byteorder="big", signed=False)
+        self.reader.read = AsyncMock(side_effect=[not_none_flag])
+        result = await read_numpy_array(id_bytes, size_bytes, self.reader)
+        self.assertIsNone(result)
+        self.reader.read.assert_awaited_once()
+
+    async def test_read_numpy_array_non_none(self):
+        array = np.array([1, 2, 3], dtype=np.float32)
+        id_bytes = 1
+        size_bytes = 4
+        not_none_flag = (1).to_bytes(id_bytes, byteorder="big", signed=False)
+        bytes_io = io.BytesIO()
+        np.save(bytes_io, array, allow_pickle=False)
+        data_bytes = bytes_io.getvalue()
+        data_length_bytes = len(data_bytes).to_bytes(size_bytes, byteorder="big", signed=False)
+
+        # Combine all the data that needs to be sent
+        data_to_send = not_none_flag + data_length_bytes + data_bytes
+        data_to_send_index = 0  # Keep track of how much data has been "read"
+
+        async def read_side_effect(num_bytes):
+            nonlocal data_to_send_index
+            await asyncio.sleep(0)
+            if data_to_send_index >= len(data_to_send):
+                return b""  # No more data to read
+
+            chunk = data_to_send[data_to_send_index : data_to_send_index + num_bytes]
+            data_to_send_index += len(chunk)
+            return chunk
+
+        self.reader = AsyncMock()
+        self.reader.read = AsyncMock(side_effect=read_side_effect)
+
+        result = await read_numpy_array(id_bytes, size_bytes, self.reader)
+        np.testing.assert_array_equal(result, array)

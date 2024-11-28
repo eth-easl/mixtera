@@ -16,6 +16,7 @@ from mixtera.network.network_utils import (
     read_utf8_string,
     write_float,
     write_int,
+    write_numpy_array,
     write_pickeled_object,
     write_utf8_string,
 )
@@ -661,10 +662,10 @@ class ServerConnection:
         else:
             logger.info("Successfully restored from checkpoint at server.")
 
-    def receive_feedback(self, job_id: str, feedback: "ClientFeedback") -> bool:
+    def receive_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         return run_async_until_complete(self._receive_feedback(job_id, feedback))
 
-    async def _receive_feedback(self, job_id: str, feedback: "ClientFeedback") -> bool:
+    async def _receive_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
@@ -676,5 +677,7 @@ class ServerConnection:
         # Announce the training steps and the job id.
         await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
         await write_int(feedback.training_steps, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_numpy_array(feedback.losses, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
+        await write_numpy_array(feedback.counts, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
 
         return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))

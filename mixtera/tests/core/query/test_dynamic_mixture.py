@@ -84,7 +84,7 @@ class TestDynamicMixture(unittest.TestCase):
         self.mixing_alg.process_losses.return_value = new_mixture_np
         with patch("mixtera.core.query.mixture.dynamic_mixture.StaticMixture") as mock_static_mixture:
             instance = mock_static_mixture.return_value
-            self.dynamic_mixture.process_losses(losses, counts)
+            self.dynamic_mixture._process_losses(losses, counts)
             self.mixing_alg.process_losses.assert_called_once_with(losses, counts)
             mock_static_mixture.assert_called_once_with(
                 self.chunk_size, {MixtureKey({"key1": ["val1"]}): 0.4, MixtureKey({"key2": ["val2"]}): 0.6}
@@ -99,7 +99,7 @@ class TestDynamicMixture(unittest.TestCase):
         counts = np.array([100, 200])
         self.mixing_alg.process_losses.return_value = None
         with patch("mixtera.core.query.mixture.dynamic_mixture.StaticMixture") as mock_static_mixture:
-            self.dynamic_mixture.process_losses(losses, counts)
+            self.dynamic_mixture._process_losses(losses, counts)
             self.mixing_alg.process_losses.assert_called_once_with(losses, counts)
             # StaticMixture should not be called since there's no update
             mock_static_mixture.assert_not_called()
@@ -116,7 +116,7 @@ class TestDynamicMixture(unittest.TestCase):
         self.mixing_alg.process_losses.return_value = np.array([0.5])
         # Should raise an AssertionError since the mixture sum is not close to 1
         with self.assertRaises(AssertionError):
-            self.dynamic_mixture.process_losses(losses, counts)
+            self.dynamic_mixture._process_losses(losses, counts)
 
     def test_end_to_end_dynamic_update(self):
         # Set up initial mixture
@@ -145,7 +145,7 @@ class TestDynamicMixture(unittest.TestCase):
 
         with patch("mixtera.core.query.mixture.dynamic_mixture.StaticMixture") as mock_static_mixture:
             instance_step1 = mock_static_mixture.return_value
-            self.dynamic_mixture.process_losses(losses_step1, counts_step1)
+            self.dynamic_mixture._process_losses(losses_step1, counts_step1)
             # Ensure process_losses called with correct parameters
             self.mixing_alg.process_losses.assert_called_with(losses_step1, counts_step1)
             # Ensure StaticMixture created with new mixture
@@ -166,7 +166,7 @@ class TestDynamicMixture(unittest.TestCase):
         counts_step2 = np.array([150, 250, 350])
 
         with patch("mixtera.core.query.mixture.dynamic_mixture.StaticMixture") as mock_static_mixture:
-            self.dynamic_mixture.process_losses(losses_step2, counts_step2)
+            self.dynamic_mixture._process_losses(losses_step2, counts_step2)
             # Ensure process_losses called with correct parameters
             self.mixing_alg.process_losses.assert_called_with(losses_step2, counts_step2)
             # StaticMixture should not be called since there's no update
@@ -182,7 +182,7 @@ class TestDynamicMixture(unittest.TestCase):
 
         with patch("mixtera.core.query.mixture.dynamic_mixture.StaticMixture") as mock_static_mixture:
             instance_step3 = mock_static_mixture.return_value
-            self.dynamic_mixture.process_losses(losses_step3, counts_step3)
+            self.dynamic_mixture._process_losses(losses_step3, counts_step3)
             # Ensure process_losses called with correct parameters
             self.mixing_alg.process_losses.assert_called_with(losses_step3, counts_step3)
             # Ensure StaticMixture created with new mixture

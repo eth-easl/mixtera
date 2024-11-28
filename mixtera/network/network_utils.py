@@ -1,8 +1,10 @@
 import asyncio
+import io
 import struct
 from typing import Any, Optional
 
 import dill
+import numpy as np
 
 
 async def read_bytes(num_bytes: int, reader: asyncio.StreamReader, timeout: float = 10.0) -> Optional[bytearray]:
@@ -79,7 +81,7 @@ async def write_bytes_obj(
         await writer.drain()
 
 
-async def read_bytes_obj(size_bytes: int, reader: asyncio.StreamReader) -> bytes | None:
+async def read_bytes_obj(size_bytes: int, reader: asyncio.StreamReader, timeout: float = 10.0) -> bytes | None:
     """
     Asynchronously reads a bytes object or None from the stream reader.
 
@@ -101,10 +103,10 @@ async def read_bytes_obj(size_bytes: int, reader: asyncio.StreamReader) -> bytes
         The size header is expected to be in big-endian format.
     """
 
-    if (obj_size := await read_int(size_bytes, reader)) is not None:
+    if (obj_size := await read_int(size_bytes, reader, timeout=timeout)) is not None:
         if obj_size == 0:
             return None
-        return await read_bytes(obj_size, reader)
+        return await read_bytes(obj_size, reader, timeout=timeout)
     return None
 
 
@@ -248,3 +250,32 @@ async def read_float(reader: asyncio.StreamReader, timeout: float = 10.0) -> Opt
         # Unpack the bytes into a float using big-endian format
         return struct.unpack(">d", bytes_data)[0]
     return None
+
+
+async def write_numpy_array(
+    array: np.ndarray | None, id_bytes: int, size_bytes: int, writer: asyncio.StreamWriter, drain: bool = True
+) -> None:
+    if array is None:
+        await write_int(0, id_bytes, writer, drain=drain)
+        return
+
+    await write_int(1, id_bytes, writer, drain=False)
+
+    bytes_io = io.BytesIO()
+    np.save(bytes_io, array, allow_pickle=False)
+    await write_bytes_obj(bytes_io.getvalue(), size_bytes, writer, drain=False)
+
+    if drain:
+        await writer.drain()
+
+
+async def read_numpy_array(
+    id_bytes: int, size_bytes: int, reader: asyncio.StreamReader, timeout: float = 10.0
+) -> np.ndarray | None:
+    not_none_flag = await read_int(id_bytes, reader, timeout=timeout)
+    if not_none_flag == 0:
+        return None
+    result = await read_bytes_obj(size_bytes, reader, timeout=timeout)
+    assert result is not None
+    array = np.load(io.BytesIO(result), allow_pickle=False)
+    return array

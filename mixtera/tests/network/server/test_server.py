@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
+import numpy as np
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.server import MixteraServer
 from mixtera.network.server_task import ServerTask
@@ -235,3 +236,47 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
         self.server._local_stub._get_query_chunk_distributor.assert_called_once_with(job_id)
         self.assertIn(job_id, self.server._chunk_distributor_map)
         mock_write_int.assert_awaited_once_with(int(success), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+
+    @patch("mixtera.network.server.server.read_utf8_string")
+    @patch("mixtera.network.server.server.read_int")
+    @patch("mixtera.network.server.server.read_numpy_array")
+    @patch("mixtera.network.server.server.write_int")
+    async def test_process_feedback(
+        self,
+        mock_write_int,
+        mock_read_numpy_array,
+        mock_read_int,
+        mock_read_utf8_string,
+    ):
+        """Test the _process_feedback method of MixteraServer."""
+
+        # Setup mocks
+        job_id = "test_job_id"
+        training_steps = 100
+        losses = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+        counts = np.array([1, 2, 3], dtype=np.int32)
+
+        mock_read_utf8_string.return_value = job_id
+        mock_read_int.return_value = training_steps
+        mock_read_numpy_array.side_effect = [losses, counts]
+
+        self.server._local_stub.process_feedback = MagicMock()
+
+        mock_reader = MagicMock()
+        mock_writer = create_mock_writer()
+
+        # Call the method
+        await self.server._process_feedback(mock_reader, mock_writer)
+
+        # Assertions
+        mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+        self.assertEqual(mock_read_numpy_array.await_count, 2)
+        self.server._local_stub.process_feedback.assert_called_once()
+        args = self.server._local_stub.process_feedback.call_args[0]
+        self.assertEqual(args[0], job_id)
+        feedback = args[1]
+        self.assertEqual(feedback.training_steps, training_steps)
+        np.testing.assert_array_equal(feedback.losses, losses)
+        np.testing.assert_array_equal(feedback.counts, counts)
+        mock_write_int.assert_awaited_once_with(int(True), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)

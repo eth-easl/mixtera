@@ -3,23 +3,30 @@ from typing import Any
 from loguru import logger
 from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.utils.dataset_utils import _recover_mixtera_dataset
+from mixtera.utils.utils import to_numpy_array
 
 
-def handle_mixture_schedule_update(
-    dataloader_or_dataset: Any, training_steps: int, dp_group_id: int, node_id: int
+def handle_mixtera_feedback(
+    dataloader_or_dataset: Any, training_steps: int, losses: Any, counts: Any, dp_rank: int, tp_rank: int
 ) -> None:
     assert training_steps >= 0, "Invalid number of training steps are received."
+
+    if dp_rank != 0 or tp_rank != 0:
+        return
+
+    # Every pipeline stage with dp=0 and tp=0 will send this,
+    # however, only the output stage will send the current steps with losses (if any).
+    # Sending the same step multiple times is not harmful, and this is the easiest solution.
 
     if (torch_dataset := _recover_mixtera_dataset(dataloader_or_dataset)) is None:
         return
 
-    # Creating the feedback object and sending to the server.
-    feedback = ClientFeedback(training_steps)
+    losses_np = None if losses is None else to_numpy_array(losses)
+    counts_np = None if counts is None else to_numpy_array(losses)
+
+    feedback = ClientFeedback(training_steps=training_steps, losses=losses_np, counts=counts_np)
     job_id = torch_dataset._query.job_id
 
-    # Updating the schedule according to the feedback of the first node.
-    if dp_group_id == 0 and node_id == 0:
-        logger.debug(f"[DP Group {dp_group_id}][Node {node_id}] Training step is {training_steps}")
-        success = torch_dataset._client.process_feedback(job_id, feedback)
-        if not success:
-            logger.error("The mixture schedule could not be updated.")
+    success = torch_dataset._client.process_feedback(job_id, feedback)
+    if not success:
+        logger.error("Error while procesisng client feedback.")

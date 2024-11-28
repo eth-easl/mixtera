@@ -213,7 +213,5 @@ class LocalStub(MixteraClient):
 
         with self._training_query_map_lock:
             logger.debug(f"Received feedback: {feedback}")
-            mixture = self._training_query_map[job_id][2]
-            mixture.inform_training_step(feedback.training_steps)
-            self._get_query_result(job_id)._mixture.inform_training_step(feedback.training_steps)
+            self._get_query_result(job_id)._mixture.process_client_feedback(feedback)
             return True
