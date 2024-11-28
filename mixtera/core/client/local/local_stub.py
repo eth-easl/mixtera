@@ -38,9 +38,6 @@ class LocalStub(MixteraClient):
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
         self._query_cache = QueryCache(self.directory / "querycache", self._mdc)
 
-        self.feedback_queue_map: dict[str, list[ClientFeedback]] = {}
-        self._feedback_queue_map_lock = mp.Lock()
-
     def register_dataset(
         self,
         identifier: str,
@@ -214,16 +211,9 @@ class LocalStub(MixteraClient):
             logger.warning(f"There is no job with the id: {job_id}!")
             return False
 
-        with self._feedback_queue_map_lock:
-            if job_id not in self.feedback_queue_map:
-                self.feedback_queue_map[job_id] = [feedback]
-            else:
-                self.feedback_queue_map[job_id].append(feedback)
-
-            received_feedback = self.feedback_queue_map[job_id].pop(0)
-
         with self._training_query_map_lock:
+            logger.debug(f"Received feedback: {feedback}")
             mixture = self._training_query_map[job_id][2]
-            mixture.inform_training_step(received_feedback.training_steps)
-            self._get_query_result(job_id)._mixture.inform_training_step(received_feedback.training_steps)
+            mixture.inform_training_step(feedback.training_steps)
+            self._get_query_result(job_id)._mixture.inform_training_step(feedback.training_steps)
             return True

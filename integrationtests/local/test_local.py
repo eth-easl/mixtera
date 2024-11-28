@@ -195,70 +195,53 @@ def test_reproducibility(
 
 
 def test_mixture_schedule(client: MixteraClient):
-    job_id = f"local_feedback_test_0_workers"
+    job_id = "client_feedback_test"
     query = Query.for_job(job_id).select(None)
 
     chunk_size = 10
     mixture_schedule = MixtureSchedule(
         chunk_size,
         [
-            ScheduleEntry(0, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 1.0})),
-            ScheduleEntry(100, StaticMixture(chunk_size, {MixtureKey({"language": ["HTML"]}): 1.0})),
             ScheduleEntry(
-                200,
-                StaticMixture(
-                    chunk_size, {MixtureKey({"language": ["JavaScript"]}): 0.5, MixtureKey({"language": ["HTML"]}): 0.5}
-                ),
+                0, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"], "license": ["CC"]}): 1.0})
             ),
+            ScheduleEntry(100, StaticMixture(chunk_size, {MixtureKey({"language": ["HTML"]}): 1.0})),
+            ScheduleEntry(200, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 1.0})),
         ],
     )
 
-    query_execution_args = QueryExecutionArgs(
-        mixture=mixture_schedule,
-        dp_groups=1,
-        nodes_per_group=1,
-        num_workers=0,
-    )
+    query_execution_args = QueryExecutionArgs(mixture=mixture_schedule)
+    result_streaming_args = ResultStreamingArgs(job_id)
+    assert client.execute_query(query, query_execution_args)
+    logger.info(f"Executed query for job {job_id} for mixture schedule.")
 
-    client.execute_query(query, query_execution_args)
-    logger.info("Executed query.")
-    # Retriving the first set of chunks.
-    worker_iterator = client._stream_result_chunks(job_id, 0, 0, 0)
-    try:
-        while True:
-            chunk = next(worker_iterator)
-            assert chunk._mixture[MixtureKey({"language": ["JavaScript"]})] == 10, "Non Javascript mixture is selected"
-    except StopIteration:
-        pass
+    result_samples = []
 
-    # Sending the feedback and seeing the mixture update.
-    feedback = ClientFeedback(100)
-    client.process_feedback(job_id, feedback)
-    worker_iterator = client._stream_result_chunks(job_id, 0, 0, 0)
+    for _, sample in client.stream_results(result_streaming_args):
+        result_samples.append(sample)
+        assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
-    assert mixture_schedule.current_step == 100, "The training step information did not propagate."
-    try:
-        while True:
-            chunk = next(worker_iterator)
-            assert chunk._mixture[MixtureKey({"language": ["HTML"]})] == 10, "Non HTML mixture is selected"
-    except StopIteration:
-        pass
+    assert len(result_samples) == EXPECTED_JS_SAMPLES // 2, f"got {len(result_samples)} != {EXPECTED_JS_SAMPLES // 2}"
 
-    # Sending the feedback and seeing the mixture update.
-    feedback = ClientFeedback(200)
-    client.process_feedback(job_id, feedback)
-    worker_iterator = client._stream_result_chunks(job_id, 0, 0, 0)
+    client.process_feedback(job_id, ClientFeedback(100))
 
-    assert mixture_schedule.current_step == 200, "The training step information did not propagate."
-    try:
-        while True:
-            chunk = next(worker_iterator)
-            assert chunk._mixture[MixtureKey({"language": ["HTML"]})] == 5, "Wrong amount of HTML data is selected."
-            assert (
-                chunk._mixture[MixtureKey({"language": ["Javascript"]})] == 5
-            ), "Wrong amount of Javascript data is selected."
-    except StopIteration:
-        pass
+    result_samples = []
+    for _, sample in client.stream_results(result_streaming_args):
+        result_samples.append(sample)
+        assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
+
+    assert len(result_samples) == EXPECTED_HTML_SAMPLES, f"got {len(result_samples)} != {EXPECTED_HTML_SAMPLES}"
+
+    client.process_feedback(job_id, ClientFeedback(200))
+
+    result_samples = []
+    for _, sample in client.stream_results(result_streaming_args):
+        result_samples.append(sample)
+        assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
+
+    assert len(result_samples) == EXPECTED_JS_SAMPLES // 2, f"got {len(result_samples)} != {EXPECTED_JS_SAMPLES // 2}"
+
+    logger.info("Successfully trained with schedule.")
 
 
 def test_client_chunksize(
@@ -271,7 +254,6 @@ def test_client_chunksize(
     test_filter_unknown_license(client, query_exec_args, result_streaming_args)
     test_filter_license_and_html(client, query_exec_args, result_streaming_args)
     test_reproducibility(client, query_exec_args, result_streaming_args)
-    test_mixture_schedule(client)
 
 
 def test_chunk_readers(dir: Path) -> None:
@@ -305,6 +287,8 @@ def test_chunk_readers(dir: Path) -> None:
                         f"per_window_mixture={per_window_mixture}, window_size={window_size}"
                     )
                     test_client_chunksize(client, query_exec_args, result_streaming_args)
+
+    test_mixture_schedule(client)
 
     print("Successfully ran chunk reader tests!")
 

@@ -58,6 +58,7 @@ class ChunkDistributor:
         self._nodes_per_group = nodes_per_group
 
         self._query_result = query_result
+        self._query_result.stop_on_none = False
         self._constructor_pid = os.getpid()
 
         self._chunk_cache: dict[int, dict[int, SerializedResultChunk | ResultChunk]] = {}
@@ -142,11 +143,12 @@ class ChunkDistributor:
             # Potentially useful debug log
             # logger.debug(
             #    f"Fetching chunk {next_chunk_id} for dp_group {dp_group} /
-            #  # node {node_id} requested by worker {worker_id} from QueryResult."
-            # )
+            #  # node {node_id} requested by worker {worker_id} from QueryResult.")
 
             # Fetch new chunk from query result and put into cache
-            chunk_to_return = next(self._query_result)
+            if (chunk_to_return := next(self._query_result)) is None:
+                raise StopIteration
+
             serialized_chunk = dill.dumps(chunk_to_return)
             self._chunk_cache[dp_group][next_chunk_id] = serialized_chunk
             self._chunk_usage[dp_group][next_chunk_id] = 0
@@ -155,10 +157,8 @@ class ChunkDistributor:
                 chunk_to_return = serialized_chunk
         else:
             # Potentially useful debug log
-            # logger.debug(
-            #    f"Fetching chunk {next_chunk_id} for dp_group {dp_group} /
-            #     node {node_id} requested by worker {worker_id} from cache."
-            # )
+            # logger.debug(f"Fetching chunk {next_chunk_id} for dp_group {dp_group} /
+            #  node {node_id} requested by worker {worker_id} from cache.")
             # Load from cache
             chunk_to_return = self._chunk_cache[dp_group][next_chunk_id]  # always serialized in cache
             if deserialize:
@@ -171,10 +171,8 @@ class ChunkDistributor:
         if self._chunk_usage[dp_group][next_chunk_id] >= self._nodes_per_group:
             if (chunk_to_delete := next_chunk_id - self._num_workers) >= 0:
                 # Potentially useful debug log
-                # logger.debug(
-                #    f"[{os.getpid()}/{threading.get_native_id()}] Purging chunk {chunk_to_delete} "
-                #    + f"for dp_group {dp_group} from cache."
-                # )
+                # logger.debug(f"[{os.getpid()}/{threading.get_native_id()}]
+                # Purging chunk {chunk_to_delete} " + f"for dp_group {dp_group} from cache.")
                 if chunk_to_delete in self._chunk_cache[dp_group]:
                     # Delete the previous chunk as all nodes have now received the next chunk
                     # In regular runs, this if is always True.
@@ -185,6 +183,8 @@ class ChunkDistributor:
         # We don't increment by 1 but instead by num_workers, because otherwise
         # we get an overlap between workers after the first chunk
         self._next_chunk[dp_group][node_id][worker_id] += self._num_workers
+        # logger.debug(f"Next chunk for dp_group {dp_group} / node {node_id}
+        # now is {self._next_chunk[dp_group][node_id][worker_id]}.")
         return chunk_to_return
 
     def _stream_chunks_for_worker(

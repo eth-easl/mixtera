@@ -208,60 +208,51 @@ def test_reproducibility(
 
 
 def test_mixture_schedule(client: ServerStub, result_streaming_args: ResultStreamingArgs):
-    job_id = f"server_feedback_test"
+    job_id = "server_feedback_test"
     query = Query.for_job(job_id).select(None)
 
     chunk_size = 10
     mixture_schedule = MixtureSchedule(
         chunk_size,
         [
-            ScheduleEntry(0, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 1.0})),
-            ScheduleEntry(100, StaticMixture(chunk_size, {MixtureKey({"language": ["HTML"]}): 1.0})),
             ScheduleEntry(
-                200,
-                StaticMixture(
-                    chunk_size, {MixtureKey({"language": ["JavaScript"]}): 0.5, MixtureKey({"language": ["HTML"]}): 0.5}
-                ),
+                0, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"], "license": ["CC"]}): 1.0})
             ),
+            ScheduleEntry(100, StaticMixture(chunk_size, {MixtureKey({"language": ["HTML"]}): 1.0})),
+            ScheduleEntry(200, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 1.0})),
         ],
     )
 
-    query_execution_args = QueryExecutionArgs(
-        mixture=mixture_schedule,
-    )
-
+    query_execution_args = QueryExecutionArgs(mixture=mixture_schedule)
+    result_streaming_args = ResultStreamingArgs(job_id)
     assert client.execute_query(query, query_execution_args)
     logger.info(f"Executed query for job {job_id} for mixture schedule.")
 
     result_samples = []
 
-    for sample in client.stream_results(result_streaming_args):
+    for _, sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
-
-    for _, sample in result_samples:
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
-    feedback = ClientFeedback(100)
-    client.process_feedback(job_id, feedback)
+    assert len(result_samples) == EXPECTED_JS_SAMPLES // 2, f"got {len(result_samples)} != {EXPECTED_JS_SAMPLES // 2}"
+
+    client.process_feedback(job_id, ClientFeedback(100))
 
     result_samples = []
-    for sample in client.stream_results(result_streaming_args):
+    for _, sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
-
-    for _, sample in result_samples:
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
-    feedback = ClientFeedback(200)
-    client.process_feedback(job_id, feedback)
+    assert len(result_samples) == EXPECTED_HTML_SAMPLES, f"got {len(result_samples)} != {EXPECTED_HTML_SAMPLES}"
+
+    client.process_feedback(job_id, ClientFeedback(200))
 
     result_samples = []
-    for sample in client.stream_results(result_streaming_args):
+    for _, sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
+        assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
-    expected_samples = EXPECTED_HTML_SAMPLES + EXPECTED_JS_SAMPLES // 2
-    assert (
-        len(result_samples) == expected_samples
-    ), f"Got {len(result_samples)} samples instead of the expected {expected_samples}!"
+    assert len(result_samples) == EXPECTED_JS_SAMPLES // 2, f"got {len(result_samples)} != {EXPECTED_JS_SAMPLES // 2}"
 
     logger.info("Successfully trained with schedule.")
 
@@ -314,6 +305,7 @@ def test_server(server_dir: Path) -> None:
                         )
                         test_rdc_chunksize_tunnel(client, query_exec_args, result_streaming_args)
 
+    test_mixture_schedule(client, result_streaming_args)
     test_list_datasets(client)
     test_add_property(client)
     test_remove_dataset(client)
@@ -331,7 +323,6 @@ def test_rdc_chunksize_tunnel(
     test_filter_unknown_license(client, query_exec_args, result_streaming_args)
     test_filter_license_and_html(client, query_exec_args, result_streaming_args)
     test_reproducibility(client, query_exec_args, result_streaming_args)
-    test_mixture_schedule(client, result_streaming_args)
 
 
 def main() -> None:
