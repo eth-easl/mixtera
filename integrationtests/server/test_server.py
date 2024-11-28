@@ -10,6 +10,7 @@ from integrationtests.utils import (
     setup_func,
     setup_test_dataset,
 )
+from loguru import logger
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.client.server import ServerStub
@@ -17,7 +18,8 @@ from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.processing.execution_mode import ExecutionMode
 from mixtera.core.query import Query
-from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, StaticMixture
+from mixtera.core.query.mixture import ArbitraryMixture, MixtureKey, MixtureSchedule, ScheduleEntry, StaticMixture
+from mixtera.network.client.client_feedback import ClientFeedback
 
 TEST_SERVER_INSTANCE_COUNT = 1000
 TEST_SERVER_FILE_COUNT = 5
@@ -205,6 +207,56 @@ def test_reproducibility(
         assert result_list[i] == result_list[i - 1], "Results are not reproducible"
 
 
+def test_mixture_schedule(client: ServerStub, result_streaming_args: ResultStreamingArgs):
+    job_id = "server_feedback_test"
+    query = Query.for_job(job_id).select(None)
+
+    chunk_size = 10
+    mixture_schedule = MixtureSchedule(
+        chunk_size,
+        [
+            ScheduleEntry(
+                0, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"], "license": ["CC"]}): 1.0})
+            ),
+            ScheduleEntry(100, StaticMixture(chunk_size, {MixtureKey({"language": ["HTML"]}): 1.0})),
+            ScheduleEntry(200, StaticMixture(chunk_size, {MixtureKey({"language": ["JavaScript"]}): 1.0})),
+        ],
+    )
+
+    query_execution_args = QueryExecutionArgs(mixture=mixture_schedule)
+    result_streaming_args = ResultStreamingArgs(job_id)
+    assert client.execute_query(query, query_execution_args)
+    logger.info(f"Executed query for job {job_id} for mixture schedule.")
+
+    result_samples = []
+
+    for _, _, sample in client.stream_results(result_streaming_args):
+        result_samples.append(sample)
+        assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
+
+    assert len(result_samples) == EXPECTED_JS_SAMPLES // 2, f"got {len(result_samples)} != {EXPECTED_JS_SAMPLES // 2}"
+
+    client.process_feedback(job_id, ClientFeedback(100))
+
+    result_samples = []
+    for _, _, sample in client.stream_results(result_streaming_args):
+        result_samples.append(sample)
+        assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
+
+    assert len(result_samples) == EXPECTED_HTML_SAMPLES, f"got {len(result_samples)} != {EXPECTED_HTML_SAMPLES}"
+
+    client.process_feedback(job_id, ClientFeedback(200))
+
+    result_samples = []
+    for _, _, sample in client.stream_results(result_streaming_args):
+        result_samples.append(sample)
+        assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
+
+    assert len(result_samples) == EXPECTED_JS_SAMPLES // 2, f"got {len(result_samples)} != {EXPECTED_JS_SAMPLES // 2}"
+
+    logger.info("Successfully trained with schedule.")
+
+
 def test_check_dataset_exists(client: ServerStub):
     assert client.check_dataset_exists("ldc_integrationtest_dataset"), "Dataset does not exist!"
 
@@ -253,6 +305,7 @@ def test_server(server_dir: Path) -> None:
                         )
                         test_rdc_chunksize_tunnel(client, query_exec_args, result_streaming_args)
 
+    test_mixture_schedule(client, result_streaming_args)
     test_list_datasets(client)
     test_add_property(client)
     test_remove_dataset(client)
