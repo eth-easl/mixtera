@@ -217,7 +217,7 @@ def test_mixture_schedule(client: MixteraClient):
 
     result_samples = []
 
-    for _, sample in client.stream_results(result_streaming_args):
+    for _, _, sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
@@ -226,7 +226,7 @@ def test_mixture_schedule(client: MixteraClient):
     client.process_feedback(job_id, ClientFeedback(100))
 
     result_samples = []
-    for _, sample in client.stream_results(result_streaming_args):
+    for _, _, sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
         assert int(sample) % 2 == 1, f"Sample {sample} should not appear for HTML"
 
@@ -235,7 +235,7 @@ def test_mixture_schedule(client: MixteraClient):
     client.process_feedback(job_id, ClientFeedback(200))
 
     result_samples = []
-    for _, sample in client.stream_results(result_streaming_args):
+    for _, _, sample in client.stream_results(result_streaming_args):
         result_samples.append(sample)
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
 
