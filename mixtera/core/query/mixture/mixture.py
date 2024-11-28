@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+import numpy as np
 from mixtera.core.query.mixture.mixture_key import MixtureKey
 
 if TYPE_CHECKING:
@@ -44,7 +45,7 @@ class Mixture(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def inform(self, chunker_index: "ChunkerIndex") -> None:
+    def process_index(self, chunker_index: "ChunkerIndex") -> None:
         """
         Function that is called to inform the mixture class about the overall chunker index, i.e.,
         the overall distribution in the QueryResult.
@@ -56,3 +57,10 @@ class Mixture(ABC):
         Helper fuction that returns the current mixture representation using string keys.
         """
         return {str(key): val for key, val in self.mixture_in_rows().items()}
+
+    def process_id_map(self, key_id_map: dict[MixtureKey, int]) -> None:
+        del key_id_map
+
+    def process_losses(self, losses: np.ndarray, counts: np.ndarray) -> None:
+        del losses
+        del counts

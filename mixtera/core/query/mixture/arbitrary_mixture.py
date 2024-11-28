@@ -22,5 +22,5 @@ class ArbitraryMixture(Mixture):
         """String representation of this mixture object."""
         return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}}}'
 
-    def inform(self, chunker_index: "ChunkerIndex") -> None:
+    def process_index(self, chunker_index: "ChunkerIndex") -> None:
         del chunker_index

@@ -71,5 +71,5 @@ class HierarchicalStaticMixture(Mixture):
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._mixture
 
-    def inform(self, chunker_index: "ChunkerIndex") -> None:
+    def process_index(self, chunker_index: "ChunkerIndex") -> None:
         del chunker_index
