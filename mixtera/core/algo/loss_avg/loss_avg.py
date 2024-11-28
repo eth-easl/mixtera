@@ -1,5 +1,3 @@
-
-
 import numpy as np
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
 
@@ -29,7 +27,7 @@ class SimpleAveragingAlgorithm(DynamicMixingAlgorithm):
         avg_losses[mask] = self.losses[mask] / self.counts[mask]
 
         # Compute mixture coefficients proportional to average losses
-        total_avg_loss = np.sum(avg_losses[mask])
+        total_avg_loss: float = np.sum(avg_losses[mask])
         if total_avg_loss == 0:
             # If total average loss is zero, assign equal mixture weights to domains with counts > 0
             mixture = np.zeros_like(self.losses, dtype=np.float32)
@@ -40,7 +38,7 @@ class SimpleAveragingAlgorithm(DynamicMixingAlgorithm):
             mixture[mask] = avg_losses[mask] / total_avg_loss
 
         # Ensure mixture coefficients sum to 1
-        mixture_sum = np.sum(mixture)
+        mixture_sum: float = np.sum(mixture)
         if mixture_sum != 0:
             mixture /= mixture_sum
 

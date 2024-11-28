@@ -76,7 +76,7 @@ class DynamicMixture(Mixture):
 
             self._informed_alg = True
 
-    def process_losses(self, losses: np.ndarray, counts: np.ndarray) -> None:
+    def _process_losses(self, losses: np.ndarray, counts: np.ndarray) -> None:
         assert self._key_id_map is not None and self._id_key_map is not None
         assert self._informed_alg
 

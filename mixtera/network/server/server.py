@@ -14,6 +14,7 @@ from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.network_utils import (
     read_float,
     read_int,
+    read_numpy_array,
     read_pickeled_object,
     read_utf8_string,
     write_bytes_obj,
@@ -292,8 +293,10 @@ class MixteraServer:
 
     async def _process_feedback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        training_steps = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        feedback = ClientFeedback(training_steps)
+        feedback = ClientFeedback()
+        feedback.training_steps = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        feedback.losses = await read_numpy_array(NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, reader)
+        feedback.counts = await read_numpy_array(NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, reader)
 
         self._local_stub.process_feedback(job_id, feedback)
 

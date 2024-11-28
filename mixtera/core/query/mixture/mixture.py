@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from mixtera.core.query.mixture.mixture_key import MixtureKey
+from mixtera.network.client.client_feedback import ClientFeedback
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.index import ChunkerIndex
@@ -53,7 +54,18 @@ class Mixture(ABC):
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
-    def inform_training_step(self, training_steps: int) -> bool:
+    def process_client_feedback(self, feedback: ClientFeedback) -> None:
+        """
+        Updates the mixture according to the received feedback.
+
+        Args:
+            feedback: The received feedback from trainig.
+        """
+        self._update_training_step(feedback.training_steps)
+        if feedback.counts is not None and feedback.losses is not None:
+            self._process_losses(feedback.losses, feedback.counts)
+
+    def _update_training_step(self, training_steps: int) -> None:
         """
         Updates the current training step according to the received feedback.
         The training steps can only increase.
@@ -62,7 +74,6 @@ class Mixture(ABC):
             training_steps: The current training step of the model.
         """
         self.current_step = max(self.current_step, training_steps)
-        return True
 
     def stringified_mixture(self) -> dict[str, int]:
         """
@@ -73,6 +84,6 @@ class Mixture(ABC):
     def process_id_map(self, key_id_map: dict[MixtureKey, int]) -> None:
         del key_id_map
 
-    def process_losses(self, losses: np.ndarray, counts: np.ndarray) -> None:
+    def _process_losses(self, losses: np.ndarray, counts: np.ndarray) -> None:
         del losses
         del counts
