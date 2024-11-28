@@ -83,6 +83,7 @@ class ResultChunk:
         file_path_dict: dict[int, str],
         parsing_func_dict: dict[int, Callable[[str], str]],
         chunk_size: int,
+        key_id_map: dict[MixtureKey, int],
         mixture: Optional[dict[MixtureKey, int]] = None,
         prefetch_first_sample: bool = True,
     ) -> None:
@@ -96,13 +97,19 @@ class ResultChunk:
         self._mixture = mixture
         self._samples_to_skip = 0  # TODO(#87): Supply this from server to skip first samples to support interruptions.
         self._prefetch_first_sample = prefetch_first_sample  # TODO(#147): Make this configurable for a query.
+        self._key_id_map = key_id_map
+
+        assert set(self._result_index.keys()) <= self._key_id_map.keys(), (
+            f"result_index keys = {self._result_index.keys()}"
+            + f"are not a subset of key_id_map = {self._key_id_map.keys()}"
+        )
 
         self._server_connection: ServerConnection | None = None
         self._degree_of_parallelism: int = 1
         self._per_window_mixture: bool = False
         self._window_size: int = 128
 
-        self._iterator: Iterator[tuple[int, str]] | None = None
+        self._iterator: Iterator[tuple[int, int, str]] | None = None
 
     def configure_result_streaming(self, client: "MixteraClient", args: "ResultStreamingArgs") -> None:
         """
@@ -161,6 +168,16 @@ class ResultChunk:
                 logger.debug("Mixture is not defined or empty but required. Infer mixture from the result index.")
             self._mixture = self._infer_mixture()
 
+        if self._mixture is not None:
+            if any(value == 0 for value in self._mixture.values()):
+                logger.warning(
+                    "Note that you have zero-valued keys in your mixture."
+                    + "This might be the result of choosing a chunk size "
+                    + "that is potentially too small for your data distribution."
+                )
+                logger.warning(f"This is the mixture:\n\n{self._mixture}\n\n")
+                self._mixture = {key: value for key, value in self._mixture.items() if value > 0}
+
         # If we have a mixture, ensure that the mixture supports the chunk
         if self._mixture is not None and (not self._mixture.keys() == self._result_index.keys()):
             raise RuntimeError(
@@ -173,7 +190,7 @@ class ResultChunk:
     def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
 
-    def _iterate_samples(self) -> Iterator[tuple[int, str]]:
+    def _iterate_samples(self) -> Iterator[tuple[int, int, str]]:
         """
         Iterate over the samples in the result index. This function yields the samples in the correct mixture
         and window size.
@@ -187,8 +204,8 @@ class ResultChunk:
         else:
             yield_source = self._iterate_overall_mixture(active_iterators)
 
-        for idx, sample in enumerate(islice(yield_source, self._samples_to_skip, None)):
-            yield idx + self._samples_to_skip, sample
+        for idx, (key_id, sample) in enumerate(islice(yield_source, self._samples_to_skip, None)):
+            yield idx + self._samples_to_skip, key_id, sample
 
     def _init_active_iterators(self) -> dict[MixtureKey, Iterator[str]]:
         """
@@ -286,7 +303,7 @@ class ResultChunk:
             for queue, proc in processes_to_remove:
                 processes.remove((queue, proc))
 
-    def _iterate_window_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[str]:
+    def _iterate_window_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[tuple[int, str]]:
         """
         Iterate over the samples in the result index with a windowed mixture. This function yields the samples
         in the correct mixture withing a window.
@@ -322,7 +339,7 @@ class ResultChunk:
                         continue
                     try:
                         # Yield the next sample from the iterator
-                        yield next(active_iterators[property_key])
+                        yield self._key_id_map[property_key], next(active_iterators[property_key])
                         nothing_yielded_window = False
                         processed_items[property_key] += 1
                         items_yielded += 1
@@ -337,7 +354,7 @@ class ResultChunk:
                 if nothing_yielded_window:
                     break
 
-    def _iterate_overall_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[str]:
+    def _iterate_overall_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[tuple[int, str]]:
         """
         Iterate over the samples in the result index with an overall mixture. This function yields the samples
         in the overall correct mixture.
@@ -355,7 +372,7 @@ class ResultChunk:
                 if property_name in deleted_keys:
                     continue
                 try:
-                    yield next(active_iterators[property_name])
+                    yield self._key_id_map[property_name], next(active_iterators[property_name])
                 except StopIteration:
                     deleted_keys.add(property_name)
 
@@ -519,11 +536,11 @@ class ResultChunk:
         self._iterator = self._iterate_samples()
         return self
 
-    def __next__(self) -> Iterator[str]:
+    def __next__(self) -> tuple[int, int, str]:
         if self._iterator is None:
             raise StopIteration
         try:
-            return next(self._iterator)  # type: ignore  # MyPy seems to expect SupportsNext[Iterator[str]] here
+            return next(self._iterator)
         except StopIteration:
             self._iterator = None
             raise

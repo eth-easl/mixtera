@@ -48,7 +48,7 @@ def test_filter_javascript(
     assert (
         len(result_samples) == EXPECTED_JS_SAMPLES
     ), f"Got {len(result_samples)} samples instead of the expected {EXPECTED_JS_SAMPLES}!"
-    for _, sample in result_samples:
+    for _, _, sample in result_samples:
         assert int(sample) % TEST_LOCAL_FRACTION_MULTIPLIER == 0, f"Sample {sample} should not appear for JavaScript"
 
 
@@ -70,7 +70,7 @@ def test_filter_html(
     assert (
         len(result_samples) == EXPECTED_HTML_SAMPLES
     ), f"Got {len(result_samples)} samples instead of the expected {EXPECTED_HTML_SAMPLES}!"
-    for _, sample in result_samples:
+    for _, _, sample in result_samples:
         assert int(sample) % TEST_LOCAL_FRACTION_MULTIPLIER == 1, f"Sample {sample} should not appear for HTML"
 
 
@@ -96,7 +96,7 @@ def test_filter_both(
     assert (
         len(result_samples) == TEST_LOCAL_INSTANCE_COUNT
     ), f"Got {len(result_samples)} samples instead of the expected {TEST_LOCAL_INSTANCE_COUNT}!"
-    for _, sample in result_samples:
+    for _, _, sample in result_samples:
         assert 0 <= int(sample) < TEST_LOCAL_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
@@ -118,7 +118,7 @@ def test_filter_license(
     assert (
         len(result_samples) == TEST_LOCAL_INSTANCE_COUNT // 2
     ), f"Got {len(result_samples)} samples instead of the expected {TEST_LOCAL_INSTANCE_COUNT}!"
-    for _, sample in result_samples:
+    for _, _, sample in result_samples:
         assert 0 <= int(sample) < TEST_LOCAL_INSTANCE_COUNT, f"Sample {sample} should not appear"
 
 
@@ -156,7 +156,7 @@ def test_filter_license_and_html(
     assert (
         len(result_samples) == expected_samples
     ), f"Got {len(result_samples)} samples instead of the expected {expected_samples}!"
-    for _, sample in result_samples:
+    for _, _, sample in result_samples:
         assert 0 <= int(sample) < expected_samples, f"Sample {sample} should not appear"
 
 

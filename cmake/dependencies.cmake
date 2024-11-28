@@ -43,7 +43,7 @@ FetchContent_Declare(
   GIT_TAG v2.3
 )
 FetchContent_MakeAvailable(indicators)
-target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant)
+target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant -Wno-sign-compare)
 
 ################### abseil ####################
 
@@ -102,3 +102,5 @@ if(NOT ARROW_PYTHON_LIB)
 else()
     message(STATUS "Found Arrow Python library: ${ARROW_PYTHON_LIB}")
 endif()
+
+target_compile_options(Arrow::arrow_shared INTERFACE -Wno-redundant-move)

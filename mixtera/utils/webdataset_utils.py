@@ -33,9 +33,11 @@ def decode(sample: dict[str, Any], decode_image: bool = True) -> dict[str, Any]:
             value = stream.read()
             sample[key] = int(value.decode("utf-8"))
         elif extension in ["jpg", "png", "ppm", "pgm", "pbm", "pnm"] and decode_image:
-            import PIL.Image  # pylint: disable=import-outside-toplevel
+            import torchvision.transforms.functional as F  # pylint: disable=import-outside-toplevel
+            from PIL import Image  # pylint: disable=import-outside-toplevel
 
-            sample[key] = PIL.Image.open(stream)
+            image = Image.open(stream)
+            sample[key] = F.to_tensor(image)
         elif extension == "json":
             import json  # pylint: disable=import-outside-toplevel
 

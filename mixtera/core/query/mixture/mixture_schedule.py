@@ -51,14 +51,14 @@ class MixtureSchedule(Mixture):
         """
         return self.current_mixture.mixture_in_rows()
 
-    def inform(self, chunker_index: "ChunkerIndex") -> None:
+    def process_index(self, chunker_index: "ChunkerIndex") -> None:
         """
         Inform the current mixture about the overall chunker index.
 
         Args:
             chunker_index: The chunker index.
         """
-        self.current_mixture.inform(chunker_index)
+        self.current_mixture.process_index(chunker_index)
 
     @property
     def current_mixture(self) -> Mixture:
