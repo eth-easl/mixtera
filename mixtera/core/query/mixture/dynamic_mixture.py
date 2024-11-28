@@ -52,9 +52,7 @@ class DynamicMixture(Mixture):
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._current_mixture.mixture_in_rows()
 
-    def process_index(
-        self, chunker_index: "ChunkerIndex"
-    ) -> None:  # TODO(MaxiBoether): Think about whether we want to rename the regualr inform
+    def process_index(self, chunker_index: "ChunkerIndex") -> None:
         # Mostly useful for using an InferringMixture as the initial mixture.
         self._current_mixture.process_index(chunker_index)
 
