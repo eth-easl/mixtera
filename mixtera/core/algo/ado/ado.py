@@ -179,6 +179,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Compute cumulative counts per domain
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
 
+        # TODO(MaxiBoether): We could use a multiprocessing Pool here.
         for k in range(num_domains):
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
@@ -312,7 +313,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         Updates the data policy pi_k(t) based on rho_k(t) and the moving average pī_k(t-1).
         """
-        assert self.mu_k is not None and self.pi_t is not None
+        assert self.mu_k is not None
+        assert self.pi_t is not None
 
         self.pi_bar_t_minus_1 = self.pi_bar_t_minus_1 if self.pi_bar_t_minus_1 is not None else self.mu_k.copy()
 
