@@ -1,0 +1,406 @@
+import numpy as np
+from scipy.optimize import minimize
+from typing import Optional
+
+from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
+
+class AdoDynamicMixing(DynamicMixingAlgorithm):
+    """
+    Adaptive Data Optimization (ADO) dynamic mixing algorithm implementation.
+
+    This class implements the ADO algorithm for dynamically adjusting mixture coefficients
+    based on domain-specific scaling laws fitted to the accumulated losses and counts.
+    """
+
+    def __init__(
+        self,
+        variant: str = 'vanilla',
+        gamma1: float = 0.1,
+        gamma2: float = 0.9,
+        s: float = 0.5,
+        delta_min: float = 0.01,
+        scaling_law_update_interval: int = 1000,
+        subsampling_interval: int = 10,
+        ignore_initial_steps: int = 500,
+    ) -> None:
+        """
+        Initializes the ADO dynamic mixing algorithm.
+
+        Args:
+            variant: The variant of the algorithm ('vanilla', 'adjusted_v1', 'adjusted_v2').
+            gamma1: The smoothing factor for the credit assignment score h(t).
+            gamma2: The smoothing factor for the data policy pi(t).
+            s: The exponent used in computing the credit assignment score lambda_k(t).
+            delta_min: The minimum probability assigned to each domain that has been sampled at least once.
+            scaling_law_update_interval: The number of steps between each scaling law parameter update.
+            subsampling_interval: For subsampling during scaling law fitting
+            ignore_initial_steps: Number of initial steps to ignore before fitting scaling laws.
+        """
+        super().__init__()
+        self.variant = variant
+        self.gamma1 = gamma1
+        self.gamma2 = gamma2
+        self.s = s
+        self.delta_min = delta_min
+        self.scaling_law_update_interval = scaling_law_update_interval
+        self.ignore_initial_steps = ignore_initial_steps
+        self.subsampling_interval = subsampling_interval
+
+        # Initialize per-domain data structures
+        self.total_steps = 0  # Total number of steps processed
+        self.last_mixture_id_step = 0  # Step when the last mixture ID was updated
+
+        # Initialize h(t), pi(t), and moving averages
+        self.h_t = None  # Credit assignment score h_k(t)
+        self.pi_t = None  # Data policy pi_k(t)
+        self.pi_t_minus_1 = None  # Previous data policy pi_k(t-1)
+        self.pi_bar_t_minus_1 = None  # Previous moving average pī_k(t-1)
+        self.scaling_law_params = None  # Scaling law parameters [log_beta_k, log_epsilon_k, alpha_k]
+
+        # Keep track of per-step counts and losses
+        self.per_step_counts = []  # List of counts per step per domain
+        self.per_step_losses = []  # List of losses per step per domain
+
+        # Initial prior distribution mu_k (from initial_mixture)
+        self.mu_k = None  # Will be set based on self.initial_mixture
+
+    def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
+        """
+        Computes the updated mixture coefficients based on the accumulated losses and counts.
+
+        Args:
+            updated_at_client: A boolean flag indicating whether a new mixture has been received
+                            at the client (used for handling mixture update delays).
+
+        Returns:
+            A numpy array representing the new mixture coefficients, or None if no update is available.
+        """
+        self.total_steps += 1
+
+        num_domains = len(self.counts)
+
+        # Initialize mu_k if not set
+        if self.mu_k is None:
+            # Use the initial mixture as the prior
+            self.mu_k = self.initial_mixture.copy()
+            assert np.isclose(1, np.sum(self.mu_k))
+            assert len(self.mu_k) == num_domains
+
+        # **Warm-up Handling**
+        if self.total_steps <= self.ignore_initial_steps:
+            # During warm-up, we use the initial mixture and do not update it
+            return None
+
+        # Initialize h_t if not set
+        self.h_t = self.h_t if self.h_t is not None else self.mu_k.copy()
+
+        # Update h(t) based on the variant and whether the mixture was updated at the client
+        if self.variant == 'vanilla':
+            # Update h(t) every step using the last calculated pi(t)
+            self.update_h_t()
+        elif self.variant == 'adjusted_v1':
+            # h(t) remains identical until we receive an update based on a new mixture_id
+            if updated_at_client:
+                self.update_h_t()
+        elif self.variant == 'adjusted_v2':
+            # Similar to adjusted_v1, but adjust the moving average to not let h(t-1) dominate
+            if updated_at_client:
+                steps_elapsed = self.total_steps - self.last_mixture_id_step
+                self.update_h_t(elapsed_steps=steps_elapsed)
+                self.last_mixture_id_step = self.total_steps
+        else:
+            raise ValueError(f"Unknown variant '{self.variant}' specified.")
+
+        # Fit scaling laws immediately after the warm-up period ends, and then at intervals
+        if self.total_steps == self.ignore_initial_steps + 1:
+            self.fit_scaling_laws()
+        elif (self.total_steps > self.ignore_initial_steps and
+            (self.total_steps - self.ignore_initial_steps - 1) % self.scaling_law_update_interval == 0):
+            self.fit_scaling_laws()
+
+        assert self.scaling_law_params is not None
+
+        # Compute the derivative of loss with respect to n for each domain
+        dL_dn = self.compute_loss_derivative()
+
+        # Compute the preference distribution rho_k(t)
+        self.compute_rho_t(dL_dn)
+
+        # Update the data policy pi_k(t)
+        self.update_pi_t()
+
+        # Enforce minimum probability delta_min for domains that have been sampled at least once
+        self.enforce_min_probability()
+
+        # Update pī_k(t)
+        self.update_pi_bar_t()
+
+        return self.pi_t
+
+    def update_h_t(self, elapsed_steps: int = 1) -> None:
+        """
+        Updates the credit assignment score h_k(t) based on the data policy pi_k(t).
+
+        Args:
+            elapsed_steps: Number of steps elapsed since the last update (used in variant 'adjusted_v2').
+        """
+        self.pi_t_minus_1 = self.pi_t_minus_1 if self.pi_t_minus_1 is not None else self.mu_k.copy()
+
+        gamma1 = self.gamma1
+
+        if self.variant == 'adjusted_v2' and elapsed_steps > 1:
+            # Adjust gamma1 to account for the fact that h(t-1) remained constant over elapsed_steps
+            gamma1 = 1 - (1 - gamma1) ** elapsed_steps
+
+        self.h_t = gamma1 * self.pi_t_minus_1 + (1 - gamma1) * self.h_t
+
+    def fit_scaling_laws(self) -> None:
+        """
+        Fits scaling laws to the accumulated counts and losses for each domain.
+        """
+        num_domains = len(self.counts)
+        self.scaling_law_params = np.zeros((num_domains, 3))  # [log_beta_k, log_epsilon_k, alpha_k]
+
+        counts_over_time = np.array(self.per_step_counts)
+        losses_over_time = np.array(self.per_step_losses)
+
+        # Ignore initial steps
+        counts_over_time = counts_over_time[self.ignore_initial_steps:]
+        losses_over_time = losses_over_time[self.ignore_initial_steps:]
+
+        # Subsample intervals
+        counts_over_time = counts_over_time[::self.subsampling_interval]
+        losses_over_time = losses_over_time[::self.subsampling_interval]
+
+        # Compute cumulative counts per domain
+        cumulative_counts = np.cumsum(counts_over_time, axis=0)
+
+        for k in range(num_domains):
+            counts_k = cumulative_counts[:, k]
+            losses_k = losses_over_time[:, k]
+
+            # Remove zero counts to avoid division by zero
+            valid_indices = counts_k > 0
+            counts_k = counts_k[valid_indices]
+            losses_k = losses_k[valid_indices]
+
+            if len(counts_k) < 1:
+                raise RuntimeError("Too little data to fit scaling laws.")
+
+            # Fit the scaling law: L_k(n) = ε_k + β_k * n^{-α_k}
+            # We fit in log-space to stabilize the optimization
+
+            def scaling_law_loss(params):
+                log_beta_k, log_epsilon_k, alpha_k = params
+                beta_k = np.exp(log_beta_k)
+                epsilon_k = np.exp(log_epsilon_k)
+                pred = np.log(epsilon_k + beta_k * counts_k ** (-alpha_k))
+                target = np.log(losses_k)
+                # Huber loss for robustness
+                delta = 1e-3
+                abs_diff = np.abs(pred - target)
+                squared_loss = np.where(abs_diff <= delta, 0.5 * abs_diff ** 2, delta * (abs_diff - 0.5 * delta))
+                # Constraints to keep parameters in reasonable ranges
+                penalty = 0
+                penalty += max(0, alpha_k - 0.8) * 1e3  # α_k <= 0.8
+                penalty += max(0, 0.05 - alpha_k) * 1e3  # α_k >= 0.05
+                penalty += max(0, log_beta_k - 6.5) * 1e3  # log_beta_k <= 6.5
+                penalty += max(0, 0.5 - log_epsilon_k) * 1e3  # log_epsilon_k >= 0.5
+                loss = np.mean(squared_loss) + penalty
+                return loss
+
+            # **Define the grid of initializations as per the paper**
+            alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
+            log_beta_grid = np.array([-2, -1, 0, 1, 2, 3, 4, 5])
+            log_epsilon_grid = np.array([-2, -1.5, -1, -0.5, 1, 1.5])
+
+            # Create all combinations of initial guesses
+            grid_search = [
+                (log_beta_0, log_epsilon_0, alpha_0)
+                for alpha_0 in alpha_grid
+                for log_beta_0 in log_beta_grid
+                for log_epsilon_0 in log_epsilon_grid
+            ]
+
+            best_loss = np.inf
+            best_params = None
+
+            # Optimization bounds
+            bounds = [(-2, 6.5), (0.5, 10.0), (0.05, 0.8)]
+
+            # TODO(MaxiBoether): we might want to limit the grid search just to the very first fit?! official implementation runs it everytime
+
+            for initial_guess in grid_search:
+                result = minimize(
+                    scaling_law_loss,
+                    initial_guess,
+                    args=(counts_k, losses_k),
+                    bounds=bounds,
+                    method='L-BFGS-B',
+                )
+
+                if result.success and result.fun < best_loss:
+                    best_loss = result.fun
+                    best_params = result.x
+
+            if best_params is not None:
+                self.scaling_law_params[k] = best_params
+            else:
+                # Handle optimization failure (e.g., keep previous parameters or use default)
+                raise RuntimeError(f"Error while fitting scaling law!\n{result}")
+
+    def compute_loss_derivative(self) -> np.ndarray:
+        """
+        Computes the derivative of the loss with respect to n for each domain.
+
+        Returns:
+            A numpy array of derivatives dL_k/dn for each domain.
+        """
+        num_domains = len(self.counts)
+        dL_dn = np.zeros(num_domains)
+
+        n_k = self.counts.copy()
+
+        for k in range(num_domains):
+            n = n_k[k]
+            if n == 0:
+                continue  # Skip domains with no data
+
+            log_beta_k, log_epsilon_k, alpha_k = self.scaling_law_params[k]
+            beta_k = np.exp(log_beta_k)
+            epsilon_k = np.exp(log_epsilon_k)
+
+            # Current loss L_k(n)
+            L_k_n = epsilon_k + beta_k * n ** (-alpha_k)
+
+            # Derivative dL_k/dn using Equation (1) from the paper
+            dL_k_dn = - (1 / n) * alpha_k * (L_k_n - epsilon_k)
+
+            # Take the absolute value for magnitude
+            dL_dn[k] = abs(dL_k_dn)
+
+        return dL_dn
+
+    def compute_rho_t(self, dL_dn: np.ndarray) -> None:
+        """
+        Computes the preference distribution rho_k(t) based on the derivative of the loss.
+
+        Args:
+            dL_dn: A numpy array of derivatives of the loss with respect to n for each domain.
+        """
+        # Compute lambda_k(t)
+        lambda_k_t = self.h_t.copy() ** self.s
+
+        # Compute rho_k(t): proportional to mu_k * lambda_k(t) * dL_k/dn
+        rho_num = self.mu_k * lambda_k_t * dL_dn
+        rho_den = np.sum(rho_num)
+        if rho_den > 0:
+            self.rho_t = rho_num / rho_den
+        else:
+            # Handle the case where denominator is zero
+            self.rho_t = self.mu_k.copy() / len(self.counts)
+
+    def update_pi_t(self) -> None:
+        """
+        Updates the data policy pi_k(t) based on rho_k(t) and the moving average pī_k(t-1).
+        """
+        self.pi_bar_t_minus_1 = self.pi_bar_t_minus_1 if self.pi_bar_t_minus_1 is not None else self.mu_k.copy()
+
+        pi_t = self.gamma2 * self.rho_t + (1 - self.gamma2) * self.pi_bar_t_minus_1
+        pi_t /= np.sum(pi_t)
+
+        self.pi_t_minus_1 = self.pi_t.copy() if self.pi_t is not None else self.mu_k.copy()
+        self.pi_t = pi_t
+
+    def enforce_min_probability(self):
+        """
+        Enforces the minimum probability delta_min for domains that have been sampled at least once.
+
+        Args:
+            pi_t: The data policy pi_k(t) before enforcing minimum probabilities.
+
+        Returns:
+            The data policy pi_k(t) after enforcing minimum probabilities.
+        """
+        pi_t_adjusted = self.pi_t.copy()
+
+        # Domains that have been sampled at least once
+        sampled_indices = np.where(self.counts > 0)[0]
+
+        # Enforce delta_min only on sampled domains
+        for k in sampled_indices:
+            if pi_t_adjusted[k] < self.delta_min:
+                pi_t_adjusted[k] = self.delta_min
+
+        # Re-normalize the probabilities
+        total = np.sum(pi_t_adjusted)
+        if total > 0:
+            pi_t_adjusted /= total
+        else:
+            # Handle zero total probability
+            pi_t_adjusted = self.mu_k.copy() / len(self.counts)
+
+        self.pi_t = pi_t_adjusted.copy()
+
+    def update_pi_bar_t(self) -> None:
+        """
+        Updates the moving average pī_k(t) of the data policy.
+        """
+        if self.pi_bar_t_minus_1 is None:
+            self.pi_bar_t_minus_1 = self.pi_t.copy()
+        else:
+            weight = 1.0 / (self.total_steps + 1.0)
+            self.pi_bar_t_minus_1 = weight * self.rho_t + (1 - weight)  * self.pi_bar_t_minus_1
+            self.pi_bar_t_minus_1 /= np.sum(self.pi_bar_t_minus_1)
+
+    def _update_state(self, losses: np.ndarray, counts: np.ndarray) -> None:
+        """
+        Accumulates the losses and counts, adjusting internal arrays as needed to accommodate new domains.
+
+        Args:
+            losses: A numpy array of losses per domain.
+            counts: A numpy array of counts per domain.
+        """
+        super()._update_state(losses, counts)
+
+        num_incoming_domains = len(losses)
+        num_internal_domains = len(self.losses)
+
+        if num_internal_domains < num_incoming_domains:
+            # Expand per-domain data structures
+            size_diff = num_incoming_domains - num_internal_domains
+            if self.h_t is not None:
+                self.h_t = np.concatenate([self.h_t, np.zeros(size_diff, dtype=self.h_t.dtype)])
+            if self.mu_k is not None:
+                self.mu_k = np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
+            if self.pi_t is not None:
+                self.pi_t = np.concatenate([self.pi_t, np.zeros(size_diff, dtype=self.pi_t.dtype)])
+            if self.pi_t_minus_1 is not None:
+                self.pi_t_minus_1 = np.concatenate([self.pi_t_minus_1, np.zeros(size_diff, dtype=self.pi_t_minus_1.dtype)])
+            if self.pi_bar_t_minus_1 is not None:
+                self.pi_bar_t_minus_1 = np.concatenate([self.pi_bar_t_minus_1, np.zeros(size_diff, dtype=self.pi_bar_t_minus_1.dtype)])
+
+        # Keep track of per-step counts and losses
+        # Adjust the lengths if necessary
+        for i in range(len(self.per_step_counts)):
+            if len(self.per_step_counts[i]) < num_incoming_domains:
+                size_diff = num_incoming_domains - len(self.per_step_counts[i])
+                self.per_step_counts[i] = np.concatenate([self.per_step_counts[i], np.zeros(size_diff, dtype=self.per_step_counts[i].dtype)])
+                self.per_step_losses[i] = np.concatenate([self.per_step_losses[i], np.zeros(size_diff, dtype=self.per_step_losses[i].dtype)])
+
+        # Append per-step counts and losses
+        # Compute per-step losses per domain (assuming losses are per-domain sums)
+        per_step_losses = np.zeros(num_incoming_domains, dtype=np.float32)
+        for i in range(num_incoming_domains):
+            if counts[i] > 0:
+                per_step_losses[i] = losses[i] / counts[i]  # Average loss per sample
+            else:
+                per_step_losses[i] = 0.0
+
+        self.per_step_counts.append(counts.copy())
+        self.per_step_losses.append(per_step_losses)
+
+        # Update last_mixture_id step
+        if self.last_received_mixture > self.last_mixture_id:
+            self.last_mixture_id = self.last_received_mixture
+            self.last_mixture_id_step = self.total_steps
