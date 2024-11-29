@@ -19,6 +19,7 @@ from mixtera.utils import wait_for_key_in_dict
 
 class LocalStub(MixteraClient):
     def __init__(self, directory: Path | str) -> None:
+        super().__init__()
         if isinstance(directory, str):
             self.directory = Path(directory)
         else:

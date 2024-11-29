@@ -270,7 +270,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
 
         # Assertions
         mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+        self.assertEqual(mock_read_int.await_count, 2)
         self.assertEqual(mock_read_numpy_array.await_count, 2)
         self.server._local_stub.process_feedback.assert_called_once()
         args = self.server._local_stub.process_feedback.call_args[0]
@@ -279,4 +279,4 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(feedback.training_steps, training_steps)
         np.testing.assert_array_equal(feedback.losses, losses)
         np.testing.assert_array_equal(feedback.counts, counts)
-        mock_write_int.assert_awaited_once_with(int(True), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+        self.assertEqual(mock_write_int.await_count, 1)

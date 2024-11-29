@@ -295,6 +295,7 @@ class MixteraServer:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         feedback = ClientFeedback()
         feedback.training_steps = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        feedback.mixture_id = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         feedback.losses = await read_numpy_array(NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, reader)
         feedback.counts = await read_numpy_array(NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, reader)
 

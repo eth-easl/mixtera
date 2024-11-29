@@ -84,6 +84,7 @@ class ResultChunk:
         parsing_func_dict: dict[int, Callable[[str], str]],
         chunk_size: int,
         key_id_map: dict[MixtureKey, int],
+        mixture_id: int,
         mixture: Optional[dict[MixtureKey, int]] = None,
         prefetch_first_sample: bool = True,
     ) -> None:
@@ -98,6 +99,7 @@ class ResultChunk:
         self._samples_to_skip = 0  # TODO(#87): Supply this from server to skip first samples to support interruptions.
         self._prefetch_first_sample = prefetch_first_sample  # TODO(#147): Make this configurable for a query.
         self._key_id_map = key_id_map
+        self.mixture_id = mixture_id
 
         assert set(self._result_index.keys()) <= self._key_id_map.keys(), (
             f"result_index keys = {self._result_index.keys()}"

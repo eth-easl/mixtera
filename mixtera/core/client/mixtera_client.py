@@ -104,6 +104,9 @@ class MixteraClient(ABC):
 
         return ServerStub(host, port)
 
+    def __init__(self) -> None:
+        self.current_mixture_id: int | None = None
+
     @abstractmethod
     def register_dataset(
         self,
@@ -220,11 +223,13 @@ class MixteraClient(ABC):
             RuntimeError if query has not been executed.
         """
         for result_chunk in self._stream_result_chunks(args.job_id, args.dp_group_id, args.node_id, args.worker_id):
+            self.current_mixture_id = result_chunk.mixture_id
             result_chunk.configure_result_streaming(
                 client=self,
                 args=args,
             )
             yield from result_chunk
+        self.current_mixture_id = None
 
     @abstractmethod
     def _stream_result_chunks(

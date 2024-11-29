@@ -24,7 +24,9 @@ def handle_mixtera_feedback(
     losses_np = None if losses is None else to_numpy_array(losses)
     counts_np = None if counts is None else to_numpy_array(losses)
 
-    feedback = ClientFeedback(training_steps=training_steps, losses=losses_np, counts=counts_np)
+    mixture_id = torch_dataset._client.current_mixture_id
+
+    feedback = ClientFeedback(training_steps=training_steps, losses=losses_np, counts=counts_np, mixture_id=mixture_id)
     job_id = torch_dataset._query.job_id
 
     success = torch_dataset._client.process_feedback(job_id, feedback)

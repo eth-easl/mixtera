@@ -63,7 +63,7 @@ class Mixture(ABC):
         """
         self._update_training_step(feedback.training_steps)
         if feedback.counts is not None and feedback.losses is not None:
-            self._process_losses(feedback.losses, feedback.counts)
+            self._process_losses(feedback.losses, feedback.counts, feedback.mixture_id)
 
     def _update_training_step(self, training_steps: int) -> None:
         """
@@ -84,6 +84,7 @@ class Mixture(ABC):
     def process_id_map(self, key_id_map: dict[MixtureKey, int]) -> None:
         del key_id_map
 
-    def _process_losses(self, losses: np.ndarray, counts: np.ndarray) -> None:
+    def _process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int) -> None:
         del losses
         del counts
+        del mixture_id

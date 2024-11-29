@@ -1,8 +1,10 @@
-import numpy as np
-from scipy.optimize import minimize
-from typing import Optional
+# pylint: disable=invalid-name
+# Mathematical notation with snake-case is harder to read.
 
+import numpy as np
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
+from scipy.optimize import minimize
+
 
 class AdoDynamicMixing(DynamicMixingAlgorithm):
     """
@@ -14,7 +16,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
     def __init__(
         self,
-        variant: str = 'vanilla',
+        variant: str = "vanilla",
         gamma1: float = 0.1,
         gamma2: float = 0.9,
         s: float = 0.5,
@@ -48,21 +50,21 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         # Initialize per-domain data structures
         self.total_steps = 0  # Total number of steps processed
-        self.last_mixture_id_step = 0  # Step when the last mixture ID was updated
+        self.last_update_step = 0  # Step when we last updated h_t
 
         # Initialize h(t), pi(t), and moving averages
-        self.h_t = None  # Credit assignment score h_k(t)
-        self.pi_t = None  # Data policy pi_k(t)
-        self.pi_t_minus_1 = None  # Previous data policy pi_k(t-1)
-        self.pi_bar_t_minus_1 = None  # Previous moving average pī_k(t-1)
-        self.scaling_law_params = None  # Scaling law parameters [log_beta_k, log_epsilon_k, alpha_k]
+        self.h_t: np.ndarray | None = None  # Credit assignment score h_k(t)
+        self.pi_t: np.ndarray | None = None  # Data policy pi_k(t)
+        self.pi_t_minus_1: np.ndarray | None = None  # Previous data policy pi_k(t-1)
+        self.pi_bar_t_minus_1: np.ndarray | None = None  # Previous moving average pī_k(t-1)
+        self.scaling_law_params: np.ndarray | None = None  # Scaling law parameters [log_beta_k, log_epsilon_k, alpha_k]
 
         # Keep track of per-step counts and losses
-        self.per_step_counts = []  # List of counts per step per domain
-        self.per_step_losses = []  # List of losses per step per domain
+        self.per_step_counts: list[np.ndarray] = []  # List of counts per step per domain
+        self.per_step_losses: list[np.ndarray] = []  # List of losses per step per domain
 
         # Initial prior distribution mu_k (from initial_mixture)
-        self.mu_k = None  # Will be set based on self.initial_mixture
+        self.mu_k: np.ndarray | None = None  # Will be set based on self.initial_mixture
 
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         """
@@ -95,27 +97,26 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.h_t = self.h_t if self.h_t is not None else self.mu_k.copy()
 
         # Update h(t) based on the variant and whether the mixture was updated at the client
-        if self.variant == 'vanilla':
+        if self.variant == "vanilla":
             # Update h(t) every step using the last calculated pi(t)
             self.update_h_t()
-        elif self.variant == 'adjusted_v1':
+        elif self.variant == "adjusted_v1":
             # h(t) remains identical until we receive an update based on a new mixture_id
             if updated_at_client:
                 self.update_h_t()
-        elif self.variant == 'adjusted_v2':
+        elif self.variant == "adjusted_v2":
             # Similar to adjusted_v1, but adjust the moving average to not let h(t-1) dominate
             if updated_at_client:
-                steps_elapsed = self.total_steps - self.last_mixture_id_step
+                steps_elapsed = self.total_steps - self.last_update_step
                 self.update_h_t(elapsed_steps=steps_elapsed)
-                self.last_mixture_id_step = self.total_steps
         else:
             raise ValueError(f"Unknown variant '{self.variant}' specified.")
 
         # Fit scaling laws immediately after the warm-up period ends, and then at intervals
-        if self.total_steps == self.ignore_initial_steps + 1:
-            self.fit_scaling_laws()
-        elif (self.total_steps > self.ignore_initial_steps and
-            (self.total_steps - self.ignore_initial_steps - 1) % self.scaling_law_update_interval == 0):
+        if (self.total_steps == self.ignore_initial_steps + 1) or (
+            self.total_steps > self.ignore_initial_steps
+            and (self.total_steps - self.ignore_initial_steps - 1) % self.scaling_law_update_interval == 0
+        ):
             self.fit_scaling_laws()
 
         assert self.scaling_law_params is not None
@@ -144,15 +145,18 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         Args:
             elapsed_steps: Number of steps elapsed since the last update (used in variant 'adjusted_v2').
         """
+        assert self.mu_k is not None and self.h_t is not None
+
         self.pi_t_minus_1 = self.pi_t_minus_1 if self.pi_t_minus_1 is not None else self.mu_k.copy()
 
         gamma1 = self.gamma1
 
-        if self.variant == 'adjusted_v2' and elapsed_steps > 1:
+        if self.variant == "adjusted_v2" and elapsed_steps > 1:
             # Adjust gamma1 to account for the fact that h(t-1) remained constant over elapsed_steps
             gamma1 = 1 - (1 - gamma1) ** elapsed_steps
 
         self.h_t = gamma1 * self.pi_t_minus_1 + (1 - gamma1) * self.h_t
+        self.last_update_step = self.total_steps
 
     def fit_scaling_laws(self) -> None:
         """
@@ -165,12 +169,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         losses_over_time = np.array(self.per_step_losses)
 
         # Ignore initial steps
-        counts_over_time = counts_over_time[self.ignore_initial_steps:]
-        losses_over_time = losses_over_time[self.ignore_initial_steps:]
+        counts_over_time = counts_over_time[self.ignore_initial_steps :]
+        losses_over_time = losses_over_time[self.ignore_initial_steps :]
 
         # Subsample intervals
-        counts_over_time = counts_over_time[::self.subsampling_interval]
-        losses_over_time = losses_over_time[::self.subsampling_interval]
+        counts_over_time = counts_over_time[:: self.subsampling_interval]
+        losses_over_time = losses_over_time[:: self.subsampling_interval]
 
         # Compute cumulative counts per domain
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
@@ -186,28 +190,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
             if len(counts_k) < 1:
                 raise RuntimeError("Too little data to fit scaling laws.")
-
-            # Fit the scaling law: L_k(n) = ε_k + β_k * n^{-α_k}
-            # We fit in log-space to stabilize the optimization
-
-            def scaling_law_loss(params):
-                log_beta_k, log_epsilon_k, alpha_k = params
-                beta_k = np.exp(log_beta_k)
-                epsilon_k = np.exp(log_epsilon_k)
-                pred = np.log(epsilon_k + beta_k * counts_k ** (-alpha_k))
-                target = np.log(losses_k)
-                # Huber loss for robustness
-                delta = 1e-3
-                abs_diff = np.abs(pred - target)
-                squared_loss = np.where(abs_diff <= delta, 0.5 * abs_diff ** 2, delta * (abs_diff - 0.5 * delta))
-                # Constraints to keep parameters in reasonable ranges
-                penalty = 0
-                penalty += max(0, alpha_k - 0.8) * 1e3  # α_k <= 0.8
-                penalty += max(0, 0.05 - alpha_k) * 1e3  # α_k >= 0.05
-                penalty += max(0, log_beta_k - 6.5) * 1e3  # log_beta_k <= 6.5
-                penalty += max(0, 0.5 - log_epsilon_k) * 1e3  # log_epsilon_k >= 0.5
-                loss = np.mean(squared_loss) + penalty
-                return loss
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
@@ -228,15 +210,15 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # Optimization bounds
             bounds = [(-2, 6.5), (0.5, 10.0), (0.05, 0.8)]
 
-            # TODO(MaxiBoether): we might want to limit the grid search just to the very first fit?! official implementation runs it everytime
+            # TODO(MaxiBoether): we might want to limit the grid search just to the very first fit?!
 
             for initial_guess in grid_search:
                 result = minimize(
-                    scaling_law_loss,
+                    AdoDynamicMixing.scaling_law_loss,
                     initial_guess,
                     args=(counts_k, losses_k),
                     bounds=bounds,
-                    method='L-BFGS-B',
+                    method="L-BFGS-B",
                 )
 
                 if result.success and result.fun < best_loss:
@@ -244,10 +226,33 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     best_params = result.x
 
             if best_params is not None:
+                assert self.scaling_law_params is not None
                 self.scaling_law_params[k] = best_params
             else:
                 # Handle optimization failure (e.g., keep previous parameters or use default)
                 raise RuntimeError(f"Error while fitting scaling law!\n{result}")
+
+    @staticmethod
+    def scaling_law_loss(params: tuple[float, float, float], counts_k: int, losses_k: float) -> float | np.floating:
+        # Fit the scaling law: L_k(n) = ε_k + β_k * n^{-α_k}
+        # We fit in log-space to stabilize the optimization
+        log_beta_k, log_epsilon_k, alpha_k = params
+        beta_k = np.exp(log_beta_k)
+        epsilon_k = np.exp(log_epsilon_k)
+        pred = np.log(epsilon_k + beta_k * counts_k ** (-alpha_k))
+        target = np.log(losses_k)
+        # Huber loss for robustness
+        delta = 1e-3
+        abs_diff = np.abs(pred - target)
+        squared_loss = np.where(abs_diff <= delta, 0.5 * abs_diff**2, delta * (abs_diff - 0.5 * delta))
+        # Constraints to keep parameters in reasonable ranges
+        penalty = 0.0
+        penalty += max(0, alpha_k - 0.8) * 1e3  # α_k <= 0.8
+        penalty += max(0, 0.05 - alpha_k) * 1e3  # α_k >= 0.05
+        penalty += max(0, log_beta_k - 6.5) * 1e3  # log_beta_k <= 6.5
+        penalty += max(0, 0.5 - log_epsilon_k) * 1e3  # log_epsilon_k >= 0.5
+        loss = np.mean(squared_loss) + penalty
+        return loss
 
     def compute_loss_derivative(self) -> np.ndarray:
         """
@@ -256,6 +261,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         Returns:
             A numpy array of derivatives dL_k/dn for each domain.
         """
+        assert self.scaling_law_params is not None
+
         num_domains = len(self.counts)
         dL_dn = np.zeros(num_domains)
 
@@ -274,7 +281,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             L_k_n = epsilon_k + beta_k * n ** (-alpha_k)
 
             # Derivative dL_k/dn using Equation (1) from the paper
-            dL_k_dn = - (1 / n) * alpha_k * (L_k_n - epsilon_k)
+            dL_k_dn = -(1 / n) * alpha_k * (L_k_n - epsilon_k)
 
             # Take the absolute value for magnitude
             dL_dn[k] = abs(dL_k_dn)
@@ -288,12 +295,13 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         Args:
             dL_dn: A numpy array of derivatives of the loss with respect to n for each domain.
         """
+        assert self.h_t is not None and self.mu_k is not None
         # Compute lambda_k(t)
         lambda_k_t = self.h_t.copy() ** self.s
 
         # Compute rho_k(t): proportional to mu_k * lambda_k(t) * dL_k/dn
         rho_num = self.mu_k * lambda_k_t * dL_dn
-        rho_den = np.sum(rho_num)
+        rho_den: float | np.floating = np.sum(rho_num)
         if rho_den > 0:
             self.rho_t = rho_num / rho_den
         else:
@@ -304,6 +312,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         Updates the data policy pi_k(t) based on rho_k(t) and the moving average pī_k(t-1).
         """
+        assert self.mu_k is not None and self.pi_t is not None
+
         self.pi_bar_t_minus_1 = self.pi_bar_t_minus_1 if self.pi_bar_t_minus_1 is not None else self.mu_k.copy()
 
         pi_t = self.gamma2 * self.rho_t + (1 - self.gamma2) * self.pi_bar_t_minus_1
@@ -312,7 +322,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.pi_t_minus_1 = self.pi_t.copy() if self.pi_t is not None else self.mu_k.copy()
         self.pi_t = pi_t
 
-    def enforce_min_probability(self):
+    def enforce_min_probability(self) -> None:
         """
         Enforces the minimum probability delta_min for domains that have been sampled at least once.
 
@@ -322,6 +332,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         Returns:
             The data policy pi_k(t) after enforcing minimum probabilities.
         """
+        assert self.pi_t is not None and self.mu_k is not None
+
         pi_t_adjusted = self.pi_t.copy()
 
         # Domains that have been sampled at least once
@@ -333,7 +345,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 pi_t_adjusted[k] = self.delta_min
 
         # Re-normalize the probabilities
-        total = np.sum(pi_t_adjusted)
+        total: float | np.floating = np.sum(pi_t_adjusted)
         if total > 0:
             pi_t_adjusted /= total
         else:
@@ -346,11 +358,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         Updates the moving average pī_k(t) of the data policy.
         """
+        assert self.pi_t is not None
+
         if self.pi_bar_t_minus_1 is None:
             self.pi_bar_t_minus_1 = self.pi_t.copy()
         else:
             weight = 1.0 / (self.total_steps + 1.0)
-            self.pi_bar_t_minus_1 = weight * self.rho_t + (1 - weight)  * self.pi_bar_t_minus_1
+            self.pi_bar_t_minus_1 = weight * self.rho_t + (1 - weight) * self.pi_bar_t_minus_1
+            assert self.pi_bar_t_minus_1 is not None  # mypy is really weird sometimes.
             self.pi_bar_t_minus_1 /= np.sum(self.pi_bar_t_minus_1)
 
     def _update_state(self, losses: np.ndarray, counts: np.ndarray) -> None:
@@ -376,17 +391,25 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             if self.pi_t is not None:
                 self.pi_t = np.concatenate([self.pi_t, np.zeros(size_diff, dtype=self.pi_t.dtype)])
             if self.pi_t_minus_1 is not None:
-                self.pi_t_minus_1 = np.concatenate([self.pi_t_minus_1, np.zeros(size_diff, dtype=self.pi_t_minus_1.dtype)])
+                self.pi_t_minus_1 = np.concatenate(
+                    [self.pi_t_minus_1, np.zeros(size_diff, dtype=self.pi_t_minus_1.dtype)]
+                )
             if self.pi_bar_t_minus_1 is not None:
-                self.pi_bar_t_minus_1 = np.concatenate([self.pi_bar_t_minus_1, np.zeros(size_diff, dtype=self.pi_bar_t_minus_1.dtype)])
+                self.pi_bar_t_minus_1 = np.concatenate(
+                    [self.pi_bar_t_minus_1, np.zeros(size_diff, dtype=self.pi_bar_t_minus_1.dtype)]
+                )
 
         # Keep track of per-step counts and losses
         # Adjust the lengths if necessary
-        for i in range(len(self.per_step_counts)):
-            if len(self.per_step_counts[i]) < num_incoming_domains:
-                size_diff = num_incoming_domains - len(self.per_step_counts[i])
-                self.per_step_counts[i] = np.concatenate([self.per_step_counts[i], np.zeros(size_diff, dtype=self.per_step_counts[i].dtype)])
-                self.per_step_losses[i] = np.concatenate([self.per_step_losses[i], np.zeros(size_diff, dtype=self.per_step_losses[i].dtype)])
+        for idx, per_step_count in enumerate(self.per_step_counts):
+            if len(per_step_count) < num_incoming_domains:
+                size_diff = num_incoming_domains - len(per_step_count)
+                self.per_step_counts[idx] = np.concatenate(
+                    [self.per_step_counts[idx], np.zeros(size_diff, dtype=self.per_step_counts[idx].dtype)]
+                )
+                self.per_step_losses[idx] = np.concatenate(
+                    [self.per_step_losses[idx], np.zeros(size_diff, dtype=self.per_step_losses[idx].dtype)]
+                )
 
         # Append per-step counts and losses
         # Compute per-step losses per domain (assuming losses are per-domain sums)
@@ -399,8 +422,3 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         self.per_step_counts.append(counts.copy())
         self.per_step_losses.append(per_step_losses)
-
-        # Update last_mixture_id step
-        if self.last_received_mixture > self.last_mixture_id:
-            self.last_mixture_id = self.last_received_mixture
-            self.last_mixture_id_step = self.total_steps

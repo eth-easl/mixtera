@@ -677,6 +677,8 @@ class ServerConnection:
         # Announce the training steps and the job id.
         await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
         await write_int(feedback.training_steps, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(feedback.mixture_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
         await write_numpy_array(feedback.losses, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
         await write_numpy_array(feedback.counts, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
 
