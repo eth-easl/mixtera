@@ -2,8 +2,10 @@
 # Mathematical notation with snake-case is harder to read.
 
 import numpy as np
+from loguru import logger
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
 from scipy.optimize import minimize
+from tqdm import tqdm
 
 
 class AdoDynamicMixing(DynamicMixingAlgorithm):
@@ -65,6 +67,67 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         # Initial prior distribution mu_k (from initial_mixture)
         self.mu_k: np.ndarray | None = None  # Will be set based on self.initial_mixture
+
+    def __str__(self) -> str:
+        """
+        Returns a dictionary-like string representation of the AdoDynamicMixing's current state.
+        """
+        state_dict = {
+            "variant": self.variant,
+            "total_steps": self.total_steps,
+            "gamma1": self.gamma1,
+            "gamma2": self.gamma2,
+            "s": self.s,
+            "delta_min": self.delta_min,
+            "scaling_law_update_interval": self.scaling_law_update_interval,
+            "ignore_initial_steps": self.ignore_initial_steps,
+            "subsampling_interval": self.subsampling_interval,
+            "num_domains": len(self.counts) if self.counts is not None else None,
+        }
+
+        if self.mu_k is not None:
+            state_dict["mu_k"] = self.mu_k.tolist()
+        else:
+            state_dict["mu_k"] = None
+
+        if self.pi_t is not None:
+            state_dict["pi_t"] = self.pi_t.tolist()
+        else:
+            state_dict["pi_t"] = None
+
+        if self.h_t is not None:
+            state_dict["h_t"] = self.h_t.tolist()
+        else:
+            state_dict["h_t"] = None
+
+        if self.scaling_law_params is not None:
+            # Convert scaling_law_params to list of dictionaries for readability
+            scaling_params_list = []
+            for idx, params in enumerate(self.scaling_law_params):
+                log_beta_k, log_epsilon_k, alpha_k = params
+                scaling_params_list.append(
+                    {
+                        "domain": idx,
+                        "log_beta_k": log_beta_k,
+                        "log_epsilon_k": log_epsilon_k,
+                        "alpha_k": alpha_k,
+                    }
+                )
+            state_dict["scaling_law_params"] = scaling_params_list
+        else:
+            state_dict["scaling_law_params"] = None
+
+        if self.counts is not None:
+            state_dict["counts"] = self.counts.tolist()
+        else:
+            state_dict["counts"] = None
+
+        if self.losses is not None:
+            state_dict["losses"] = self.losses.tolist()
+        else:
+            state_dict["losses"] = None
+
+        return str(state_dict)
 
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         """
@@ -136,6 +199,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Update pī_k(t)
         self.update_pi_bar_t()
 
+        logger.debug(f"Calculated mixture = {self.pi_t}")
+
         return self.pi_t
 
     def update_h_t(self, elapsed_steps: int = 1) -> None:
@@ -162,6 +227,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         Fits scaling laws to the accumulated counts and losses for each domain.
         """
+        logger.debug("Re-fitting scaling laws.")
         num_domains = len(self.counts)
         self.scaling_law_params = np.zeros((num_domains, 3))  # [log_beta_k, log_epsilon_k, alpha_k]
 
@@ -180,7 +246,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
 
         # TODO(MaxiBoether): We could use a multiprocessing Pool here.
-        for k in range(num_domains):
+        logger.debug("Initialized state.")
+        for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
 
@@ -264,28 +331,26 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         assert self.scaling_law_params is not None
 
-        num_domains = len(self.counts)
-        dL_dn = np.zeros(num_domains)
-
         n_k = self.counts.copy()
 
-        for k in range(num_domains):
-            n = n_k[k]
-            if n == 0:
-                continue  # Skip domains with no data
+        # Extract parameters
+        log_beta_k, log_epsilon_k, alpha_k = self.scaling_law_params.T
+        beta_k = np.exp(log_beta_k)
+        epsilon_k = np.exp(log_epsilon_k)
 
-            log_beta_k, log_epsilon_k, alpha_k = self.scaling_law_params[k]
-            beta_k = np.exp(log_beta_k)
-            epsilon_k = np.exp(log_epsilon_k)
+        # Handle domains with n_k > 0 to avoid division by zero
+        mask = n_k > 0
 
-            # Current loss L_k(n)
-            L_k_n = epsilon_k + beta_k * n ** (-alpha_k)
+        # Compute L_k(n) for n_k > 0
+        L_k_n = np.zeros_like(n_k, dtype=np.float64)
+        L_k_n[mask] = epsilon_k[mask] + beta_k[mask] * n_k[mask] ** (-alpha_k[mask])
 
-            # Derivative dL_k/dn using Equation (1) from the paper
-            dL_k_dn = -(1 / n) * alpha_k * (L_k_n - epsilon_k)
+        # Compute derivative dL_k/dn for n_k > 0
+        dL_dn = np.zeros_like(n_k, dtype=np.float64)
+        dL_dn[mask] = -(1 / n_k[mask]) * alpha_k[mask] * (L_k_n[mask] - epsilon_k[mask])
 
-            # Take the absolute value for magnitude
-            dL_dn[k] = abs(dL_k_dn)
+        # Take the absolute value
+        dL_dn = np.abs(dL_dn)
 
         return dL_dn
 
@@ -338,13 +403,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         pi_t_adjusted = self.pi_t.copy()
 
-        # Domains that have been sampled at least once
-        sampled_indices = np.where(self.counts > 0)[0]
+        # Create a mask for domains that have been sampled at least once
+        sampled_mask = self.counts > 0
 
         # Enforce delta_min only on sampled domains
-        for k in sampled_indices:
-            if pi_t_adjusted[k] < self.delta_min:
-                pi_t_adjusted[k] = self.delta_min
+        pi_t_adjusted[sampled_mask] = np.maximum(pi_t_adjusted[sampled_mask], self.delta_min)
 
         # Re-normalize the probabilities
         total: float | np.floating = np.sum(pi_t_adjusted)
@@ -354,7 +417,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # Handle zero total probability
             pi_t_adjusted = self.mu_k.copy() / len(self.counts)
 
-        self.pi_t = pi_t_adjusted.copy()
+        self.pi_t = pi_t_adjusted
 
     def update_pi_bar_t(self) -> None:
         """
@@ -413,14 +476,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     [self.per_step_losses[idx], np.zeros(size_diff, dtype=self.per_step_losses[idx].dtype)]
                 )
 
-        # Append per-step counts and losses
-        # Compute per-step losses per domain (assuming losses are per-domain sums)
-        per_step_losses = np.zeros(num_incoming_domains, dtype=np.float32)
-        for i in range(num_incoming_domains):
-            if counts[i] > 0:
-                per_step_losses[i] = losses[i] / counts[i]  # Average loss per sample
-            else:
-                per_step_losses[i] = 0.0
+        # Compute per-step losses per domain (avoiding division by zero)
+        per_step_losses = np.divide(losses, counts, out=np.zeros_like(losses, dtype=np.float32), where=counts != 0)
 
         self.per_step_counts.append(counts.copy())
         self.per_step_losses.append(per_step_losses)

@@ -208,3 +208,54 @@ class TestAdoDynamicMixing(unittest.TestCase):
         # Check that per_step_losses are average losses per sample
         expected_per_step_losses = new_losses / new_counts
         np.testing.assert_array_almost_equal(self.ado.per_step_losses[-1], expected_per_step_losses)
+
+    def test_update_method(self):
+        """
+        Test the update process, ensuring that losses and counts are kept track correctly.
+        """
+        # Initial counts and losses
+        initial_counts = np.array([100, 200])
+        initial_losses = np.array([10.0, 5.0])
+        self.ado.counts = initial_counts.copy()
+        self.ado.losses = initial_losses.copy()
+
+        # Existing per_step_counts and per_step_losses
+        self.ado.per_step_counts = [np.array([50, 100])]
+        self.ado.per_step_losses = [np.array([0.1, 0.05])]  # average losses per sample
+
+        # New losses and counts
+        new_counts = np.array([50, 100])
+        new_losses = np.array([5.0, 2.5])
+        mixture_id = 0  # Assuming initial mixture_id
+
+        # Expected counts and losses after update
+        expected_counts = initial_counts + new_counts
+        expected_losses = initial_losses + new_losses
+
+        # Expected per-step counts and losses
+        expected_per_step_counts = self.ado.per_step_counts + [new_counts]
+        expected_per_step_losses = self.ado.per_step_losses + [new_losses / new_counts]
+
+        # Process losses
+        new_mixture = self.ado.process_losses(new_losses, new_counts, mixture_id)
+
+        # Check that counts and losses have been updated correctly
+        np.testing.assert_array_equal(self.ado.counts, expected_counts)
+        np.testing.assert_array_equal(self.ado.losses, expected_losses)
+
+        # Since calc_mixture returns None by default, check that new_mixture is None for now
+        self.assertIsNone(new_mixture)
+
+        # Check that per_step_counts and per_step_losses have been appended correctly
+        self.assertEqual(len(self.ado.per_step_counts), 2)
+        self.assertEqual(len(self.ado.per_step_losses), 2)
+        np.testing.assert_array_equal(self.ado.per_step_counts[-1], new_counts)
+        np.testing.assert_array_almost_equal(self.ado.per_step_losses[-1], new_losses / new_counts)
+
+        # Additionally, we can verify that the accumulated per-step counts and losses are as expected
+        for idx, (counts, losses) in enumerate(zip(expected_per_step_counts, expected_per_step_losses)):
+            np.testing.assert_array_equal(self.ado.per_step_counts[idx], counts)
+            np.testing.assert_array_almost_equal(self.ado.per_step_losses[idx], losses)
+
+        # Verify that total_steps has been incremented
+        self.assertEqual(self.ado.total_steps, 1)
