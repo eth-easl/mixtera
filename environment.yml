@@ -26,7 +26,7 @@ dependencies:
   - scipy
   - pip: # Both duckdb and polars recommend their pip build over conda
     - duckdb
-    - polars
+    - polars==1.15
     - webdataset
     - pillow
     - pybind11
