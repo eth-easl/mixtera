@@ -276,8 +276,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
-            log_beta_grid = np.array([-2, -1, 0, 1, 2, 3, 4, 5])
-            log_epsilon_grid = np.array([-2, -1.5, -1, -0.5, 1, 1.5])
+            log_beta_grid = np.array([1, 2, 3, 4, 5])
+            log_epsilon_grid = np.array([0.5, 1, 2, 3, 4, 7 ])
 
             # Create all combinations of initial guesses
             grid_search = [
@@ -290,8 +290,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             best_loss = np.inf
             best_params = None
 
-            # Optimization bounds
-            bounds = [(-2, 6.5), (0.5, 10.0), (0.05, 0.8)]
+            bounds = [(0.5, 6.5),  # log_beta_k ∈ [0.5, 6.5]
+                    (0.5, 10.0), # log_epsilon_k ∈ [0.5, 10.0]
+                    (0.05, 0.8)] # alpha_k ∈ [0.05, 0.8]
 
             # TODO(MaxiBoether): we might want to limit the grid search just to the very first fit?!
 
@@ -320,6 +321,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Fit the scaling law: L_k(n) = ε_k + β_k * n^{-α_k}
         # We fit in log-space to stabilize the optimization
         log_beta_k, log_epsilon_k, alpha_k = params
+
+        # Check for invalid parameter values
+        #if not np.isfinite(log_beta_k) or not np.isfinite(log_epsilon_k) or not np.isfinite(alpha_k):
+        #    return np.inf
+
         beta_k = np.exp(log_beta_k)
         epsilon_k = np.exp(log_epsilon_k)
         pred = np.log(epsilon_k + beta_k * counts_k ** (-alpha_k))
