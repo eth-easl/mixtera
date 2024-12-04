@@ -682,4 +682,4 @@ class ServerConnection:
         await write_numpy_array(feedback.losses, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
         await write_numpy_array(feedback.counts, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
 
-        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=5 * 60))
