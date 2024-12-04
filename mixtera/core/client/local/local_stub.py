@@ -170,7 +170,7 @@ class LocalStub(MixteraClient):
     def _get_query_result(self, job_id: str) -> QueryResult:
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
             raise RuntimeError(f"Unknown job {job_id}")
-        return self._training_query_map[job_id][1].results
+        return self._training_query_map[job_id][0]._query_result
 
     def _get_query_chunk_distributor(self, job_id: str) -> ChunkDistributor:
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
