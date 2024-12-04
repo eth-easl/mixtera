@@ -149,7 +149,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # Use the initial mixture as the prior
             self.mu_k = self.initial_mixture.copy()
             assert np.isclose(1, np.sum(self.mu_k))
-            assert len(self.mu_k) == num_domains
+            assert len(self.mu_k) == num_domains, f"len(self.mu_k) = {len(self.mu_k)} != num_domains = {num_domains}\n\n{self.mu_k}"
 
         # **Warm-up Handling**
         if self.total_steps <= self.ignore_initial_steps:
@@ -448,13 +448,18 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         super()._update_state(losses, counts)
 
         if num_internal_domains < num_incoming_domains:
-            logger.debug(f"Resizing structures in ADO algorithm.")
             # Expand per-domain data structures
             size_diff = num_incoming_domains - num_internal_domains
+            logger.debug(f"Resizing structures in ADO algorithm. size_diff = {size_diff}")
+
             if self.h_t is not None:
                 self.h_t = np.concatenate([self.h_t, np.zeros(size_diff, dtype=self.h_t.dtype)])
             if self.mu_k is not None:
+                logger.debug(f"len(self.mu_k) before = {len(self.mu_k)}")
                 self.mu_k = np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
+                logger.debug(f"len(self.mu_k) after = {len(self.mu_k)}")
+            else:
+                logger.debug("mu_k is currently None.")
             if self.pi_t is not None:
                 self.pi_t = np.concatenate([self.pi_t, np.zeros(size_diff, dtype=self.pi_t.dtype)])
             if self.pi_t_minus_1 is not None:
