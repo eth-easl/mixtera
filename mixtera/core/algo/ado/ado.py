@@ -332,11 +332,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         if np.isnan(epsilon_k):
             raise RuntimeError(f"epsilon_k is nan. log_epsilon_k = {log_epsilon_k}")
         
-        if np.isnan(pred):
-            raise RuntimeError(f"pred is nan. epsilon_k = {epsilon_k}, beta_k = {beta_k} counts_k = {counts_k} alpha_k = {alpha_k}")
+        if any(np.isnan(pred)):
+            raise RuntimeError(f"pred has nan = {pred} is nan = {np.isnan(pred)}. epsilon_k = {epsilon_k}, beta_k = {beta_k} counts_k = {counts_k} alpha_k = {alpha_k}")
         
-        if np.isnan(target):
-            raise RuntimeError(f"target is nan. losses_k = {losses_k}")
+        if any(np.isnan(target)):
+            raise RuntimeError(f"target has nan = {target} is nan = {np.isnan(target)}. losses_k = {losses_k}")
 
         # Huber loss for robustness
         delta = 1e-3
