@@ -150,7 +150,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             self.mu_k = self.initial_mixture.copy()
             # Might need to adjust size
             if (size_diff := num_domains - len(self.mu_k)) > 0:
-                np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
+                self.mu_k = np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
 
             assert size_diff >= 0, f"size_diff = {size_diff}"
 
