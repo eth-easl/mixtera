@@ -441,12 +441,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             losses: A numpy array of losses per domain.
             counts: A numpy array of counts per domain.
         """
-        super()._update_state(losses, counts)
-
+        # We first need to catch the number of internal domains, otherwise we will not trigger the following condition.
         num_incoming_domains = len(losses)
         num_internal_domains = len(self.losses)
 
+        super()._update_state(losses, counts)
+
         if num_internal_domains < num_incoming_domains:
+            logger.debug(f"Resizing structures in ADO algorithm.")
             # Expand per-domain data structures
             size_diff = num_incoming_domains - num_internal_domains
             if self.h_t is not None:

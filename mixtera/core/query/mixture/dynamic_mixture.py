@@ -78,7 +78,7 @@ class DynamicMixture(Mixture):
 
             self._informed_alg = True
 
-            logger.debug("Informed the algorithm about the initial mixture.")
+            logger.debug(f"Informed the algorithm about the initial mixture of length = {len(initial_mix)}")
 
     def _process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int) -> None:
         assert self._key_id_map is not None and self._id_key_map is not None

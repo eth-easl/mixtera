@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from loguru import logger
+
 
 class DynamicMixingAlgorithm(ABC):
     """
@@ -56,11 +58,14 @@ class DynamicMixingAlgorithm(ABC):
         num_internal_domains = len(self.losses)
         num_domains = max(num_incoming_domains, num_internal_domains)
 
+        logger.debug(f"DynamicMixingAlgorithm updating state: num_incoming_domains = {num_incoming_domains}, num_internal_domains = {num_internal_domains}")
+
         if num_internal_domains < num_domains:
             # Expand the internal arrays to accommodate new domains
             size_diff = num_domains - num_internal_domains
             self.losses = np.concatenate([self.losses, np.zeros(size_diff, dtype=self.losses.dtype)])
             self.counts = np.concatenate([self.counts, np.zeros(size_diff, dtype=self.counts.dtype)])
+            logger.debug(f"Resized to match size diff of {size_diff}")
 
         # Accumulate the incoming losses and counts
         self.losses[:num_incoming_domains] += losses
