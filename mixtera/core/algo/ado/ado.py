@@ -455,11 +455,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             if self.h_t is not None:
                 self.h_t = np.concatenate([self.h_t, np.zeros(size_diff, dtype=self.h_t.dtype)])
             if self.mu_k is not None:
-                logger.debug(f"len(self.mu_k) before = {len(self.mu_k)}")
                 self.mu_k = np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
-                logger.debug(f"len(self.mu_k) after = {len(self.mu_k)}")
-            else:
-                logger.debug("mu_k is currently None.")
+            if self.initial_mixture is not None:
+                self.initial_mixture = np.concatenate([self.initial_mixture, np.zeros(size_diff, dtype=self.initial_mixture.dtype)])
             if self.pi_t is not None:
                 self.pi_t = np.concatenate([self.pi_t, np.zeros(size_diff, dtype=self.pi_t.dtype)])
             if self.pi_t_minus_1 is not None:
