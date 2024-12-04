@@ -26,6 +26,8 @@ def handle_mixtera_feedback(
 
     mixture_id = torch_dataset._client.current_mixture_id
 
+    assert mixture_id is not None, "mixture_id is None!"
+
     feedback = ClientFeedback(training_steps=training_steps, losses=losses_np, counts=counts_np, mixture_id=mixture_id)
     job_id = torch_dataset._query.job_id
 
