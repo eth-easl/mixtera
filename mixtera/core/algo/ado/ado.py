@@ -266,6 +266,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             losses_k = losses_k[valid_indices]
             logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
 
+            # Remove zero losses (we did not update the counts in that case, i.e., count i = count i - 1)
+            valid_indices = losses_k > 0
+            counts_k = counts_k[valid_indices]
+            losses_k = losses_k[valid_indices]
+            logger.debug(f"counts_k.shape = {counts_k.shape} (post selection no .2)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
+
             if len(counts_k) < 1:
                 logger.debug(f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain.")
                 if self.counts[k] > 0:
@@ -276,8 +282,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
-            log_beta_grid = np.array([1, 2, 3, 4, 5])
-            log_epsilon_grid = np.array([0.75, 1, 1.5, 2, 4, 7 ])
+            log_beta_grid = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+            log_epsilon_grid = np.array([0.75, 1.0, 1.5, 2.0, 4.0, 7.0])
 
             # Create all combinations of initial guesses
             grid_search = [
@@ -308,12 +314,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 )
 
                 if result.success and result.fun < best_loss:
+                    logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
                     best_loss = result.fun
                     best_params = result.x
 
             if best_params is not None:
                 assert self.scaling_law_params is not None
                 self.scaling_law_params[k] = best_params
+                logger.debug(f"Selected best_params {best_params} with loss = {best_loss}")
             else:
                 # Handle optimization failure (e.g., keep previous parameters or use default)
                 raise RuntimeError(f"Error while fitting scaling law!\n{result}")
@@ -325,8 +333,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         log_beta_k, log_epsilon_k, alpha_k = params
 
         # Check for invalid parameter values
-        #if not np.isfinite(log_beta_k) or not np.isfinite(log_epsilon_k) or not np.isfinite(alpha_k):
-        #    return np.inf
+        if not np.isfinite(log_beta_k) or not np.isfinite(log_epsilon_k) or not np.isfinite(alpha_k):
+            return np.inf
 
         beta_k = np.exp(log_beta_k)
         epsilon_k = np.exp(log_epsilon_k)
