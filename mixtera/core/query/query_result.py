@@ -678,6 +678,10 @@ class QueryResult:
 
         logger.debug("Instantiated QueryResult from pickle/dill.")
 
+        query_result._mixture.process_id_map(query_result._key_id_map)
+
+        logger.debug("Processed initial id map.")
+
         # Initialize non-picklable attributes
         query_result._lock = mp.Lock()
         query_result._index = mp.Value("i", 0)

@@ -60,6 +60,8 @@ class DynamicMixture(Mixture):
         self._key_id_map = key_id_map
         self._id_key_map = {value: key for key, value in key_id_map.items()}
 
+        logger.debug("Updated ID map of dynamic mixture.")
+
         if not self._informed_alg:
             # First `inform` is called (which will potentially build the initial mixture), then this function is called.
             # If after that we still have a None mixture, the dynamic mixture does not work.
@@ -75,6 +77,8 @@ class DynamicMixture(Mixture):
             self._mixing_alg.initial_mixture = initial_mix
 
             self._informed_alg = True
+
+            logger.debug("Informed the algorithm about the initial mixture.")
 
     def _process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int) -> None:
         assert self._key_id_map is not None and self._id_key_map is not None
