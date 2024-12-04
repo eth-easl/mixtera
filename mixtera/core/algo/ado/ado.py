@@ -158,8 +158,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             assert len(self.mu_k) == num_domains, f"len(self.mu_k) = {len(self.mu_k)} != num_domains = {num_domains}\n\n{self.mu_k}"
 
         # **Warm-up Handling**
-        if self.total_steps <= self.ignore_initial_steps:
+        if self.total_steps <= self.ignore_initial_steps + self.scaling_law_update_interval:
             # During warm-up, we use the initial mixture and do not update it
+            # Since we cannot use the first information during self.ignore_initial_steps, we nede to wait an additional interval before actually starting the update.
             return None
 
         # Initialize h_t if not set
@@ -252,7 +253,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
 
         # TODO(MaxiBoether): We could use a multiprocessing Pool here.
-        logger.debug(f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}")
+        logger.debug(f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts.shape} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}")
         for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
@@ -266,7 +267,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}")
 
             if len(counts_k) < 1:
-                raise RuntimeError(f"Too little data to fit scaling laws for domain {k}")
+                logger.debug(f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain.")
+                self.scaling_law_params[k] = (-1, -1, -1)
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
