@@ -325,6 +325,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             else:
                 # Handle optimization failure (e.g., keep previous parameters or use default)
                 raise RuntimeError(f"Error while fitting scaling law!\n{result}")
+            
+        logger.debug("Finished fitting scaling laws.")
 
     @staticmethod
     def scaling_law_loss(params: tuple[float, float, float], counts_k: int, losses_k: float) -> float | np.floating:
@@ -415,16 +417,17 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         rho_den: float | np.floating = np.sum(rho_num)
         if rho_den > 0:
             self.rho_t = rho_num / rho_den
+            logger.debug(f"Computed rho_t = {self.rho_t}")
         else:
             # Handle the case where denominator is zero
             self.rho_t = self.mu_k.copy() / len(self.counts)
+            logger.debug(f"Computed special rho_t = {self.rho_t}")
 
     def update_pi_t(self) -> None:
         """
         Updates the data policy pi_k(t) based on rho_k(t) and the moving average pī_k(t-1).
         """
         assert self.mu_k is not None
-        assert self.pi_t is not None
 
         self.pi_bar_t_minus_1 = self.pi_bar_t_minus_1 if self.pi_bar_t_minus_1 is not None else self.mu_k.copy()
 
