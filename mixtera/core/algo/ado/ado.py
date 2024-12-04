@@ -148,6 +148,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         if self.mu_k is None:
             # Use the initial mixture as the prior
             self.mu_k = self.initial_mixture.copy()
+            # Might need to adjust size
+            if (size_diff := num_domains - len(self.mu_k)) > 0:
+                np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
+
+            assert size_diff >= 0, f"size_diff = {size_diff}"
+
             assert np.isclose(1, np.sum(self.mu_k))
             assert len(self.mu_k) == num_domains, f"len(self.mu_k) = {len(self.mu_k)} != num_domains = {num_domains}\n\n{self.mu_k}"
 
@@ -456,8 +462,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 self.h_t = np.concatenate([self.h_t, np.zeros(size_diff, dtype=self.h_t.dtype)])
             if self.mu_k is not None:
                 self.mu_k = np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
-            if self.initial_mixture is not None:
-                self.initial_mixture = np.concatenate([self.initial_mixture, np.zeros(size_diff, dtype=self.initial_mixture.dtype)])
             if self.pi_t is not None:
                 self.pi_t = np.concatenate([self.pi_t, np.zeros(size_diff, dtype=self.pi_t.dtype)])
             if self.pi_t_minus_1 is not None:
