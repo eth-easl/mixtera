@@ -252,18 +252,21 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
 
         # TODO(MaxiBoether): We could use a multiprocessing Pool here.
-        logger.debug("Initialized state.")
+        logger.debug(f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}")
         for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
+
+            logger.debug(f"counts_k.shape = {counts_k.shape} (pre selection)\ncounts_k = {counts_k}")
 
             # Remove zero counts to avoid division by zero
             valid_indices = counts_k > 0
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
+            logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}")
 
             if len(counts_k) < 1:
-                raise RuntimeError("Too little data to fit scaling laws.")
+                raise RuntimeError(f"Too little data to fit scaling laws for domain {k}")
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
