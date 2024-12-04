@@ -277,7 +277,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
             log_beta_grid = np.array([1, 2, 3, 4, 5])
-            log_epsilon_grid = np.array([0.5, 1, 2, 3, 4, 7 ])
+            log_epsilon_grid = np.array([0.75, 1, 1.5, 2, 4, 7 ])
 
             # Create all combinations of initial guesses
             grid_search = [
@@ -297,12 +297,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # TODO(MaxiBoether): we might want to limit the grid search just to the very first fit?!
 
             for initial_guess in grid_search:
+                logger.debug(f"Trying initial guess {initial_guess}")
                 result = minimize(
                     AdoDynamicMixing.scaling_law_loss,
                     initial_guess,
                     args=(counts_k, losses_k),
                     bounds=bounds,
                     method="L-BFGS-B",
+                    options={"maxiter": 200}
                 )
 
                 if result.success and result.fun < best_loss:
