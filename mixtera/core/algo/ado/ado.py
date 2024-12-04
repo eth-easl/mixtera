@@ -279,6 +279,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     raise RuntimeError(f"We sampled domain {k} during the initial steps but not between that and fitting the first scaling laws. Please either increase your interval size or decrease or warm up steps to ensure this does not happen.")
 
                 self.scaling_law_params[k] = (-1, -1, -1)
+                continue
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
@@ -303,7 +304,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # TODO(MaxiBoether): we might want to limit the grid search just to the very first fit?!
 
             for initial_guess in grid_search:
-                logger.debug(f"Trying initial guess {initial_guess}")
                 result = minimize(
                     AdoDynamicMixing.scaling_law_loss,
                     initial_guess,
