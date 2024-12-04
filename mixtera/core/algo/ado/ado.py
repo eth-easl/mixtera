@@ -264,10 +264,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             valid_indices = counts_k > 0
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
-            logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}")
+            logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
 
             if len(counts_k) < 1:
                 logger.debug(f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain.")
+                if self.counts[k] > 0:
+                    # TODO(MaxiBoether): In this case we could also think about not ignoring the initial steps.
+                    raise RuntimeError(f"We sampled domain {k} during the initial steps but not between that and fitting the first scaling laws. Please either increase your interval size or decrease or warm up steps to ensure this does not happen.")
+
                 self.scaling_law_params[k] = (-1, -1, -1)
 
             # **Define the grid of initializations as per the paper**
@@ -319,7 +323,21 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         beta_k = np.exp(log_beta_k)
         epsilon_k = np.exp(log_epsilon_k)
         pred = np.log(epsilon_k + beta_k * counts_k ** (-alpha_k))
+        #pred = np.logaddexp(log_epsilon_k, log_beta_k - alpha_k * np.log(counts_k))
         target = np.log(losses_k)
+
+        if np.isnan(beta_k):
+            raise RuntimeError(f"beta_k is nan. log_beta_k = {log_beta_k}")
+
+        if np.isnan(epsilon_k):
+            raise RuntimeError(f"epsilon_k is nan. log_epsilon_k = {log_epsilon_k}")
+        
+        if np.isnan(pred):
+            raise RuntimeError(f"pred is nan. epsilon_k = {epsilon_k}, beta_k = {beta_k} counts_k = {counts_k} alpha_k = {alpha_k}")
+        
+        if np.isnan(target):
+            raise RuntimeError(f"target is nan. losses_k = {losses_k}")
+
         # Huber loss for robustness
         delta = 1e-3
         abs_diff = np.abs(pred - target)
