@@ -22,7 +22,7 @@ def handle_mixtera_feedback(
         return
 
     losses_np = None if losses is None else to_numpy_array(losses)
-    counts_np = None if counts is None else to_numpy_array(losses)
+    counts_np = None if counts is None else to_numpy_array(counts)
 
     mixture_id = torch_dataset._client.current_mixture_id
 
