@@ -317,9 +317,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             steps_k = steps_k[valid_indices]
 
             # Apply sampling if we have a bit of data
+            subsampled = False
             if len(counts_k) > 4 * self.subsampling_interval:
                 counts_k = counts_k[:: self.subsampling_interval]
                 losses_k = losses_k[:: self.subsampling_interval]
+                subsampled = True
 
             if len(counts_k) < 1:
                 logger.debug(
@@ -441,6 +443,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "median_diff": median_diff if "median_diff" in locals() else None,
                     "best_loss": best_loss,
                     "applied_savgol": applied_savgol,
+                    "subsampled": subsampled
                 }
                 self.log_scaling_laws.append(domain_log)
 
