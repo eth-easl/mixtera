@@ -1,6 +1,8 @@
 # pylint: disable=invalid-name
 # Mathematical notation with snake-case is harder to read.
 
+import json
+
 import numpy as np
 from loguru import logger
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
@@ -31,6 +33,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         ignore_initial_steps: int = 500,
         savgol: bool = True,
         spline_before_savgol: bool = False,
+        logging_path: str | None = None,
     ) -> None:
         """
         Initializes the ADO dynamic mixing algorithm.
@@ -56,6 +59,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.subsampling_interval = subsampling_interval
         self.savgol = savgol
         self.spline_before_savgol = spline_before_savgol
+        self.logging_path = logging_path
 
         # Initialize per-domain data structures
         self.total_steps = 0  # Total number of steps processed
@@ -74,6 +78,22 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         # Initial prior distribution mu_k (from initial_mixture)
         self.mu_k: np.ndarray | None = None  # Will be set based on self.initial_mixture
+
+        if self.logging_path is not None:
+            self.log_config = {
+                "variant": variant,
+                "gamma1": gamma1,
+                "gamma2": gamma2,
+                "s": s,
+                "delta_min": delta_min,
+                "scaling_law_update_interval": scaling_law_update_interval,
+                "subsampling_interval": subsampling_interval,
+                "ignore_initial_steps": ignore_initial_steps,
+                "savgol": savgol,
+                "spline_before_savgol": spline_before_savgol,
+            }
+            self.log_entries = []
+            self.log_scaling_laws = []
 
     def __str__(self) -> str:
         """
@@ -135,6 +155,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             state_dict["losses"] = None
 
         return str(state_dict)
+
+    def write_logs(self) -> None:
+        if self.logging_path is not None:
+            log_data = {"config": self.log_config, "entries": self.log_entries, "scaling_laws": self.log_scaling_laws}
+            with open(self.logging_path, "w+") as f:
+                json.dump(log_data, f, indent=4)
 
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         """
@@ -216,6 +242,24 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.update_pi_bar_t()
 
         logger.debug(f"Calculated mixture = {self.pi_t}")
+
+        if self.logging_path is not None:
+            step_log = {
+                "step": self.total_steps,
+                "counts": self.counts.tolist() if self.counts is not None else None,
+                "losses": self.losses.tolist() if self.losses is not None else None,
+                "h_t": self.h_t.tolist() if self.h_t is not None else None,
+                "pi_t": self.pi_t.tolist() if self.pi_t is not None else None,
+                "pi_bar_t_minus_1": self.pi_bar_t_minus_1.tolist() if self.pi_bar_t_minus_1 is not None else None,
+                "pi_t_minus_1": self.pi_t_minus_1.tolist() if self.pi_t_minus_1 is not None else None,
+                "rho_t": self.rho_t.tolist() if hasattr(self, "rho_t") else None,
+                "dL_dn": dL_dn.tolist() if "dL_dn" in locals() else None,
+                "scaling_law_params": self.scaling_law_params.tolist() if self.scaling_law_params is not None else None,
+            }
+            self.log_entries.append(step_log)
+
+        if self.total_steps % 50 == 0:
+            self.write_logs()
 
         return self.pi_t
 
@@ -385,6 +429,19 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             else:
                 # Handle optimization failure (e.g., keep previous parameters or use default)
                 raise RuntimeError(f"Error while fitting scaling law!\n{result}")
+
+            if self.logging_path is not None:
+                domain_log = {
+                    "step": self.total_steps,
+                    "domain_index": k,
+                    "counts_k": counts_k.tolist(),
+                    "losses_k": losses_k.tolist(),
+                    "x_data": x_data.tolist(),
+                    "y_data": y_data.tolist(),
+                    "interpolated_losses": interpolated_losses.tolist() if "interpolated_losses" in locals() else None,
+                    "best_params": best_params.tolist() if best_params is not None else None,
+                }
+                self.log_scaling_laws.append(domain_log)
 
         logger.debug("Finished fitting scaling laws.")
 
