@@ -342,6 +342,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
             x_data = counts_k
             y_data = losses_k
+            applied_savgol = False
 
             if self.savgol:
                 interpolated_losses = losses_k
@@ -374,6 +375,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     window_length -= 1  # window_length must be odd
                 if window_length >= 3:
                     y_data = savgol_filter(interpolated_losses, window_length=window_length, polyorder=3)
+                    applied_savgol = True
                 else:
                     logger.debug(
                         f"Not enough data points to apply Savitzky-Golay filter for domain {k}. Using original data"
@@ -439,7 +441,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "window_length": window_length if "window_length" in locals() else None,
                     "num_points": num_points if "num_points" in locals() else None,
                     "median_diff": median_diff if "median_diff" in locals() else None,
-                    "best_loss": best_loss
+                    "best_loss": best_loss,
+                    "applied_savgol": applied_savgol
                 }
                 self.log_scaling_laws.append(domain_log)
 
