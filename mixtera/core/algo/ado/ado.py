@@ -35,6 +35,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         savgol: bool = True,
         spline_before_savgol: bool = False,
         use_same_step_size: bool = True,
+        count_normalizer: None | int = None,
         logging_path: str | None = None,
     ) -> None:
         """
@@ -63,6 +64,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.spline_before_savgol = spline_before_savgol
         self.logging_path = logging_path
         self.use_same_step_size = use_same_step_size
+        self.count_normalizer = count_normalizer
 
         if use_same_step_size and spline_before_savgol:
             raise RuntimeError("Can only use either `use_same_step_size` or `spline_before_savgol`")
@@ -407,6 +409,10 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     )
                     x_data = counts_k
                     y_data = losses_k
+
+            if self.count_normalizer is not None and self.count_normalizer > 1:
+                # Can be used to convert tokens into samples
+                x_data = x_data / float(self.count_normalizer)
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
