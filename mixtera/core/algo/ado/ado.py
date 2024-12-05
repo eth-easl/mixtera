@@ -537,6 +537,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         n_k = self.counts.copy()
 
+        if self.count_normalizer is not None and self.count_normalizer > 1:
+            n_k = n_k / self.count_normalizer
+
         # Extract parameters
         log_beta_k, log_epsilon_k, alpha_k = self.scaling_law_params.T
         beta_k = np.exp(log_beta_k)
