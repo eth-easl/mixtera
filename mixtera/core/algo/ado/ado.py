@@ -317,7 +317,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             steps_k = steps_k[valid_indices]
 
             # Apply sampling if we have a bit of data
-            if len(counts_k) > 2 * self.subsampling_interval:
+            if len(counts_k) > 4 * self.subsampling_interval:
                 counts_k = counts_k[:: self.subsampling_interval]
                 losses_k = losses_k[:: self.subsampling_interval]
 
