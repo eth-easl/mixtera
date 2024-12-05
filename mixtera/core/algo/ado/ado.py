@@ -683,15 +683,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.per_step_losses.append(per_step_losses)
 
         if self.use_same_step_size:
-            valid_domains = self.counts > 0
-            total_counts = np.sum(self.counts)
-            num_valid_domains = np.sum(valid_domains)
-            num_time_steps = len(self.per_step_counts)
-            assert num_valid_domains > 0 and num_time_steps > 0
-
-            per_step_increment = total_counts / (num_valid_domains * num_time_steps)
-            per_step_counts_array = np.zeros((num_time_steps, num_incoming_domains), dtype=counts.dtype)
-            per_step_counts_array[:, valid_domains] = per_step_increment
-            self.per_step_counts = [per_step_counts_array[t] for t in range(num_time_steps)]
+            num_valid_domains = np.sum(self.counts > 0)
+            assert num_valid_domains > 0
+            total_tokens = counts.sum()
+            increment = np.zeros_like(counts, dtype=counts.dtype)
+            increment[self.counts > 0] = int(total_tokens / num_valid_domains)
+            self.per_step_counts.append(increment)
         else:
             self.per_step_counts.append(counts.copy())
