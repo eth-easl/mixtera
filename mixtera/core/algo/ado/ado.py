@@ -294,42 +294,38 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         counts_over_time = np.array(self.per_step_counts)
         losses_over_time = np.array(self.per_step_losses)
 
-        # Ignore initial steps
-        counts_over_time = counts_over_time[self.ignore_initial_steps :]
-        losses_over_time = losses_over_time[self.ignore_initial_steps :]
-
-        # Subsample intervals
-        counts_over_time = counts_over_time[:: self.subsampling_interval]
-        losses_over_time = losses_over_time[:: self.subsampling_interval]
-
         # Compute cumulative counts per domain
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
 
         # TODO(MaxiBoether): We could use a multiprocessing Pool here.
-        logger.debug(
-            f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts.shape} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}"
-        )
+        #logger.debug(
+        #    f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts.shape} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}"
+        #)
         for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
+            steps_k = np.arange(len(counts_k))
 
-            logger.debug(f"counts_k.shape = {counts_k.shape} (pre selection)\ncounts_k = {counts_k}")
+            # logger.debug(f"counts_k.shape = {counts_k.shape} (pre selection)\ncounts_k = {counts_k}")
 
-            # Remove zero counts to avoid division by zero
-            valid_indices = counts_k > 0
+            # Select only items where counts/losess are > 0
+            valid_indices = (counts_k > 0) & (losses_k > 0)
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
-            logger.debug(
-                f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}"
-            )
+            steps_k = steps_k[valid_indices]
+            # logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
 
-            # Remove zero losses (we did not update the counts in that case, i.e., count i = count i - 1)
-            valid_indices = losses_k > 0
+            # Apply filter for initial steps
+            valid_indices = steps_k < self.ignore_initial_steps
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
-            logger.debug(
-                f"counts_k.shape = {counts_k.shape} (post selection no .2)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}"
-            )
+            steps_k = steps_k[valid_indices]
+            #logger.debug(f"counts_k.shape = {counts_k.shape} (post selection2)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
+
+            # Apply sampling if we have a bit of data
+            if len(counts_k) > 2 * self.subsampling_interval:
+                counts_k = counts_k[:: self.subsampling_interval]
+                losses_k = losses_k[:: self.subsampling_interval]
 
             if len(counts_k) < 1:
                 logger.debug(
@@ -418,7 +414,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 )
 
                 if result.success and result.fun < best_loss:
-                    logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
+                    #logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
                     best_loss = result.fun
                     best_params = result.x
 
@@ -440,6 +436,10 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "y_data": y_data.tolist(),
                     "interpolated_losses": interpolated_losses.tolist() if "interpolated_losses" in locals() else None,
                     "best_params": best_params.tolist() if best_params is not None else None,
+                    "window_length": window_length if "window_length" in locals() else None,
+                    "num_points": num_points if "num_points" in locals() else None,
+                    "median_diff": median_diff if "median_diff" in locals() else None,
+                    "best_loss": best_loss
                 }
                 self.log_scaling_laws.append(domain_log)
 
@@ -457,7 +457,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         beta_k = np.exp(log_beta_k)
         epsilon_k = np.exp(log_epsilon_k)
-        pred = logsumexp([log_beta_k - alpha_k * np.log(counts_k), log_epsilon_k], axis=0)
+        pred = logsumexp([log_beta_k - alpha_k * np.log(counts_k), log_epsilon_k + np.zeros_like(counts_k)], axis=0)
         target = np.log(losses_k)
 
         if np.isnan(beta_k):
@@ -537,11 +537,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         rho_den: float | np.floating = np.sum(rho_num)
         if rho_den > 0:
             self.rho_t = rho_num / rho_den
-            logger.debug(f"Computed rho_t = {self.rho_t}")
+            # logger.debug(f"Computed rho_t = {self.rho_t}")
         else:
             # Handle the case where denominator is zero
             self.rho_t = self.mu_k.copy() / len(self.counts)
-            logger.debug(f"Computed special rho_t = {self.rho_t}")
+            # logger.debug(f"Computed special rho_t = {self.rho_t}")
 
     def update_pi_t(self) -> None:
         """
