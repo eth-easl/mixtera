@@ -316,7 +316,7 @@ def test_dynamic_mixture(client: MixteraClient):
     losses[key_html] = 1
     counts[key_js] = 1
     counts[key_html] = 1
-    client.process_feedback(job_id, ClientFeedback(training_steps=1, losses=losses, counts=counts))
+    client.process_feedback(job_id, ClientFeedback(training_steps=1, losses=losses, counts=counts, mixture_id=0))
 
     # 3. Check for two chunks whether they fulfill the new mixture
     num_js = 0
@@ -359,7 +359,7 @@ def test_dynamic_mixture(client: MixteraClient):
     losses[key_html] = 3
     counts[key_js] = 1
     counts[key_html] = 1
-    client.process_feedback(job_id, ClientFeedback(training_steps=3, losses=losses, counts=counts))
+    client.process_feedback(job_id, ClientFeedback(training_steps=3, losses=losses, counts=counts, mixture_id=1))
 
     # 3. Check for one chunk whether it fulfills the new mixture
     num_js = 0
