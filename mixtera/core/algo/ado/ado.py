@@ -35,7 +35,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         savgol: bool = True,
         spline_before_savgol: bool = False,
         use_same_step_size: bool = True,
-        normalize_losses: bool = True,
         logging_path: str | None = None,
     ) -> None:
         """
@@ -63,11 +62,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.savgol = savgol
         self.spline_before_savgol = spline_before_savgol
         self.logging_path = logging_path
-        self.use_same_step_size = use_same_step_size 
-        self.normalize_losses = normalize_losses
-
-        if use_same_step_size:
-            raise NotImplementedError()
+        self.use_same_step_size = use_same_step_size
 
         if use_same_step_size and spline_before_savgol:
             raise RuntimeError("Can only use either `use_same_step_size` or `spline_before_savgol`")
@@ -102,7 +97,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "ignore_initial_steps": ignore_initial_steps,
                 "savgol": savgol,
                 "spline_before_savgol": spline_before_savgol,
-                "normalize_losses": normalize_losses
             }
             self.log_entries: list[Any] = []
             self.log_scaling_laws: list[Any] = []
@@ -313,17 +307,32 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         # TODO(#create issue): We could use a multiprocessing Pool here.
         for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
-            nonc_counts_k = counts_over_time[:, k] # Non cumulative counts over time
+            nonc_counts_k = counts_over_time[:, k]  # Non cumulative counts over time
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
             steps_k = np.arange(len(counts_k))
 
-            # Select only items where counts/losess are > 0
-            valid_indices = (counts_k > 0) & (losses_k > 0)
+            # Select only items where counts are > 0
+            valid_indices = counts_k > 0
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
             steps_k = steps_k[valid_indices]
             nonc_counts_k = nonc_counts_k[valid_indices]
+
+            if self.use_same_step_size:
+                # When using the same step size, we impute missing losses
+                # TODO: This aligns with the paper but I guess we could also make this a flag?
+                # I don't think we _have to_ do this, we could also fit it without these data points.
+                for t in range(1, len(losses_k)):
+                    if losses_k[t] == 0:
+                        losses_k[t] = losses_k[t - 1]
+            else:
+                # If fitting on x data for each domain, select only items where loses are > 0
+                valid_indices = losses_k > 0
+                counts_k = counts_k[valid_indices]
+                losses_k = losses_k[valid_indices]
+                steps_k = steps_k[valid_indices]
+                nonc_counts_k = nonc_counts_k[valid_indices]
 
             # Apply filter for initial steps
             valid_indices = steps_k > self.ignore_initial_steps
@@ -331,9 +340,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             losses_k = losses_k[valid_indices]
             steps_k = steps_k[valid_indices]
             nonc_counts_k = nonc_counts_k[valid_indices]
-
-            if self.normalize_losses:
-                losses_k = losses_k / nonc_counts_k
 
             # Apply sampling if we have a bit of data
             subsampled = False
@@ -672,8 +678,20 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     [self.per_step_losses[idx], np.zeros(size_diff, dtype=self.per_step_losses[idx].dtype)]
                 )
 
-        # Compute per-step losses per domain (avoiding division by zero)
-        per_step_losses = np.divide(losses, counts, out=np.zeros_like(losses, dtype=np.float32), where=counts != 0)
-
-        self.per_step_counts.append(counts.copy())
+        # Compute NORMALIZED per-step losses per domain (avoiding division by zero)
+        per_step_losses = np.divide(losses, counts, out=np.zeros_like(losses, dtype=losses.dtype), where=counts != 0)
         self.per_step_losses.append(per_step_losses)
+
+        if self.use_same_step_size:
+            valid_domains = self.counts > 0
+            total_counts = np.sum(self.counts)
+            num_valid_domains = np.sum(valid_domains)
+            num_time_steps = len(self.per_step_counts)
+            assert num_valid_domains > 0 and num_time_steps > 0
+
+            per_step_increment = total_counts / (num_valid_domains * num_time_steps)
+            per_step_counts_array = np.zeros((num_time_steps, num_incoming_domains), dtype=counts.dtype)
+            per_step_counts_array[:, valid_domains] = per_step_increment
+            self.per_step_counts = [per_step_counts_array[t] for t in range(num_time_steps)]
+        else:
+            self.per_step_counts.append(counts.copy())
