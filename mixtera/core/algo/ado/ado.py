@@ -316,7 +316,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
 
             # Apply filter for initial steps
-            valid_indices = steps_k < self.ignore_initial_steps
+            valid_indices = steps_k > self.ignore_initial_steps
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
             steps_k = steps_k[valid_indices]
