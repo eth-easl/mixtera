@@ -159,7 +159,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
     def write_logs(self) -> None:
         if self.logging_path is not None:
             log_data = {"config": self.log_config, "entries": self.log_entries, "scaling_laws": self.log_scaling_laws}
-            with open(self.logging_path, "w+") as f:
+            with open(self.logging_path, "w+", encoding="utf-8") as f:
                 json.dump(log_data, f, indent=4)
 
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
@@ -195,7 +195,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # **Warm-up Handling**
         if self.total_steps <= self.ignore_initial_steps + self.scaling_law_update_interval:
             # During warm-up, we use the initial mixture and do not update it
-            # Since we cannot use the first information during self.ignore_initial_steps, we nede to wait an additional interval before actually starting the update.
+            # Since we cannot use the first information during self.ignore_initial_steps,
+            # we need to wait an additional interval before actually starting the update.
             return None
 
         # Initialize h_t if not set
@@ -297,30 +298,23 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Compute cumulative counts per domain
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
 
-        # TODO(MaxiBoether): We could use a multiprocessing Pool here.
-        #logger.debug(
-        #    f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts.shape} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}"
-        #)
+        # TODO(#create issue): We could use a multiprocessing Pool here.
         for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
             steps_k = np.arange(len(counts_k))
-
-            # logger.debug(f"counts_k.shape = {counts_k.shape} (pre selection)\ncounts_k = {counts_k}")
 
             # Select only items where counts/losess are > 0
             valid_indices = (counts_k > 0) & (losses_k > 0)
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
             steps_k = steps_k[valid_indices]
-            # logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
 
             # Apply filter for initial steps
             valid_indices = steps_k > self.ignore_initial_steps
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
             steps_k = steps_k[valid_indices]
-            #logger.debug(f"counts_k.shape = {counts_k.shape} (post selection2)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
 
             # Apply sampling if we have a bit of data
             if len(counts_k) > 2 * self.subsampling_interval:
@@ -332,9 +326,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain."
                 )
                 if self.counts[k] > 0:
-                    # TODO(MaxiBoether): In this case we could also think about not ignoring the initial steps.
                     raise RuntimeError(
-                        f"We sampled domain {k} during the initial steps but not between that and fitting the first scaling laws. Please either increase your interval size or decrease or warm up steps to ensure this does not happen."
+                        f"We sampled domain {k}"
+                        + "during the initial steps but not between that and fitting the first scaling laws."
+                        + "Please either increase your interval size or"
+                        + "decrease or warm up steps to ensure this does not happen."
                     )
 
                 self.scaling_law_params[k] = (-1, -1, -1)
@@ -373,7 +369,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 window_length = min(101, num_x)
                 if window_length % 2 == 0:
                     window_length -= 1  # window_length must be odd
-                if window_length >= 3:
+                    logger.debug(f"Adjusted window length to {window_length} for domain {k}")
+                if window_length > 3:
                     y_data = savgol_filter(interpolated_losses, window_length=window_length, polyorder=3)
                     applied_savgol = True
                 else:
@@ -416,7 +413,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 )
 
                 if result.success and result.fun < best_loss:
-                    #logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
+                    # logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
                     best_loss = result.fun
                     best_params = result.x
 
@@ -443,7 +440,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "num_points": num_points if "num_points" in locals() else None,
                     "median_diff": median_diff if "median_diff" in locals() else None,
                     "best_loss": best_loss,
-                    "applied_savgol": applied_savgol
+                    "applied_savgol": applied_savgol,
                 }
                 self.log_scaling_laws.append(domain_log)
 
@@ -472,7 +469,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         if any(np.isnan(pred)):
             raise RuntimeError(
-                f"pred has nan = {pred} is nan = {np.isnan(pred)}. epsilon_k = {epsilon_k}, beta_k = {beta_k} counts_k = {counts_k} alpha_k = {alpha_k} params = {params}"
+                f"pred has nan = {pred} is nan = {np.isnan(pred)}. epsilon_k = {epsilon_k}, "
+                + f"beta_k = {beta_k} counts_k = {counts_k} alpha_k = {alpha_k} params = {params}"
             )
 
         if any(np.isnan(target)):
