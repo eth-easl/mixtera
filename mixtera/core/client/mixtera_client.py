@@ -106,12 +106,12 @@ class MixteraClient(ABC):
 
     def __init__(self) -> None:
         self.current_mixture_id_val = mp.Value("i", -1)
-    
+
     @property
     def current_mixture_id(self) -> int | None:
         with self.current_mixture_id_val.get_lock():
             val = self.current_mixture_id_val.get_obj().value
-    
+
         return None if val < 0 else val
 
     @abstractmethod
@@ -238,7 +238,7 @@ class MixteraClient(ABC):
                 args=args,
             )
             yield from result_chunk
-            
+
         with self.current_mixture_id_val.get_lock():
             self.current_mixture_id_val.get_obj().value = -1
 

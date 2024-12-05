@@ -637,7 +637,7 @@ class ServerConnection:
         await write_int(int(on_disk), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Read success flag from the server
-        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=120)
         return bool(success)
 
     def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:

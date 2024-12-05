@@ -86,7 +86,7 @@ class LocalStub(MixteraClient):
             ), "We cached a query that already has returned items, this should not happen!"
             query.results._query_log_dir = self.mixture_log_directory / query.job_id
             query.results._query_log_dir.mkdir(exist_ok=True)
-            query.results._key_id_map = {} # reset map to trigger update of mixture id map
+            query.results._key_id_map = {}  # reset map to trigger update of mixture id map
             query.results.update_mixture(args.mixture)
         else:
             query.execute(self._mdc, args.mixture, self.mixture_log_directory / query.job_id)

@@ -4,7 +4,10 @@
 import numpy as np
 from loguru import logger
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
+from scipy.interpolate import UnivariateSpline
 from scipy.optimize import minimize
+from scipy.signal import savgol_filter
+from scipy.special import logsumexp
 from tqdm import tqdm
 
 
@@ -26,6 +29,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         scaling_law_update_interval: int = 1000,
         subsampling_interval: int = 10,
         ignore_initial_steps: int = 500,
+        savgol: bool = True,
+        spline_before_savgol: bool = False,
     ) -> None:
         """
         Initializes the ADO dynamic mixing algorithm.
@@ -49,6 +54,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.scaling_law_update_interval = scaling_law_update_interval
         self.ignore_initial_steps = ignore_initial_steps
         self.subsampling_interval = subsampling_interval
+        self.savgol = savgol
+        self.spline_before_savgol = spline_before_savgol
 
         # Initialize per-domain data structures
         self.total_steps = 0  # Total number of steps processed
@@ -155,7 +162,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             assert size_diff >= 0, f"size_diff = {size_diff}"
 
             assert np.isclose(1, np.sum(self.mu_k))
-            assert len(self.mu_k) == num_domains, f"len(self.mu_k) = {len(self.mu_k)} != num_domains = {num_domains}\n\n{self.mu_k}"
+            assert (
+                len(self.mu_k) == num_domains
+            ), f"len(self.mu_k) = {len(self.mu_k)} != num_domains = {num_domains}\n\n{self.mu_k}"
 
         # **Warm-up Handling**
         if self.total_steps <= self.ignore_initial_steps + self.scaling_law_update_interval:
@@ -253,7 +262,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         cumulative_counts = np.cumsum(counts_over_time, axis=0)
 
         # TODO(MaxiBoether): We could use a multiprocessing Pool here.
-        logger.debug(f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts.shape} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}")
+        logger.debug(
+            f"Initialized state.\ncounts_over_time.shape={counts_over_time.shape} cumulative_counts.shape={cumulative_counts.shape} len(self.per_step_counts) = {len(self.per_step_counts)}\ncumulative_counts = {cumulative_counts}\nself.counts = {self.counts}\nself.counts.shape = {self.counts.shape}"
+        )
         for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
@@ -264,22 +275,71 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             valid_indices = counts_k > 0
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
-            logger.debug(f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
+            logger.debug(
+                f"counts_k.shape = {counts_k.shape} (post selection)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}"
+            )
 
             # Remove zero losses (we did not update the counts in that case, i.e., count i = count i - 1)
             valid_indices = losses_k > 0
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
-            logger.debug(f"counts_k.shape = {counts_k.shape} (post selection no .2)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}")
+            logger.debug(
+                f"counts_k.shape = {counts_k.shape} (post selection no .2)\nvalid_indices = {valid_indices}\ncounts_k = {counts_k}\nlosses_k = {losses_k}"
+            )
 
             if len(counts_k) < 1:
-                logger.debug(f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain.")
+                logger.debug(
+                    f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain."
+                )
                 if self.counts[k] > 0:
                     # TODO(MaxiBoether): In this case we could also think about not ignoring the initial steps.
-                    raise RuntimeError(f"We sampled domain {k} during the initial steps but not between that and fitting the first scaling laws. Please either increase your interval size or decrease or warm up steps to ensure this does not happen.")
+                    raise RuntimeError(
+                        f"We sampled domain {k} during the initial steps but not between that and fitting the first scaling laws. Please either increase your interval size or decrease or warm up steps to ensure this does not happen."
+                    )
 
                 self.scaling_law_params[k] = (-1, -1, -1)
                 continue
+
+            x_data = counts_k
+            y_data = losses_k
+
+            if self.savgol:
+                interpolated_losses = losses_k
+                num_x = len(counts_k)
+                if self.spline_before_savgol:
+                    counts_diffs = np.diff(counts_k)
+                    median_diff = np.median(counts_diffs)
+                    if median_diff <= 0:
+                        logger.debug(f"median_diff = {median_diff} falling back to linear spacing")
+                        # If the median difference is zero or negative, fall back to linear spacing
+                        median_diff = (counts_k[-1] - counts_k[0]) / (len(counts_k) - 1)
+                        logger.debug(f"median_diff now = {median_diff}")
+
+                    if median_diff <= 0:
+                        logger.debug("All counts are the same; cannot create a grid")
+                        counts_grid = counts_k.copy()
+                    else:
+                        # Create evenly spaced counts grid using the median difference
+                        num_points = int(np.ceil((counts_k[-1] - counts_k[0]) / median_diff)) + 1
+                        counts_grid = np.linspace(counts_k[0], counts_k[0] + median_diff * (num_points - 1), num_points)
+
+                    # Use spline interpolation to map losses onto the counts grid
+                    spline = UnivariateSpline(counts_k, losses_k, s=0, k=3)
+                    interpolated_losses = spline(counts_grid)
+                    num_x = len(counts_grid)
+                    x_data = counts_grid
+
+                window_length = min(101, num_x)
+                if window_length % 2 == 0:
+                    window_length -= 1  # window_length must be odd
+                if window_length >= 3:
+                    y_data = savgol_filter(interpolated_losses, window_length=window_length, polyorder=3)
+                else:
+                    logger.debug(
+                        f"Not enough data points to apply Savitzky-Golay filter for domain {k}. Using original data"
+                    )
+                    x_data = counts_k
+                    y_data = losses_k
 
             # **Define the grid of initializations as per the paper**
             alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
@@ -297,20 +357,20 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             best_loss = np.inf
             best_params = None
 
-            bounds = [(0.5, 6.5),  # log_beta_k ∈ [0.5, 6.5]
-                    (0.5, 10.0), # log_epsilon_k ∈ [0.5, 10.0]
-                    (0.05, 0.8)] # alpha_k ∈ [0.05, 0.8]
-
-            # TODO(MaxiBoether): we might want to limit the grid search just to the very first fit?!
+            bounds = [
+                (0.5, 6.5),  # log_beta_k ∈ [0.5, 6.5]
+                (0.5, 10.0),  # log_epsilon_k ∈ [0.5, 10.0]
+                (0.05, 0.8),
+            ]  # alpha_k ∈ [0.05, 0.8]
 
             for initial_guess in grid_search:
                 result = minimize(
                     AdoDynamicMixing.scaling_law_loss,
                     initial_guess,
-                    args=(counts_k, losses_k),
+                    args=(x_data, y_data),
                     bounds=bounds,
                     method="L-BFGS-B",
-                    options={"maxiter": 200}
+                    options={"maxiter": 200},
                 )
 
                 if result.success and result.fun < best_loss:
@@ -325,7 +385,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             else:
                 # Handle optimization failure (e.g., keep previous parameters or use default)
                 raise RuntimeError(f"Error while fitting scaling law!\n{result}")
-            
+
         logger.debug("Finished fitting scaling laws.")
 
     @staticmethod
@@ -340,8 +400,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         beta_k = np.exp(log_beta_k)
         epsilon_k = np.exp(log_epsilon_k)
-        pred = np.log(epsilon_k + beta_k * counts_k ** (-alpha_k))
-        #pred = np.logaddexp(log_epsilon_k, log_beta_k - alpha_k * np.log(counts_k))
+        pred = logsumexp([log_beta_k - alpha_k * np.log(counts_k), log_epsilon_k], axis=0)
         target = np.log(losses_k)
 
         if np.isnan(beta_k):
@@ -349,12 +408,16 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         if np.isnan(epsilon_k):
             raise RuntimeError(f"epsilon_k is nan. log_epsilon_k = {log_epsilon_k} params = {params}")
-        
+
         if any(np.isnan(pred)):
-            raise RuntimeError(f"pred has nan = {pred} is nan = {np.isnan(pred)}. epsilon_k = {epsilon_k}, beta_k = {beta_k} counts_k = {counts_k} alpha_k = {alpha_k} params = {params}")
-        
+            raise RuntimeError(
+                f"pred has nan = {pred} is nan = {np.isnan(pred)}. epsilon_k = {epsilon_k}, beta_k = {beta_k} counts_k = {counts_k} alpha_k = {alpha_k} params = {params}"
+            )
+
         if any(np.isnan(target)):
-            raise RuntimeError(f"target has nan = {target} is nan = {np.isnan(target)}. losses_k = {losses_k} params = {params}")
+            raise RuntimeError(
+                f"target has nan = {target} is nan = {np.isnan(target)}. losses_k = {losses_k} params = {params}"
+            )
 
         # Huber loss for robustness
         delta = 1e-3
