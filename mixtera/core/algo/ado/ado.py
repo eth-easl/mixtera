@@ -2,6 +2,7 @@
 # Mathematical notation with snake-case is harder to read.
 
 import json
+from typing import Any
 
 import numpy as np
 from loguru import logger
@@ -92,8 +93,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "savgol": savgol,
                 "spline_before_savgol": spline_before_savgol,
             }
-            self.log_entries = []
-            self.log_scaling_laws = []
+            self.log_entries: list[Any] = []
+            self.log_scaling_laws: list[Any] = []
 
     def __str__(self) -> str:
         """
@@ -186,7 +187,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 self.mu_k = np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
 
             assert size_diff >= 0, f"size_diff = {size_diff}"
-
+            assert self.mu_k is not None
             assert np.isclose(1, np.sum(self.mu_k))
             assert (
                 len(self.mu_k) == num_domains
@@ -291,6 +292,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         logger.debug("Re-fitting scaling laws.")
         num_domains = len(self.counts)
         self.scaling_law_params = np.zeros((num_domains, 3))  # [log_beta_k, log_epsilon_k, alpha_k]
+        assert self.scaling_law_params is not None
 
         counts_over_time = np.array(self.per_step_counts)
         losses_over_time = np.array(self.per_step_losses)
@@ -443,7 +445,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "median_diff": median_diff if "median_diff" in locals() else None,
                     "best_loss": best_loss,
                     "applied_savgol": applied_savgol,
-                    "subsampled": subsampled
+                    "subsampled": subsampled,
                 }
                 self.log_scaling_laws.append(domain_log)
 

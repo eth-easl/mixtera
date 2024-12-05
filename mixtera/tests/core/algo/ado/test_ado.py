@@ -50,7 +50,7 @@ class TestAdoDynamicMixing(unittest.TestCase):
 
     def test_calc_mixture_after_warmup(self):
         # Test calc_mixture method after warm-up
-        self.ado.total_steps = self.ado.ignore_initial_steps + 1
+        self.ado.total_steps = self.ado.ignore_initial_steps + self.ado.scaling_law_update_interval + 1
         self.ado.counts = np.array([100, 200])
         self.ado.losses = np.array([1.0, 0.5])
         # Mock per_step_counts and per_step_losses

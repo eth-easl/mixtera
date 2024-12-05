@@ -262,6 +262,7 @@ class TestLocalStub(unittest.TestCase):
         )
         query.results._mixture = schedule
         self.local_stub._training_query_map["feedback_job"] = (None, query, schedule)
+        self.local_stub._get_query_result = MagicMock(return_value=query.results)
 
         # First sending feedbacks.
         for steps in [0, 100, 200]:
