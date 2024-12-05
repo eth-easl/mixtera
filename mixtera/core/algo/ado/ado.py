@@ -436,6 +436,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "losses_k": losses_k.tolist(),
                     "x_data": x_data.tolist(),
                     "y_data": y_data.tolist(),
+                    "steps_k": steps_k.tolist(),
                     "interpolated_losses": interpolated_losses.tolist() if "interpolated_losses" in locals() else None,
                     "best_params": best_params.tolist() if best_params is not None else None,
                     "window_length": window_length if "window_length" in locals() else None,
