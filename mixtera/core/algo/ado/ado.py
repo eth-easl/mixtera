@@ -34,6 +34,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         ignore_initial_steps: int = 500,
         savgol: bool = True,
         spline_before_savgol: bool = False,
+        use_same_step_size: bool = True,
+        normalize_losses: bool = True,
         logging_path: str | None = None,
     ) -> None:
         """
@@ -61,6 +63,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.savgol = savgol
         self.spline_before_savgol = spline_before_savgol
         self.logging_path = logging_path
+        self.use_same_step_size = use_same_step_size 
+        self.normalize_losses = normalize_losses
+
+        if use_same_step_size:
+            raise NotImplementedError()
+
+        if use_same_step_size and spline_before_savgol:
+            raise RuntimeError("Can only use either `use_same_step_size` or `spline_before_savgol`")
 
         # Initialize per-domain data structures
         self.total_steps = 0  # Total number of steps processed
@@ -92,6 +102,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "ignore_initial_steps": ignore_initial_steps,
                 "savgol": savgol,
                 "spline_before_savgol": spline_before_savgol,
+                "normalize_losses": normalize_losses
             }
             self.log_entries: list[Any] = []
             self.log_scaling_laws: list[Any] = []
@@ -302,6 +313,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         # TODO(#create issue): We could use a multiprocessing Pool here.
         for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
+            nonc_counts_k = counts_over_time[:, k] # Non cumulative counts over time
             counts_k = cumulative_counts[:, k]
             losses_k = losses_over_time[:, k]
             steps_k = np.arange(len(counts_k))
@@ -311,18 +323,24 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
             steps_k = steps_k[valid_indices]
+            nonc_counts_k = nonc_counts_k[valid_indices]
 
             # Apply filter for initial steps
             valid_indices = steps_k > self.ignore_initial_steps
             counts_k = counts_k[valid_indices]
             losses_k = losses_k[valid_indices]
             steps_k = steps_k[valid_indices]
+            nonc_counts_k = nonc_counts_k[valid_indices]
+
+            if self.normalize_losses:
+                losses_k = losses_k / nonc_counts_k
 
             # Apply sampling if we have a bit of data
             subsampled = False
             if len(counts_k) > 4 * self.subsampling_interval:
                 counts_k = counts_k[:: self.subsampling_interval]
                 losses_k = losses_k[:: self.subsampling_interval]
+                steps_k = steps_k[:: self.subsampling_interval]
                 subsampled = True
 
             if len(counts_k) < 1:
