@@ -76,7 +76,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Initialize h(t), pi(t), and moving averages
         self.h_t: np.ndarray | None = None  # Credit assignment score h_k(t)
         self.pi_t: np.ndarray | None = None  # Data policy pi_k(t)
-        self.pi_t_minus_1: np.ndarray | None = None  # Previous data policy pi_k(t-1)
         self.pi_bar_t_minus_1: np.ndarray | None = None  # Previous moving average pī_k(t-1)
         self.scaling_law_params: np.ndarray | None = None  # Scaling law parameters [log_beta_k, log_epsilon_k, alpha_k]
 
@@ -210,22 +209,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Initialize h_t if not set
         self.h_t = self.h_t if self.h_t is not None else self.mu_k.copy()
 
-        # Update h(t) based on the variant and whether the mixture was updated at the client
-        if self.variant == "vanilla":
-            # Update h(t) every step using the last calculated pi(t)
-            self.update_h_t()
-        elif self.variant == "adjusted_v1":
-            # h(t) remains identical until we receive an update based on a new mixture_id
-            if updated_at_client:
-                self.update_h_t()
-        elif self.variant == "adjusted_v2":
-            # Similar to adjusted_v1, but adjust the moving average to not let h(t-1) dominate
-            if updated_at_client:
-                steps_elapsed = self.total_steps - self.last_update_step
-                self.update_h_t(elapsed_steps=steps_elapsed)
-        else:
-            raise ValueError(f"Unknown variant '{self.variant}' specified.")
-
         # Fit scaling laws immediately after the warm-up period ends, and then at intervals
         if (self.total_steps == self.ignore_initial_steps + 1) or (
             self.total_steps > self.ignore_initial_steps
@@ -247,6 +230,22 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Enforce minimum probability delta_min for domains that have been sampled at least once
         self.enforce_min_probability()
 
+        # Update h(t) based on the variant and whether the mixture was updated at the client
+        if self.variant == "vanilla":
+            # Update h(t) every step using the last calculated pi(t)
+            self.update_h_t()
+        elif self.variant == "adjusted_v1":
+            # h(t) remains identical until we receive an update based on a new mixture_id
+            if updated_at_client:
+                self.update_h_t()
+        elif self.variant == "adjusted_v2":
+            # Similar to adjusted_v1, but adjust the moving average to not let h(t-1) dominate
+            if updated_at_client:
+                steps_elapsed = self.total_steps - self.last_update_step
+                self.update_h_t(elapsed_steps=steps_elapsed)
+        else:
+            raise ValueError(f"Unknown variant '{self.variant}' specified.")
+
         # Update pī_k(t)
         self.update_pi_bar_t()
 
@@ -260,7 +259,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "h_t": self.h_t.tolist() if self.h_t is not None else None,
                 "pi_t": self.pi_t.tolist() if self.pi_t is not None else None,
                 "pi_bar_t_minus_1": self.pi_bar_t_minus_1.tolist() if self.pi_bar_t_minus_1 is not None else None,
-                "pi_t_minus_1": self.pi_t_minus_1.tolist() if self.pi_t_minus_1 is not None else None,
                 "rho_t": self.rho_t.tolist() if hasattr(self, "rho_t") else None,
                 "dL_dn": dL_dn.tolist() if "dL_dn" in locals() else None,
                 "scaling_law_params": self.scaling_law_params.tolist() if self.scaling_law_params is not None else None,
@@ -281,15 +279,13 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         assert self.mu_k is not None and self.h_t is not None
 
-        self.pi_t_minus_1 = self.pi_t_minus_1 if self.pi_t_minus_1 is not None else self.mu_k.copy()
-
         gamma1 = self.gamma1
 
         if self.variant == "adjusted_v2" and elapsed_steps > 1:
             # Adjust gamma1 to account for the fact that h(t-1) remained constant over elapsed_steps
             gamma1 = 1 - (1 - gamma1) ** elapsed_steps
 
-        self.h_t = gamma1 * self.pi_t_minus_1 + (1 - gamma1) * self.h_t
+        self.h_t = gamma1 * self.pi_t + (1 - gamma1) * self.h_t
         self.last_update_step = self.total_steps
 
     def fit_scaling_laws(self) -> None:
@@ -573,10 +569,11 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         lambda_k_t = self.h_t.copy() ** self.s
 
         # Compute rho_k(t): proportional to mu_k * lambda_k(t) * dL_k/dn
+        # TODO(MaxiBoether): think about this. in the paper, it's proportional to negative mu_k gradient lambda, we however already have a positive gradient so not sure.
         rho_num = self.mu_k * lambda_k_t * dL_dn
         rho_den: float | np.floating = np.sum(rho_num)
         if rho_den > 0:
-            self.rho_t = rho_num / rho_den
+            self.rho_t = rho_num / rho_den  # TODO(MaxiBoether): test without this normalizaiton.
             # logger.debug(f"Computed rho_t = {self.rho_t}")
         else:
             # Handle the case where denominator is zero
@@ -594,7 +591,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         pi_t = self.gamma2 * self.rho_t + (1 - self.gamma2) * self.pi_bar_t_minus_1
         pi_t /= np.sum(pi_t)
 
-        self.pi_t_minus_1 = self.pi_t.copy() if self.pi_t is not None else self.mu_k.copy()
         self.pi_t = pi_t
 
     def enforce_min_probability(self) -> None:
@@ -631,15 +627,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         Updates the moving average pī_k(t) of the data policy.
         """
-        assert self.pi_t is not None
+        assert self.pi_t is not None and self.pi_bar_t_minus_1 is not None
 
-        if self.pi_bar_t_minus_1 is None:
-            self.pi_bar_t_minus_1 = self.pi_t.copy()
-        else:
-            weight = 1.0 / (self.total_steps + 1.0)
-            self.pi_bar_t_minus_1 = weight * self.rho_t + (1 - weight) * self.pi_bar_t_minus_1
-            assert self.pi_bar_t_minus_1 is not None  # mypy is really weird sometimes.
-            self.pi_bar_t_minus_1 /= np.sum(self.pi_bar_t_minus_1)
+        weight = 1.0 / (self.total_steps + 1.0)
+        self.pi_bar_t_minus_1 = weight * self.rho_t + (1 - weight) * self.pi_bar_t_minus_1
+        assert self.pi_bar_t_minus_1 is not None  # mypy is really weird sometimes.
+        self.pi_bar_t_minus_1 /= np.sum(self.pi_bar_t_minus_1)  # TODO(MaxiBoether): test without this normalizaiton.
 
     def _update_state(self, losses: np.ndarray, counts: np.ndarray) -> None:
         """
@@ -666,10 +659,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 self.mu_k = np.concatenate([self.mu_k, np.zeros(size_diff, dtype=self.mu_k.dtype)])
             if self.pi_t is not None:
                 self.pi_t = np.concatenate([self.pi_t, np.zeros(size_diff, dtype=self.pi_t.dtype)])
-            if self.pi_t_minus_1 is not None:
-                self.pi_t_minus_1 = np.concatenate(
-                    [self.pi_t_minus_1, np.zeros(size_diff, dtype=self.pi_t_minus_1.dtype)]
-                )
             if self.pi_bar_t_minus_1 is not None:
                 self.pi_bar_t_minus_1 = np.concatenate(
                     [self.pi_bar_t_minus_1, np.zeros(size_diff, dtype=self.pi_bar_t_minus_1.dtype)]
