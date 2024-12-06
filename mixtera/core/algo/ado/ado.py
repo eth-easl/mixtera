@@ -565,7 +565,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # In this case self.counts cannot be used. Only per_step_counts contains the
             # "adjusted" distribution of tokens.
             counts_over_time = np.array(self.per_step_counts)
-            n_k = np.sum(counts_over_time, axis=1)
+            n_k = np.sum(counts_over_time, axis=0)
         else:
             n_k = self.counts.copy()
 
