@@ -695,7 +695,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         num_internal_domains = len(self.losses)
 
         if self.log_counts is not None:
-            self.log_counts.append(counts)
+            self.log_counts.append(counts.tolist())
 
         super()._update_state(losses, counts)
 
