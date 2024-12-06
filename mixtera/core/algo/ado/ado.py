@@ -104,6 +104,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Initial prior distribution mu_k (from initial_mixture)
         self.mu_k: np.ndarray | None = None  # Will be set based on self.initial_mixture
 
+        self.log_counts: list[np.ndarray] | None = None
         if self.logging_path is not None:
             self.log_config = {
                 "variant": variant,
@@ -121,6 +122,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             }
             self.log_entries: list[Any] = []
             self.log_scaling_laws: list[Any] = []
+            self.log_counts: list[np.ndarray] = []
 
     def __str__(self) -> str:
         """
@@ -185,7 +187,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
     def write_logs(self) -> None:
         if self.logging_path is not None:
-            log_data = {"config": self.log_config, "entries": self.log_entries, "scaling_laws": self.log_scaling_laws}
+            log_data = {"config": self.log_config, "entries": self.log_entries, "scaling_laws": self.log_scaling_laws, "log_counts": self.log_counts}
             with open(self.logging_path, "w+", encoding="utf-8") as f:
                 json.dump(log_data, f, indent=4)
 
@@ -233,6 +235,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "rho_history": self.rho_history.tolist() if self.rho_history is not None else None,
                 }
                 self.log_entries.append(step_log)
+                if self.total_steps % 50 == 0:
+                    self.write_logs()
             return None
 
         # Initialize h_t if not set
@@ -689,6 +693,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # We first need to catch the number of internal domains, otherwise we will not trigger the following condition.
         num_incoming_domains = len(losses)
         num_internal_domains = len(self.losses)
+
+        if self.log_counts is not None:
+            self.log_counts.append(counts)
 
         super()._update_state(losses, counts)
 
