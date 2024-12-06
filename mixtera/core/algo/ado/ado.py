@@ -36,6 +36,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         spline_before_savgol: bool = False,
         use_same_step_size: bool = True,
         count_normalizer: None | int = None,
+        use_rho_history_adjustment: bool = False,
+        rho_history_gamma: float = 0.9,
         logging_path: str | None = None,
     ) -> None:
         """
@@ -50,6 +52,19 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             scaling_law_update_interval: The number of steps between each scaling law parameter update.
             subsampling_interval: For subsampling during scaling law fitting
             ignore_initial_steps: Number of initial steps to ignore before fitting scaling laws.
+            savgol: Whether to apply a savgol filter on the losses to smoothen them
+            spline_before_savgol: Whether to fit all x values onto a common grid using spline interpolation.
+                                  Applied _per domain_. Mutually exclusive with use_same_step_size.
+                                  Not in the original paper.
+            use_same_step_size: If True, all sampled domains increase their count. Done in the original paper
+                                to more scaling laws more comparable and account for transfer learning.
+            count_normalizer: If set to a positive int, we divide all counts by this when interacting with scaling laws.
+                              Can be helpful since the bounds we currently use for parameters are provided by the original
+                              paper, which used sample count with 1024 tokens/sample. Hence, to align with the paper, _if_
+                              your inputs are tokens (default assumption by Mixtera), this needs to be 1024.
+            use_p_history_adjustment: If True, applies p_history adjustment to rho_t computation.
+            p_history_gamma: Smoothing factor for updating p_history.
+            logging_path: If provided, we will save debug json logs to this path.
         """
         super().__init__()
         self.variant = variant
@@ -65,6 +80,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.logging_path = logging_path
         self.use_same_step_size = use_same_step_size
         self.count_normalizer = count_normalizer
+        self.use_rho_history_adjustment = use_rho_history_adjustment
+        self.rho_history_gamma = rho_history_gamma
 
         if use_same_step_size and spline_before_savgol:
             raise RuntimeError("Can only use either `use_same_step_size` or `spline_before_savgol`")
@@ -78,6 +95,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.pi_t: np.ndarray | None = None  # Data policy pi_k(t)
         self.pi_bar_t_minus_1: np.ndarray | None = None  # Previous moving average pī_k(t-1)
         self.scaling_law_params: np.ndarray | None = None  # Scaling law parameters [log_beta_k, log_epsilon_k, alpha_k]
+        self.rho_history: np.ndarray | None = None
 
         # Keep track of per-step counts and losses
         self.per_step_counts: list[np.ndarray] = []  # List of counts per step per domain
@@ -98,6 +116,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "ignore_initial_steps": ignore_initial_steps,
                 "savgol": savgol,
                 "spline_before_savgol": spline_before_savgol,
+                "use_rho_history_adjustment": use_rho_history_adjustment,
+                "rho_history_gamma": rho_history_gamma,
             }
             self.log_entries: list[Any] = []
             self.log_scaling_laws: list[Any] = []
@@ -262,6 +282,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "rho_t": self.rho_t.tolist() if hasattr(self, "rho_t") else None,
                 "dL_dn": dL_dn.tolist() if "dL_dn" in locals() else None,
                 "scaling_law_params": self.scaling_law_params.tolist() if self.scaling_law_params is not None else None,
+                "rho_history": self.rho_history.tolist() if self.rho_history is not None else None,
             }
             self.log_entries.append(step_log)
 
@@ -277,7 +298,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         Args:
             elapsed_steps: Number of steps elapsed since the last update (used in variant 'adjusted_v2').
         """
-        assert self.mu_k is not None and self.h_t is not None
+        assert self.mu_k is not None and self.h_t is not None and self.pi_t is not None
 
         gamma1 = self.gamma1
 
@@ -571,6 +592,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Compute rho_k(t): proportional to mu_k * lambda_k(t) * dL_k/dn
         # TODO(MaxiBoether): think about this. in the paper, it's proportional to negative mu_k gradient lambda, we however already have a positive gradient so not sure.
         rho_num = self.mu_k * lambda_k_t * dL_dn
+
+        if self.use_rho_history_adjustment:
+            assert self.rho_history is not None, "p_history should have been initialized."
+            adjustment_factor = np.sqrt(self.rho_history * (1 - self.rho_history))
+            rho_num *= adjustment_factor
+
         rho_den: float | np.floating = np.sum(rho_num)
         if rho_den > 0:
             self.rho_t = rho_num / rho_den  # TODO(MaxiBoether): test without this normalizaiton.
@@ -663,6 +690,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 self.pi_bar_t_minus_1 = np.concatenate(
                     [self.pi_bar_t_minus_1, np.zeros(size_diff, dtype=self.pi_bar_t_minus_1.dtype)]
                 )
+            if self.rho_history is not None:
+                self.rho_history = np.concatenate([self.rho_history, np.zeros(size_diff, dtype=self.rho_history.dtype)])
 
         # Keep track of per-step counts and losses
         # Adjust the lengths if necessary
@@ -681,7 +710,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.per_step_losses.append(per_step_losses)
 
         if self.use_same_step_size:
-            num_valid_domains = np.sum(self.counts > 0)
+            num_valid_domains: int = np.sum(self.counts > 0)
             assert num_valid_domains > 0
             total_tokens = counts.sum()
             increment = np.zeros_like(counts, dtype=counts.dtype)
@@ -689,3 +718,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             self.per_step_counts.append(increment)
         else:
             self.per_step_counts.append(counts.copy())
+
+        if self.use_rho_history_adjustment:
+            count_sum = counts.sum()
+            if count_sum > 0:
+                count_dist = counts / count_sum
+                if self.rho_history is None:
+                    self.rho_history = np.zeros_like(counts, dtype=np.float32)
+                gamma = self.rho_history_gamma
+                self.rho_history = gamma * self.rho_history + (1 - gamma) * count_dist
