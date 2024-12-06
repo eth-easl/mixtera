@@ -595,6 +595,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         if self.use_rho_history_adjustment:
             assert self.rho_history is not None, "p_history should have been initialized."
+            assert self.rho_history.shape == rho_num.shape, f"self.rho_history.shape = {self.rho_history.shape} != rho_num.shape = {rho_num.shape}"
             adjustment_factor = np.sqrt(self.rho_history * (1 - self.rho_history))
             rho_num *= adjustment_factor
 
