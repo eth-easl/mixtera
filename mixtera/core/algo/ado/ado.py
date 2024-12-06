@@ -224,6 +224,15 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             # During warm-up, we use the initial mixture and do not update it
             # Since we cannot use the first information during self.ignore_initial_steps,
             # we need to wait an additional interval before actually starting the update.
+            if self.logging_path is not None:
+                # Still write log information if necessary.
+                step_log = {
+                    "step": self.total_steps,
+                    "counts": self.counts.tolist() if self.counts is not None else None,
+                    "losses": self.losses.tolist() if self.losses is not None else None,
+                    "rho_history": self.rho_history.tolist() if self.rho_history is not None else None,
+                }
+                self.log_entries.append(step_log)
             return None
 
         # Initialize h_t if not set
@@ -552,7 +561,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         """
         assert self.scaling_law_params is not None
 
-        n_k = self.counts.copy()
+        if self.use_same_step_size:
+            # In this case self.counts cannot be used. Only per_step_counts contains the
+            # "adjusted" distribution of tokens.
+            counts_over_time = np.array(self.per_step_counts)
+            n_k = np.sum(counts_over_time, axis=1)
+        else:
+            n_k = self.counts.copy()
+
 
         if self.count_normalizer is not None and self.count_normalizer > 1:
             n_k = n_k / self.count_normalizer
