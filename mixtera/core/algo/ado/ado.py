@@ -634,9 +634,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         dL_dn = np.zeros_like(n_k, dtype=np.float64)
         dL_dn[mask] = -(1 / n_k[mask]) * alpha_k[mask] * (L_k_n[mask] - epsilon_k[mask])
 
-        # Take the absolute value
-        dL_dn = np.abs(dL_dn)
-
         return dL_dn
 
     def compute_rho_t(self, dL_dn: np.ndarray) -> None:
@@ -650,9 +647,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Compute lambda_k(t)
         lambda_k_t = self.h_t.copy() ** self.s
 
-        # Compute rho_k(t): proportional to mu_k * lambda_k(t) * dL_k/dn
-        # TODO(MaxiBoether): think about this. in the paper, it's proportional to negative mu_k gradient lambda, we however already have a positive gradient so not sure.
-        rho_num = self.mu_k * lambda_k_t * dL_dn
+        rho_num = self.mu_k * lambda_k_t * (-dL_dn)
 
         if self.use_rho_history_adjustment:
             assert self.rho_history is not None, "p_history should have been initialized."
@@ -660,6 +655,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             adjustment_factor = np.sqrt(self.rho_history * (1 - self.rho_history))
             rho_num *= adjustment_factor
 
+        rho_num = np.maximum(rho_num, 0)
+        
         rho_den: float | np.floating = np.sum(rho_num)
         if rho_den > 0:
             self.rho_t = rho_num / rho_den  # TODO(MaxiBoether): test without this normalizaiton.
