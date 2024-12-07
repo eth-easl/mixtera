@@ -26,7 +26,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self,
         variant: str = "vanilla",
         gamma1: float = 0.1,
-        gamma2: float = 0.9,
+        gamma2: float = 0.1,
         s: float = 0.5,
         delta_min: float = 0.01,
         scaling_law_update_interval: int = 1000,
@@ -47,6 +47,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             variant: The variant of the algorithm ('vanilla', 'adjusted_v1', 'adjusted_v2').
             gamma1: The smoothing factor for the credit assignment score h(t).
             gamma2: The smoothing factor for the data policy pi(t).
+                    Note that while the paper mentions 0.9 as a default, to align with their experiments,
+                    this needs to be 0.1
             s: The exponent used in computing the credit assignment score lambda_k(t).
             delta_min: The minimum probability assigned to each domain that has been sampled at least once.
             scaling_law_update_interval: The number of steps between each scaling law parameter update.
@@ -59,8 +61,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             use_same_step_size: If True, all sampled domains increase their count. Done in the original paper
                                 to more scaling laws more comparable and account for transfer learning.
             count_normalizer: If set to a positive int, we divide all counts by this when interacting with scaling laws.
-                              Can be helpful since the bounds we currently use for parameters are provided by the original
-                              paper, which used sample count with 1024 tokens/sample. Hence, to align with the paper, _if_
+                              Can be helpful since the bounds we currently use
+                              for parameters are provided by the original paper.
+                              They used sample count with 1024 tokens/sample. Hence, to align with the paper, _if_
                               your inputs are tokens (default assumption by Mixtera), this needs to be 1024.
             use_p_history_adjustment: If True, applies p_history adjustment to rho_t computation.
             p_history_gamma: Smoothing factor for updating p_history.
@@ -104,7 +107,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Initial prior distribution mu_k (from initial_mixture)
         self.mu_k: np.ndarray | None = None  # Will be set based on self.initial_mixture
 
-        self.next_continue_at = None
+        self.next_continue_at: int | None = None
         self.handed_out_first_update = False
 
         self.log_counts: list[np.ndarray] | None = None
@@ -125,19 +128,19 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             }
             self.log_entries: list[Any] = []
             self.log_scaling_laws: list[Any] = []
-            self.log_counts: list[np.ndarray] = []
+            self.log_counts = []
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[Any, Any]:
         state = self.__dict__.copy()
         if "log_entries" in state:
-            state.pop('log_entries', None)
+            state.pop("log_entries", None)
         if "log_scaling_laws" in state:
-            state.pop('log_scaling_laws', None)
+            state.pop("log_scaling_laws", None)
         if "log_counts" in state:
-            state.pop('log_counts', None)
+            state.pop("log_counts", None)
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[Any, Any]) -> None:
         # Restore the object's state
         self.__dict__.update(state)
         # Reinitialize the logging attributes to their initial state
@@ -208,7 +211,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
     def write_logs(self) -> None:
         if self.logging_path is not None:
-            log_data = {"config": self.log_config, "entries": self.log_entries, "scaling_laws": self.log_scaling_laws, "log_counts": self.log_counts}
+            log_data = {
+                "config": self.log_config,
+                "entries": self.log_entries,
+                "scaling_laws": self.log_scaling_laws,
+                "log_counts": self.log_counts,
+            }
             with open(self.logging_path, "w+", encoding="utf-8") as f:
                 json.dump(log_data, f, indent=4)
 
@@ -272,24 +280,28 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             self.fit_scaling_laws()
             updated_scaling_laws = True
 
+        # Only relevant for adjusted_v3
         should_continue = True
         force_log = False
         if self.variant == "adjusted_v3":
             if self.handed_out_first_update:
                 should_continue = False
                 if updated_at_client:
-                    # todo instead of hardcoding steps we could calculate the mean response time between updates and use that, because that is the average time it takes to process a chunk
-                    self.next_continue_at = self.total_steps + 15 # give us 15 steps to collect some data.
+                    self.next_continue_at = self.total_steps + 15  # give us some slack to collect more data.
                     logger.debug(f"Updated at client, continuting at {self.next_continue_at}")
-                
-                if (self.next_continue_at is not None and self.total_steps == self.next_continue_at) or updated_scaling_laws:
-                    # We also get a new mixture ID if the chunk-level mixture does not change, and updated_scaling_laws fixes that.
+
+                if (
+                    self.next_continue_at is not None and self.total_steps == self.next_continue_at
+                ) or updated_scaling_laws:
+                    # We also get a new mixture ID if the chunk-level mixture does not change,
+                    # and updated_scaling_laws fixes that.
                     logger.debug("Continuing!")
                     should_continue = True
                     force_log = True
 
         if not should_continue:
             return None
+        # End code for adjusted_v3
 
         assert self.scaling_law_params is not None
 
@@ -306,7 +318,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.enforce_min_probability()
 
         # Update h(t) based on the variant and whether the mixture was updated at the client
-        if self.variant == "vanilla" or self.variant == "adjusted_v3":
+        if self.variant in ("vanilla", "adjusted_v3"):
             # Update h(t) every step using the last calculated pi(t)
             self.update_h_t()
         elif self.variant == "adjusted_v1":
@@ -397,8 +409,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
             if self.use_same_step_size:
                 # When using the same step size, we impute missing losses
-                # TODO: This aligns with the paper but I guess we could also make this a flag?
-                # I don't think we _have to_ do this, we could also fit it without these data points.
+                # This aligns with the paper but we could also make this a flag at some point
+                # to either impute losses or select only losses > 0.
                 for t in range(1, len(losses_k)):
                     if losses_k[t] == 0:
                         losses_k[t] = losses_k[t - 1]
@@ -617,7 +629,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         else:
             n_k = self.counts.copy()
 
-
         if self.count_normalizer is not None and self.count_normalizer > 1:
             n_k = n_k / self.count_normalizer
 
@@ -654,7 +665,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         if self.use_rho_history_adjustment:
             assert self.rho_history is not None, "p_history should have been initialized."
-            assert self.rho_history.shape == rho_num.shape, f"self.rho_history.shape = {self.rho_history.shape} != rho_num.shape = {rho_num.shape}"
+            assert (
+                self.rho_history.shape == rho_num.shape
+            ), f"self.rho_history.shape = {self.rho_history.shape} != rho_num.shape = {rho_num.shape}"
             adjustment_factor = np.sqrt(self.rho_history * (1 - self.rho_history))
             rho_num *= adjustment_factor
 

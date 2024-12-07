@@ -8,7 +8,7 @@ from mixtera.core.algo.ado.ado import AdoDynamicMixing
 class TestAdoDynamicMixing(unittest.TestCase):
     def setUp(self):
         # Initialize the AdoDynamicMixing instance with default parameters
-        self.ado = AdoDynamicMixing()
+        self.ado = AdoDynamicMixing(use_same_step_size=False)
         self.ado.initial_mixture = np.array([0.4, 0.6])
         # Initialize counts and losses
         num_domains = len(self.ado.initial_mixture)
@@ -37,7 +37,6 @@ class TestAdoDynamicMixing(unittest.TestCase):
         self.assertIsNone(dynamic_mixing.mu_k)
         self.assertIsNone(dynamic_mixing.h_t)
         self.assertIsNone(dynamic_mixing.pi_t)
-        self.assertIsNone(dynamic_mixing.pi_t_minus_1)
         self.assertIsNone(dynamic_mixing.pi_bar_t_minus_1)
         self.assertEqual(dynamic_mixing.total_steps, 0)
 
@@ -73,7 +72,7 @@ class TestAdoDynamicMixing(unittest.TestCase):
     def test_update_h_t(self):
         # Test update_h_t method
         self.ado.h_t = np.array([0.3, 0.7])
-        self.ado.pi_t_minus_1 = np.array([0.4, 0.6])
+        self.ado.pi_t = np.array([0.4, 0.6])
         self.ado.gamma1 = 0.1
         self.ado.update_h_t()
         expected_h_t = 0.1 * np.array([0.4, 0.6]) + 0.9 * np.array([0.3, 0.7])
@@ -83,7 +82,7 @@ class TestAdoDynamicMixing(unittest.TestCase):
         # Test update_h_t with variant 'adjusted_v2' and elapsed_steps
         self.ado.variant = "adjusted_v2"
         self.ado.h_t = np.array([0.3, 0.7])
-        self.ado.pi_t_minus_1 = np.array([0.4, 0.6])
+        self.ado.pi_t = np.array([0.4, 0.6])
         self.ado.gamma1 = 0.1
         self.ado.total_steps = 105
         self.ado.last_update_step = 100
@@ -93,7 +92,7 @@ class TestAdoDynamicMixing(unittest.TestCase):
 
         self.ado.update_h_t(elapsed_steps=elapsed_steps)
         adjusted_gamma1 = 1 - (1 - self.ado.gamma1) ** elapsed_steps
-        expected_h_t = adjusted_gamma1 * self.ado.pi_t_minus_1 + (1 - adjusted_gamma1) * prev_h_t
+        expected_h_t = adjusted_gamma1 * self.ado.pi_t + (1 - adjusted_gamma1) * prev_h_t
 
         np.testing.assert_array_almost_equal(self.ado.h_t, expected_h_t)
 
@@ -131,9 +130,8 @@ class TestAdoDynamicMixing(unittest.TestCase):
         dL_dn = self.ado.compute_loss_derivative()
         # Check that the derivative array has the correct length
         self.assertEqual(len(dL_dn), 2)
-        # Check that the derivatives are finite and positive
+        # Check that the derivatives are finite
         self.assertTrue(np.all(np.isfinite(dL_dn)))
-        self.assertTrue(np.all(dL_dn >= 0))
 
     def test_compute_rho_t(self):
         # Test compute_rho_t method
@@ -143,7 +141,7 @@ class TestAdoDynamicMixing(unittest.TestCase):
         dL_dn = np.array([0.1, 0.2])
         self.ado.compute_rho_t(dL_dn)
         expected_lambda_k_t = self.ado.h_t**self.ado.s
-        rho_num = self.ado.mu_k * expected_lambda_k_t * dL_dn
+        rho_num = self.ado.mu_k * expected_lambda_k_t * (-dL_dn)
         rho_den = np.sum(rho_num)
         expected_rho_t = rho_num / rho_den if rho_den > 0 else self.ado.mu_k / len(self.ado.counts)
         np.testing.assert_array_almost_equal(self.ado.rho_t, expected_rho_t)
