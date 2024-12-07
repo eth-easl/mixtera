@@ -249,6 +249,23 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         ):
             self.fit_scaling_laws()
 
+        should_continue = True
+        if self.variant == "adjusted_v3":
+            if self.total_steps > self.ignore_initial_steps + 1:
+                # Hand out first updated chunk after warmup
+                should_continue = False
+                if updated_at_client:
+                    # todo instead of  hardcoding steps we could calculate the mean response time between updates and use that, because that is the average time it takes to process a chunk
+                    self.next_continue_at = self.total_steps + 25 # give us 25 steps to collect some data.
+                    logger.debug(f"Updated at client, continuting at {self.next_continue_at}")
+                
+                if self.total_steps == self.next_continue_at:
+                    logger.debug("Continuing!")
+                    should_continue = True
+
+        if not should_continue:
+            return None
+
         assert self.scaling_law_params is not None
 
         # Compute the derivative of loss with respect to n for each domain
@@ -264,7 +281,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.enforce_min_probability()
 
         # Update h(t) based on the variant and whether the mixture was updated at the client
-        if self.variant == "vanilla":
+        if self.variant == "vanilla" or self.variant == "adjusted_v3":
             # Update h(t) every step using the last calculated pi(t)
             self.update_h_t()
         elif self.variant == "adjusted_v1":
