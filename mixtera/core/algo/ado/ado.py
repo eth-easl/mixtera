@@ -105,6 +105,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.mu_k: np.ndarray | None = None  # Will be set based on self.initial_mixture
 
         self.next_continue_at = None
+        self.handed_out_first_update = False
 
         self.log_counts: list[np.ndarray] | None = None
         if self.logging_path is not None:
@@ -253,11 +254,10 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         should_continue = True
         if self.variant == "adjusted_v3":
-            if self.total_steps > self.ignore_initial_steps + 1:
-                # Hand out first updated chunk after warmup
+            if self.handed_out_first_update:
                 should_continue = False
                 if updated_at_client:
-                    # todo instead of  hardcoding steps we could calculate the mean response time between updates and use that, because that is the average time it takes to process a chunk
+                    # todo instead of hardcoding steps we could calculate the mean response time between updates and use that, because that is the average time it takes to process a chunk
                     self.next_continue_at = self.total_steps + 25 # give us 25 steps to collect some data.
                     logger.debug(f"Updated at client, continuting at {self.next_continue_at}")
                 
@@ -317,6 +317,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "rho_history": self.rho_history.tolist() if self.rho_history is not None else None,
             }
             self.log_entries.append(step_log)
+
+        self.handed_out_first_update = True
 
         if self.total_steps % 50 == 0:
             self.write_logs()

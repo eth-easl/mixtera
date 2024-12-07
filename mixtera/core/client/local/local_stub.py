@@ -214,6 +214,6 @@ class LocalStub(MixteraClient):
             return False
 
         with self._training_query_map_lock:
-            logger.debug(f"Received feedback: {feedback}")
+            # logger.debug(f"Received feedback: {feedback}")
             self._get_query_result(job_id)._mixture.process_client_feedback(feedback)
             return True
