@@ -253,17 +253,19 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             self.fit_scaling_laws()
 
         should_continue = True
+        force_log = False
         if self.variant == "adjusted_v3":
             if self.handed_out_first_update:
                 should_continue = False
                 if updated_at_client:
                     # todo instead of hardcoding steps we could calculate the mean response time between updates and use that, because that is the average time it takes to process a chunk
-                    self.next_continue_at = self.total_steps + 25 # give us 25 steps to collect some data.
+                    self.next_continue_at = self.total_steps + 15 # give us 15 steps to collect some data.
                     logger.debug(f"Updated at client, continuting at {self.next_continue_at}")
                 
                 if self.next_continue_at is not None and self.total_steps == self.next_continue_at:
                     logger.debug("Continuing!")
                     should_continue = True
+                    force_log = True
 
         if not should_continue:
             return None
@@ -320,7 +322,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         self.handed_out_first_update = True
 
-        if self.total_steps % 50 == 0:
+        if (self.total_steps % 50 == 0) or force_log:
             self.write_logs()
 
         return self.pi_t
