@@ -22,8 +22,10 @@ class DynamicMixingAlgorithm(ABC):
         self.losses = np.array([], dtype=np.float32)
         self.counts = np.array([], dtype=np.int64)
         self.initial_mixture = np.array([-1], dtype=np.float32)
+        self.last_received_mixture = -1
+        self.next_mixture = 0
 
-    def process_losses(self, losses: np.ndarray, counts: np.ndarray) -> np.ndarray | None:
+    def process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int) -> np.ndarray | None:
         """
         Receives arrays of losses and counts, accumulates them, and returns the updated mixture if available.
 
@@ -34,8 +36,13 @@ class DynamicMixingAlgorithm(ABC):
         Returns:
             A numpy array representing the new mixture coefficients, or None if no update is available.
         """
+        update_at_client = False
+        if mixture_id > self.last_received_mixture:
+            update_at_client = True
+            self.last_received_mixture = mixture_id
+
         self._update_state(losses, counts)
-        return self.calc_mixture()
+        return self.calc_mixture(update_at_client)
 
     def _update_state(self, losses: np.ndarray, counts: np.ndarray) -> None:
         """
@@ -67,7 +74,7 @@ class DynamicMixingAlgorithm(ABC):
         self.counts = np.array([], dtype=self.counts.dtype)
 
     @abstractmethod
-    def calc_mixture(self) -> np.ndarray | None:
+    def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         """
         Computes the updated mixture coefficients based on the accumulated losses and counts.
 

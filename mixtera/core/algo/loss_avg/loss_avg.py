@@ -10,13 +10,15 @@ class SimpleAveragingAlgorithm(DynamicMixingAlgorithm):
     considering only domains with observed counts.
     """
 
-    def calc_mixture(self) -> np.ndarray | None:
+    def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         """
         Computes the updated mixture coefficients based on the accumulated losses and counts.
 
         Returns:
             A numpy array representing the new mixture coefficients, or None if no update is available.
         """
+        del updated_at_client
+
         # Only consider domains with counts > 0
         mask = self.counts > 0
         if not np.any(mask):

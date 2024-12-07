@@ -19,6 +19,7 @@ from mixtera.utils import wait_for_key_in_dict
 
 class LocalStub(MixteraClient):
     def __init__(self, directory: Path | str) -> None:
+        super().__init__()
         if isinstance(directory, str):
             self.directory = Path(directory)
         else:
@@ -85,6 +86,7 @@ class LocalStub(MixteraClient):
             ), "We cached a query that already has returned items, this should not happen!"
             query.results._query_log_dir = self.mixture_log_directory / query.job_id
             query.results._query_log_dir.mkdir(exist_ok=True)
+            query.results._key_id_map = {}  # reset map to trigger update of mixture id map
             query.results.update_mixture(args.mixture)
         else:
             query.execute(self._mdc, args.mixture, self.mixture_log_directory / query.job_id)
@@ -168,7 +170,7 @@ class LocalStub(MixteraClient):
     def _get_query_result(self, job_id: str) -> QueryResult:
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
             raise RuntimeError(f"Unknown job {job_id}")
-        return self._training_query_map[job_id][1].results
+        return self._training_query_map[job_id][0]._query_result
 
     def _get_query_chunk_distributor(self, job_id: str) -> ChunkDistributor:
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
@@ -212,6 +214,6 @@ class LocalStub(MixteraClient):
             return False
 
         with self._training_query_map_lock:
-            logger.debug(f"Received feedback: {feedback}")
+            # logger.debug(f"Received feedback: {feedback}")
             self._get_query_result(job_id)._mixture.process_client_feedback(feedback)
             return True

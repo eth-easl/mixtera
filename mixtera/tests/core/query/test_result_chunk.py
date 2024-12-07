@@ -19,6 +19,7 @@ class TestResultChunk(unittest.TestCase):
         self.mixture = MagicMock()
         self.mixture.keys = MagicMock(return_value=shared_keys)
         self.chunk_size = 10
+        self._default_mix_id = 0
 
         self.result_streaming_args = MagicMock()
         self.mock_client = MagicMock(type=ServerStub)
@@ -31,7 +32,8 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
-            None,
+            self._default_mix_id,
+            mixture=None,
         )
 
         result_chunk._infer_mixture = MagicMock(return_value=self.mixture)
@@ -54,6 +56,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
+            self._default_mix_id,
             None,
         )
 
@@ -85,6 +88,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {MixtureKey({"property1": ["value1"]}): 0, MixtureKey({"property2": ["value2"]}): 1},
+            self._default_mix_id,
             mixture=None,
         )
 
@@ -101,6 +105,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
+            self._default_mix_id,
             mixture=None,
         )
 
@@ -124,6 +129,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
+            self._default_mix_id,
             mixture=None,
         )
 
@@ -147,6 +153,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
+            self._default_mix_id,
             mixture=None,
             prefetch_first_sample=False,
         )
@@ -172,6 +179,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
+            self._default_mix_id,
             mixture=None,
             prefetch_first_sample=False,
         )
@@ -207,6 +215,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
+            self._default_mix_id,
             mixture=None,
         )
         result_chunk._degree_of_parallelism = 4  # Trigger the mt path
@@ -228,6 +237,7 @@ class TestResultChunk(unittest.TestCase):
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
             key_id_map={},
+            mixture_id=self._default_mix_id,
         )
 
         workload = [(1, 1, ["range1", "range2"]), (2, 2, ["range3"])]
@@ -267,6 +277,7 @@ class TestResultChunk(unittest.TestCase):
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
             key_id_map={},
+            mixture_id=self._default_mix_id,
         )
 
         # Collecting data from generator
@@ -295,6 +306,7 @@ class TestResultChunk(unittest.TestCase):
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
             key_id_map={},
+            mixture_id=self._default_mix_id,
         )
 
         with self.assertRaises(RuntimeError) as context:
@@ -322,6 +334,7 @@ class TestResultChunk(unittest.TestCase):
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
             key_id_map={},
+            mixture_id=self._default_mix_id,
         )
 
         # Collecting data from generator
@@ -335,6 +348,7 @@ class TestResultChunk(unittest.TestCase):
             parsing_func_dict={1: MagicMock(), 2: MagicMock()},
             chunk_size=MagicMock(),
             key_id_map={"prop1": 0, "prop2": 1},
+            mixture_id=self._default_mix_id,
         )
 
         # Mocking the active_iterators
@@ -359,6 +373,7 @@ class TestResultChunk(unittest.TestCase):
             parsing_func_dict={1: MagicMock(), 2: MagicMock(), 3: MagicMock()},
             chunk_size=MagicMock(),
             key_id_map={"prop1": 0, "prop2": 1, "prop3": 2},
+            mixture_id=self._default_mix_id,
         )
 
         # Mocking the active_iterators with more data to test multiple windows
@@ -390,6 +405,7 @@ class TestResultChunk(unittest.TestCase):
             parsing_func_dict={1: MagicMock(), 2: MagicMock(), 3: MagicMock()},
             chunk_size=MagicMock(),
             key_id_map={"prop1": 0, "prop2": 1, "prop3": 2},
+            mixture_id=self._default_mix_id,
         )
 
         # Mocking the active_iterators with different lengths to simulate varied data sources
@@ -432,6 +448,7 @@ class TestResultChunk(unittest.TestCase):
             mock_parsing_func_dict,
             self.chunk_size,
             {},
+            self._default_mix_id,
             mixture=mock_mixture,
         )
         result_chunk._window_size = 10  # Assuming a window size of 10 for this test
@@ -458,6 +475,7 @@ class TestResultChunk(unittest.TestCase):
             self.parsing_func_dict,
             self.chunk_size,
             {"key1": 0, "key2": 1, "key3": 2},
+            self._default_mix_id,
             mixture=None,
         )
 

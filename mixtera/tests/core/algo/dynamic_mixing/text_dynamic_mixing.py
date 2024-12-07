@@ -1,5 +1,4 @@
 import unittest
-from typing import Optional
 
 import numpy as np
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
@@ -7,7 +6,7 @@ from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorit
 
 class TestDynamicMixingAlgorithm(unittest.TestCase):
     class MinimalDynamicMixingAlgorithm(DynamicMixingAlgorithm):
-        def calc_mixture(self) -> Optional[np.ndarray]:
+        def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
             return None
 
     def setUp(self):
@@ -24,7 +23,7 @@ class TestDynamicMixingAlgorithm(unittest.TestCase):
         """Test process_losses method with initial data."""
         losses = np.array([0.1, 0.2, 0.3])
         counts = np.array([10, 20, 30])
-        return_value = self.algorithm.process_losses(losses, counts)
+        return_value = self.algorithm.process_losses(losses, counts, 0)
         # Check that the internal state was updated correctly
         self.assertTrue(np.allclose(self.algorithm.losses, losses))
         self.assertTrue(np.allclose(self.algorithm.counts, counts))
@@ -36,11 +35,11 @@ class TestDynamicMixingAlgorithm(unittest.TestCase):
         # First call
         losses1 = np.array([0.1, 0.2])
         counts1 = np.array([10, 20])
-        self.algorithm.process_losses(losses1, counts1)
+        self.algorithm.process_losses(losses1, counts1, 0)
         # Second call with same length arrays
         losses2 = np.array([0.3, 0.4])
         counts2 = np.array([30, 40])
-        self.algorithm.process_losses(losses2, counts2)
+        self.algorithm.process_losses(losses2, counts2, 0)
         # Expected accumulated losses and counts
         expected_losses = losses1 + losses2  # [0.4, 0.6]
         expected_counts = counts1 + counts2  # [40, 60]
@@ -52,11 +51,11 @@ class TestDynamicMixingAlgorithm(unittest.TestCase):
         # First call with 2 domains
         losses1 = np.array([0.1, 0.2])
         counts1 = np.array([10, 20])
-        self.algorithm.process_losses(losses1, counts1)
+        self.algorithm.process_losses(losses1, counts1, 0)
         # Second call with 3 domains
         losses2 = np.array([0.3, 0.4, 0.5])
         counts2 = np.array([30, 40, 50])
-        self.algorithm.process_losses(losses2, counts2)
+        self.algorithm.process_losses(losses2, counts2, 0)
         # Expected losses and counts after expansion
         expected_losses = np.array([0.1 + 0.3, 0.2 + 0.4, 0 + 0.5])  # [0.4, 0.6, 0.5]
         expected_counts = np.array([10 + 30, 20 + 40, 0 + 50])  # [40, 60, 50]
@@ -67,7 +66,7 @@ class TestDynamicMixingAlgorithm(unittest.TestCase):
         # Provide some data
         losses = np.array([0.1, 0.2, 0.3])
         counts = np.array([10, 20, 30])
-        self.algorithm.process_losses(losses, counts)
+        self.algorithm.process_losses(losses, counts, 0)
         # Now reset state
         self.algorithm.reset_state()
         # State should be reset
