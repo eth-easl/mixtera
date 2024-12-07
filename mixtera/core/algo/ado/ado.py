@@ -104,6 +104,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Initial prior distribution mu_k (from initial_mixture)
         self.mu_k: np.ndarray | None = None  # Will be set based on self.initial_mixture
 
+        self.next_continue_at = None
+
         self.log_counts: list[np.ndarray] | None = None
         if self.logging_path is not None:
             self.log_config = {
@@ -259,7 +261,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     self.next_continue_at = self.total_steps + 25 # give us 25 steps to collect some data.
                     logger.debug(f"Updated at client, continuting at {self.next_continue_at}")
                 
-                if self.total_steps == self.next_continue_at:
+                if self.next_continue_at is not None and self.total_steps == self.next_continue_at:
                     logger.debug("Continuing!")
                     should_continue = True
 
