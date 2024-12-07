@@ -263,12 +263,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Initialize h_t if not set
         self.h_t = self.h_t if self.h_t is not None else self.mu_k.copy()
 
+        updated_scaling_laws = False
         # Fit scaling laws immediately after the warm-up period ends, and then at intervals
         if (self.total_steps == self.ignore_initial_steps + 1) or (
             self.total_steps > self.ignore_initial_steps
             and (self.total_steps - self.ignore_initial_steps - 1) % self.scaling_law_update_interval == 0
         ):
             self.fit_scaling_laws()
+            updated_scaling_laws = True
 
         should_continue = True
         force_log = False
@@ -280,7 +282,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     self.next_continue_at = self.total_steps + 15 # give us 15 steps to collect some data.
                     logger.debug(f"Updated at client, continuting at {self.next_continue_at}")
                 
-                if self.next_continue_at is not None and self.total_steps == self.next_continue_at:
+                if (self.next_continue_at is not None and self.total_steps == self.next_continue_at) or updated_scaling_laws:
+                    # We also get a new mixture ID if the chunk-level mixture does not change, and updated_scaling_laws fixes that.
                     logger.debug("Continuing!")
                     should_continue = True
                     force_log = True
@@ -656,7 +659,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             rho_num *= adjustment_factor
 
         rho_num = np.maximum(rho_num, 0)
-        
+
         rho_den: float | np.floating = np.sum(rho_num)
         if rho_den > 0:
             self.rho_t = rho_num / rho_den  # TODO(MaxiBoether): test without this normalizaiton.
