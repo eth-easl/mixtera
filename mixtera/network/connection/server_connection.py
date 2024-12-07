@@ -224,7 +224,7 @@ class ServerConnection:
         await write_int(worker_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Get bytes
-        serialized_chunk = await read_bytes_obj(NUM_BYTES_FOR_SIZES, reader, timeout=60)
+        serialized_chunk = await read_bytes_obj(NUM_BYTES_FOR_SIZES, reader, timeout=10*60)
         if serialized_chunk is not None:
             serialized_chunk = dill.loads(serialized_chunk)
 
