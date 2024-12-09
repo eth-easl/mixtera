@@ -84,7 +84,7 @@ class TokenizingIterator:
                 if total_needed > self.buffer_size:
                     # Calculate new buffer size
                     new_buffer_size = max(self.buffer_size * 2, total_needed)
-                    new_buffer = np.empty(new_buffer_size)
+                    new_buffer = np.empty(new_buffer_size, dtype=np.int64)
                     # Copy existing data to new buffer
                     current_data = self.get_current_buffer_contents()
                     new_buffer[:len(current_data)] = current_data
@@ -112,6 +112,8 @@ class TokenizingIterator:
 
     def __next__(self) -> np.ndarray:
         available_tokens = self.end - self.start
+
+        # fetch data überschreibt den buffer, d.h. wenn wir konsequent zu wenig samples haben dann wird das nix
 
         if available_tokens < self.sequence_length + 1:
             self.fetch_data()
