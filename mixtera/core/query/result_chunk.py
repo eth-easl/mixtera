@@ -45,8 +45,10 @@ class TokenizingIterator:
         self.sequence_length = sequence_length
         self.prefetch_size = prefetch_size
         self.buffer = []  # List to hold tokens
+        self.chunk_index = 0  # Index to keep track of where we are in the buffer
         self.eos = False  # Indicator for end of stream
-
+        self.text_lens = []
+        self.yielded_samples = 0
     def __iter__(self):
         return self
 
@@ -57,6 +59,7 @@ class TokenizingIterator:
             try:
                 text = next(self.iterator)
                 texts.append(text)
+                self.text_lens.append(len(text))
             except StopIteration:
                 self.eos = True
                 break
@@ -64,6 +67,7 @@ class TokenizingIterator:
             # Efficient batch tokenization
             encoded_batch = self.tokenizer.batch_encode_plus(
                 texts,
+                #add_special_tokens=False,
                 return_attention_mask=False,
                 return_token_type_ids=False,
             )
@@ -72,19 +76,24 @@ class TokenizingIterator:
             self.buffer.extend(tokens)
 
     def __next__(self) -> List[int]:
-        # Continue fetching data until we have enough tokens or reach the end
-        while len(self.buffer) < self.sequence_length + 1 and not self.eos:
-            self.fetch_data()
-        
-        if len(self.buffer) >= self.sequence_length + 1:
-            # Return a chunk and remove used tokens from the buffer
-            chunk = self.buffer[:self.sequence_length + 1]
-            # Overlap by one token
-            self.buffer = self.buffer[self.sequence_length:] # todo this might be very inefficient because it copies the remaining buffer.
-            return chunk
-        else:
-            # No more tokens to yield
-            raise StopIteration
+        while True:
+            current_length = len(self.buffer) - self.chunk_index
+
+            if current_length >= self.sequence_length + 1:
+                # Yield a chunk of sequence_length + 1 tokens
+                start = self.chunk_index
+                end = start + self.sequence_length + 1
+                chunk = self.buffer[start:end]
+                self.chunk_index += self.sequence_length  # Move forward by sequence_length (overlap by one according to nanotron)
+                self.yielded_samples += 1
+                return chunk
+            elif not self.eos:
+                # Fetch more data if possible
+                self.fetch_data()
+            else:
+                logger.debug(f"Reached EOS for iterator after reading {self.text_lens} texts resulting in {self.yielded_samples} tokenized samples!")
+                # End of data, discard remaining tokens if not enough for a full chunk
+                raise StopIteration
 
 @typing.no_type_check
 def allow_daemon_spawn() -> None:
