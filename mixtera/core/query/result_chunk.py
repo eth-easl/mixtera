@@ -487,7 +487,7 @@ class ResultChunk:
                         # Yield the next sample from the iterator
                         sam = next(active_iterators[property_key])
                         assert isinstance(sam, list), f"sam = {sam}"
-                        assert len(sam) == self._sequence_length, f"sam = {sam} \n\n len = {len(sam) == self._sequence_length}"
+                        assert len(sam) == self._sequence_length +1, f"sam = {sam} \n\n len = {len(sam)}"
                         yield self._key_id_map[property_key], sam
                         nothing_yielded_window = False
                         processed_items[property_key] += 1
