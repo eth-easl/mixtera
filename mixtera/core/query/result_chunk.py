@@ -60,6 +60,7 @@ class TokenizingIterator:
                     # to produce another chunk
                     raise StopIteration
                 else:
+                    logger.debug("Prefetching!")
                     # Need to add more tokens to the buffer
                     texts = []
                     for _ in range(self.prefetch_size):
@@ -396,6 +397,8 @@ class ResultChunk:
         assert set(key for (key, _) in element_counts) == active_iterators.keys(), (
             f"element_counts.keys = {element_counts} != " + f"active_iterators.keys() = {active_iterators.keys()}"
         )
+
+        logger.debug(element_counts)
 
         deleted_keys: set[MixtureKey] = set()
 
