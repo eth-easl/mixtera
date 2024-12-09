@@ -28,6 +28,46 @@ END_OF_STREAM_OBJECT = "END_OF_STREAM"
 
 original_start = mp.Process.start
 
+class TokenizingIterator:
+    def __init__(
+        self,
+        iterator: Iterator[str],
+        tokenizer: "AutoTokenizer",
+        sequence_length: int,
+    ) -> None:
+        self.iterator = iterator
+        self.tokenizer = tokenizer
+        self.sequence_length = sequence_length
+        self.buffer = []
+        self.eos = False  # Indicator for end of stream
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> list[int]:
+        while True:
+            if len(self.buffer) >= self.sequence_length + 1:
+                # We have enough tokens to return a chunk
+                chunk = self.buffer[:self.sequence_length + 1]
+                # Move buffer forward by sequence_length (overlap by one token)
+                self.buffer = self.buffer[self.sequence_length:]
+                return chunk
+            else:
+                if self.eos:
+                    # Underlying iterator is exhausted, and not enough tokens left
+                    # to produce another chunk
+                    raise StopIteration
+                else:
+                    # Need to add more tokens to the buffer
+                    try:
+                        text = next(self.iterator)
+                        tokens = self.tokenizer.encode(text, add_special_tokens=False)
+                        self.buffer.extend(tokens)
+                    except StopIteration:
+                        # Underlying iterator is exhausted
+                        self.eos = True
+                        # After setting eos, we let the loop continue to process any remaining tokens
+                        # We don't raise StopIteration yet; check buffer size in the next loop iteration
 
 @typing.no_type_check
 def allow_daemon_spawn() -> None:
@@ -110,6 +150,9 @@ class ResultChunk:
         self._degree_of_parallelism: int = 1
         self._per_window_mixture: bool = False
         self._window_size: int = 128
+        self._tokenizer_name = None
+        self._sequence_length = -1
+        self._token_level_mixture = False
 
         self._iterator: Iterator[tuple[int, int, str]] | None = None
 
@@ -188,6 +231,20 @@ class ResultChunk:
                 + f"\n{self._mixture.keys()}"
                 + f"\n{self._mixture}"
             )
+        
+        # token level stuff
+        self._window_size = 1000
+        self._per_window_mixture = True
+        self._token_level_mixture = True
+        self._tokenizer_name = "EleutherAI/gpt-neox-20b"
+        if self._token_level_mixture:
+            if not self._tokenizer_name:
+                raise ValueError("Tokenizer name must be provided when using token-level mixture.")
+            from transformers import AutoTokenizer 
+            self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
+        else:
+            self._tokenizer = None
+
 
     def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
@@ -232,6 +289,12 @@ class ResultChunk:
             active_iterators = {
                 property_name: self._get_iterator_for_workload_mt(process)
                 for property_name, process in processes.items()
+            }
+
+        if self._token_level_mixture:
+            active_iterators = {
+                key: TokenizingIterator(iterator, self._tokenizer, self._sequence_length)
+                for key, iterator in active_iterators.items()
             }
 
         if self._prefetch_first_sample:
@@ -325,20 +388,22 @@ class ResultChunk:
         deleted_keys: set[MixtureKey] = set()
 
         # Continue until all iterators are deleted
-        while len(active_iterators) > len(deleted_keys):
+        guarantee_stop = False
+        while len(active_iterators) > len(deleted_keys) and not guarantee_stop:
             items_yielded = 0
             processed_items = {property_key: 0 for property_key, _ in element_counts}
             # This inner while loop represents one window with the correct mixture
             # We continue until the window is full or we don't have enough active iterators (outer condition)
-            while len(active_iterators) > len(deleted_keys) and items_yielded < self._window_size:
+            while len(active_iterators) > len(deleted_keys) and items_yielded < self._window_size and not guarantee_stop:
                 nothing_yielded_window = True
                 for property_key, property_count in element_counts:
                     # We iterate through all mixture keys and yield one item for the key per iteration
-                    if property_key in deleted_keys or processed_items[property_key] >= property_count:
-                        # However, if we cannot produce any items for this key anymore, (key has been deleted)
-                        # OR if we're done for this window, we move to the next property
-                        # We might also want to support stopping here if one property name
+                    if processed_items[property_key] >= property_count: # For this window, yielded enough of it
                         continue
+
+                    if property_key in deleted_keys:
+                        continue # for best effort, non best effort is handled when first deletion is encountered
+
                     try:
                         # Yield the next sample from the iterator
                         yield self._key_id_map[property_key], next(active_iterators[property_key])
@@ -352,6 +417,7 @@ class ResultChunk:
                     except StopIteration:
                         # If no more workloads, this property is done
                         deleted_keys.add(property_key)
+                        guarantee_stop = True # finish current window with best effort but don't do another best effort one
 
                 if nothing_yielded_window:
                     break

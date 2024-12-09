@@ -43,6 +43,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         )
         datasets.iterable_dataset._BaseExamplesIterable.__init__(self)
         self._shard_call_count = _shard_call_count
+        self.tokenization = True
 
     def __getitem__(self, index: int) -> Any:
         raise NotImplementedError("This is just overwritten to satify pylint.")
@@ -120,8 +121,9 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         datasets.logging.set_verbosity_debug()
         self.validate_state()
         idx = -1
+        column_str = "text" if self.tokenization else "input_ids"
         for idx, (key_id, sample) in enumerate(MixteraTorchDataset.__iter__(self)):
-            yield (f"{self._dp_group_id}-{self._node_id}-{self.worker_id}-{idx}", {"text": sample, "key_id": key_id})
+            yield (f"{self._dp_group_id}-{self._node_id}-{self.worker_id}-{idx}", {column_str: sample, "key_id": [key_id for _ in range(len(sample))]})
 
         logger.info(f"[{self._dp_group_id}-{self._node_id}-{self.worker_id}] Reached EOS after sample {idx}")
 
@@ -140,9 +142,18 @@ class MixteraHFDataset(datasets.IterableDataset):
                 client, query, query_execution_args, result_streaming_args, checkpoint_path=checkpoint_path
             )
         )
-        self.info.features = datasets.Features(
-            {"text": datasets.Value(dtype="string"), "key_id": datasets.Value(dtype="int32")}
-        )
+        self.tokenization = True
+        self.sequence_length = 1024
+        if self.tokenization:
+            self.info.features = datasets.Features(
+                {"input_ids": datasets.Sequence(feature=datasets.Value(dtype="int64"), length=self.sequence_length+1), "key_id": datasets.Sequence(feature=datasets.Value(dtype="int32"), length=self.sequence_length + 1)}
+            )
+        else:
+            self.info.features = datasets.Features(
+                {"text": datasets.Value(dtype="string"), "key_id": datasets.Value(dtype="int32")}
+            )
+
+
         self._ex_iterable: _MixteraHFIterable
 
     def __iter__(self) -> Generator[Any | dict, Any, None]:
