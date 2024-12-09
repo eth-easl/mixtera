@@ -34,10 +34,12 @@ class TokenizingIterator:
         iterator: Iterator[str],
         tokenizer: "AutoTokenizer",
         sequence_length: int,
+        prefetch_size: int = 100
     ) -> None:
         self.iterator = iterator
         self.tokenizer = tokenizer
         self.sequence_length = sequence_length
+        self.prefetch_size = prefetch_size
         self.buffer = []
         self.eos = False  # Indicator for end of stream
 
@@ -59,15 +61,25 @@ class TokenizingIterator:
                     raise StopIteration
                 else:
                     # Need to add more tokens to the buffer
-                    try:
-                        text = next(self.iterator)
-                        tokens = self.tokenizer.encode(text, add_special_tokens=False)
-                        self.buffer.extend(tokens)
-                    except StopIteration:
+                    texts = []
+                    for _ in range(self.prefetch_size):
+                        try:
+                            text = next(self.iterator)
+                            texts.append(text)
+                        except StopIteration:
+                            self.eos = True
+                            break
+                    if texts:
+                        # Use batch_encode_plus for efficient tokenization
+                        encoded_batch = self.tokenizer.batch_encode_plus(
+                            texts, return_attention_mask=False, return_token_type_ids=False
+                        )
+                        # Extend buffer with token ids
+                        for tokens in encoded_batch["input_ids"]:
+                            self.buffer.extend(tokens)
+                    else:
                         # Underlying iterator is exhausted
                         self.eos = True
-                        # After setting eos, we let the loop continue to process any remaining tokens
-                        # We don't raise StopIteration yet; check buffer size in the next loop iteration
 
 @typing.no_type_check
 def allow_daemon_spawn() -> None:
