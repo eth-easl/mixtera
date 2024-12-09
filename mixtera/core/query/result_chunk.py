@@ -501,6 +501,8 @@ class ResultChunk:
                 if nothing_yielded_window:
                     break
 
+            logger.error(f"yielded {items_yielded} samples.")
+
     def _iterate_overall_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[tuple[int, str]]:
         """
         Iterate over the samples in the result index with an overall mixture. This function yields the samples
