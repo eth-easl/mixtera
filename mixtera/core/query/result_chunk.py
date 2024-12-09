@@ -27,6 +27,7 @@ MULTIPROCESSING_TIMEOUT = 90
 END_OF_STREAM_OBJECT = "END_OF_STREAM"
 
 original_start = mp.Process.start
+import numpy as np
 
 class TokenizingIterator:
     def __init__(
@@ -34,53 +35,115 @@ class TokenizingIterator:
         iterator: Iterator[str],
         tokenizer: "AutoTokenizer",
         sequence_length: int,
-        prefetch_size: int = 100
+        prefetch_size: int = 100,
+        buffer_size: int = 100000  # Adjust as needed
     ) -> None:
         self.iterator = iterator
         self.tokenizer = tokenizer
         self.sequence_length = sequence_length
         self.prefetch_size = prefetch_size
-        self.buffer = []
+        self.buffer_size = buffer_size
+        self.buffer = np.empty(self.buffer_size, dtype=np.int32)
+        self.start = 0    # Start index of data in buffer
+        self.end = 0      # End index (exclusive) of data in buffer
         self.eos = False  # Indicator for end of stream
 
     def __iter__(self):
         return self
 
-    def __next__(self) -> list[int]:
-        while True:
-            if len(self.buffer) >= self.sequence_length + 1:
-                # We have enough tokens to return a chunk
-                chunk = self.buffer[:self.sequence_length + 1]
-                # Move buffer forward by sequence_length (overlap by one token)
-                self.buffer = self.buffer[self.sequence_length:]
-                return chunk
-            else:
-                if self.eos:
-                    # Underlying iterator is exhausted, and not enough tokens left
-                    # to produce another chunk
-                    raise StopIteration
+    def fetch_data(self) -> None:
+        if self.eos:
+            # Underlying iterator is exhausted, and not enough tokens left
+            # to produce another chunk
+            raise StopIteration
+        else:
+            # Need to add more tokens to the buffer
+            texts = []
+            for _ in range(self.prefetch_size):
+                try:
+                    text = next(self.iterator)
+                    texts.append(text)
+                except StopIteration:
+                    self.eos = True
+                    break
+            if texts:
+                # Efficient batch tokenization
+                encoded_batch = self.tokenizer.batch_encode_plus(
+                    texts,
+                    return_attention_mask=False,
+                    return_token_type_ids=False,
+                )
+                # Flatten the list of token lists into a single NumPy array
+                tokens = np.concatenate(
+                    [np.array(ids, dtype=np.int32) for ids in encoded_batch["input_ids"]]
+                )
+                num_tokens = len(tokens)
+                total_needed = (self.end - self.start) + num_tokens
+                # Ensure the buffer is large enough
+                if total_needed > self.buffer_size:
+                    # Calculate new buffer size
+                    new_buffer_size = max(self.buffer_size * 2, total_needed)
+                    new_buffer = np.empty(new_buffer_size, dtype=np.int32)
+                    # Copy existing data to new buffer
+                    current_data = self.get_current_buffer_contents()
+                    new_buffer[:len(current_data)] = current_data
+                    # Update buffer and indices
+                    self.buffer = new_buffer
+                    self.buffer_size = new_buffer_size
+                    self.start = 0
+                    self.end = len(current_data)
+                # Insert new tokens into buffer
+                insert_pos = self.end % self.buffer_size
+                end_pos = insert_pos + num_tokens
+                if end_pos <= self.buffer_size:
+                    # No wrap-around
+                    self.buffer[insert_pos:end_pos] = tokens
                 else:
-                    logger.debug("Prefetching!")
-                    # Need to add more tokens to the buffer
-                    texts = []
-                    for _ in range(self.prefetch_size):
-                        try:
-                            text = next(self.iterator)
-                            texts.append(text)
-                        except StopIteration:
-                            self.eos = True
-                            break
-                    if texts:
-                        # Use batch_encode_plus for efficient tokenization
-                        encoded_batch = self.tokenizer.batch_encode_plus(
-                            texts, return_attention_mask=False, return_token_type_ids=False
-                        )
-                        # Extend buffer with token ids
-                        for tokens in encoded_batch["input_ids"]:
-                            self.buffer.extend(tokens)
-                    else:
-                        # Underlying iterator is exhausted
-                        self.eos = True
+                    # Wrap-around
+                    first_part_size = self.buffer_size - insert_pos
+                    self.buffer[insert_pos:] = tokens[:first_part_size]
+                    self.buffer[:end_pos % self.buffer_size] = tokens[first_part_size:]
+                self.end += num_tokens
+            else:
+                # Underlying iterator is exhausted
+                self.eos = True
+
+
+    def __next__(self) -> np.ndarray:
+        available_tokens = self.end - self.start
+
+        if available_tokens < self.sequence_length + 1:
+            self.fetch_data()
+        
+        available_tokens = self.end - self.start
+
+        if available_tokens < self.sequence_length + 1:
+            raise StopIteration
+
+        if available_tokens >= self.sequence_length + 1:
+            # We have enough tokens to return a chunk
+            chunk_start = self.start % self.buffer_size
+            chunk_end = chunk_start + self.sequence_length + 1
+            if chunk_end <= self.buffer_size:
+                # No wrap-around
+                chunk = self.buffer[chunk_start:chunk_end]
+            else:
+                # Wrap-around
+                part1 = self.buffer[chunk_start:]
+                part2 = self.buffer[:chunk_end % self.buffer_size]
+                chunk = np.concatenate((part1, part2))
+            # Advance start index by sequence_length (overlap by one token)
+            self.start += self.sequence_length
+            return chunk
+
+    def get_current_buffer_contents(self) -> np.ndarray:
+        """Helper method to get current data in the buffer as a contiguous array."""
+        start_idx = self.start % self.buffer_size
+        end_idx = self.end % self.buffer_size
+        if end_idx >= start_idx:
+            return self.buffer[start_idx:end_idx]
+        else:
+            return np.concatenate((self.buffer[start_idx:], self.buffer[:end_idx]))
 
 @typing.no_type_check
 def allow_daemon_spawn() -> None:
@@ -184,6 +247,21 @@ class ResultChunk:
         self._per_window_mixture = args.chunk_reading_per_window_mixture
         self._window_size = args.chunk_reading_window_size
 
+        # token level stuff
+        self._window_size = 1000
+        self._sequence_length = 1024
+        self._per_window_mixture = True
+        self._token_level_mixture = True
+        self._tokenizer_name = "EleutherAI/gpt-neox-20b"
+        if self._token_level_mixture:
+            if not self._tokenizer_name:
+                raise ValueError("Tokenizer name must be provided when using token-level mixture.")
+            from transformers import AutoTokenizer 
+            self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
+        else:
+            self._tokenizer = None
+
+
         from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
 
         if args.tunnel_via_server:
@@ -202,7 +280,7 @@ class ResultChunk:
                 )
             self._degree_of_parallelism = 1
 
-        if self._per_window_mixture and self._window_size > self._chunk_size:
+        if self._per_window_mixture and self._window_size > self._chunk_size and not self._token_level_mixture:
             if not is_on_github_actions:
                 logger.warning(
                     f"Window size is set to {self._window_size} which is > the chunk size of {self._chunk_size}. "
@@ -245,20 +323,6 @@ class ResultChunk:
                 + f"\n{self._mixture}"
             )
         
-        # token level stuff
-        self._window_size = 1000
-        self._per_window_mixture = True
-        self._token_level_mixture = True
-        self._tokenizer_name = "EleutherAI/gpt-neox-20b"
-        if self._token_level_mixture:
-            if not self._tokenizer_name:
-                raise ValueError("Tokenizer name must be provided when using token-level mixture.")
-            from transformers import AutoTokenizer 
-            self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
-        else:
-            self._tokenizer = None
-
-
     def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
 
