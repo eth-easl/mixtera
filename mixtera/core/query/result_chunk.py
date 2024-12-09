@@ -134,7 +134,7 @@ class TokenizingIterator:
                 chunk = np.concatenate((part1, part2))
             # Advance start index by sequence_length (overlap by one token)
             self.start += self.sequence_length
-            return list(chunk)
+            return chunk.tolist()
 
     def get_current_buffer_contents(self) -> np.ndarray:
         """Helper method to get current data in the buffer as a contiguous array."""
