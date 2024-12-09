@@ -43,7 +43,7 @@ class TokenizingIterator:
         self.sequence_length = sequence_length
         self.prefetch_size = prefetch_size
         self.buffer_size = buffer_size
-        self.buffer = np.empty(self.buffer_size, dtype=np.int32)
+        self.buffer = np.empty(self.buffer_size)
         self.start = 0    # Start index of data in buffer
         self.end = 0      # End index (exclusive) of data in buffer
         self.eos = False  # Indicator for end of stream
@@ -75,15 +75,16 @@ class TokenizingIterator:
                 )
                 # Flatten the list of token lists into a single NumPy array
                 tokens = np.concatenate(
-                    [np.array(ids, dtype=np.int32) for ids in encoded_batch["input_ids"]]
+                    [np.array(ids) for ids in encoded_batch["input_ids"]]
                 )
                 num_tokens = len(tokens)
                 total_needed = (self.end - self.start) + num_tokens
+                assert self.buffer.dtype == tokens.dtype, f"buffer = {self.buffer.dtype} tokens = {tokens.dtype}"
                 # Ensure the buffer is large enough
                 if total_needed > self.buffer_size:
                     # Calculate new buffer size
                     new_buffer_size = max(self.buffer_size * 2, total_needed)
-                    new_buffer = np.empty(new_buffer_size, dtype=np.int32)
+                    new_buffer = np.empty(new_buffer_size)
                     # Copy existing data to new buffer
                     current_data = self.get_current_buffer_contents()
                     new_buffer[:len(current_data)] = current_data
@@ -134,7 +135,10 @@ class TokenizingIterator:
                 chunk = np.concatenate((part1, part2))
             # Advance start index by sequence_length (overlap by one token)
             self.start += self.sequence_length
-            return chunk.tolist()
+            chunk = chunk.tolist()
+            assert chunk is not None
+            assert not any(item is None for item in chunk)
+            return chunk
 
     def get_current_buffer_contents(self) -> np.ndarray:
         """Helper method to get current data in the buffer as a contiguous array."""
@@ -488,6 +492,7 @@ class ResultChunk:
                         sam = next(active_iterators[property_key])
                         assert isinstance(sam, list), f"sam = {sam}"
                         assert len(sam) == self._sequence_length + 1, f"sam = {sam} \n\n len = {len(sam)}"
+                        assert not any(item is None for item in sam), f"sam = {sam} \n\n len = {len(sam)}"
                         yield self._key_id_map[property_key], sam
                         nothing_yielded_window = False
                         processed_items[property_key] += 1
