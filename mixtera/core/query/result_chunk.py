@@ -36,6 +36,7 @@ class TokenizingIterator:
     def __init__(
         self,
         iterator: Iterator[str],
+        key: MixtureKey,
         tokenizer,
         sequence_length: int,
         prefetch_size: int = 100,
@@ -49,6 +50,8 @@ class TokenizingIterator:
         self.eos = False  # Indicator for end of stream
         self.text_lens = []
         self.yielded_samples = 0
+        self.key = key
+
     def __iter__(self):
         return self
 
@@ -78,7 +81,8 @@ class TokenizingIterator:
     def __next__(self) -> List[int]:
         while True:
             current_length = len(self.buffer) - self.chunk_index
-
+            # todo all of this is highly inefficient (we never evict the buffer)
+            # todo: if we have not handed out a single sample, we pad it with some token (or repeat it) to have at least a single sample per iterator.
             if current_length >= self.sequence_length + 1:
                 # Yield a chunk of sequence_length + 1 tokens
                 start = self.chunk_index
@@ -91,7 +95,7 @@ class TokenizingIterator:
                 # Fetch more data if possible
                 self.fetch_data()
             else:
-                logger.debug(f"Reached EOS for iterator after reading {self.text_lens} texts resulting in {self.yielded_samples} tokenized samples!")
+                logger.debug(f"Reached EOS for iterator for {self.key} after reading {len(self.text_lens)} texts with {sum(self.text_lens)} chars resulting in {self.yielded_samples} tokenized samples!")
                 # End of data, discard remaining tokens if not enough for a full chunk
                 raise StopIteration
 
@@ -320,7 +324,7 @@ class ResultChunk:
 
         if self._token_level_mixture:
             active_iterators = {
-                key: TokenizingIterator(iterator, self._tokenizer, self._sequence_length)
+                key: TokenizingIterator(iterator, key, self._tokenizer, self._sequence_length)
                 for key, iterator in active_iterators.items()
             }
 
