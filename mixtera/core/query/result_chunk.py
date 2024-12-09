@@ -29,127 +29,62 @@ END_OF_STREAM_OBJECT = "END_OF_STREAM"
 original_start = mp.Process.start
 import numpy as np
 
+import numpy as np
+from typing import Iterator, List
+
 class TokenizingIterator:
     def __init__(
         self,
         iterator: Iterator[str],
-        tokenizer: "AutoTokenizer",
+        tokenizer,
         sequence_length: int,
         prefetch_size: int = 100,
-        buffer_size: int = 100000  # Adjust as needed
     ) -> None:
         self.iterator = iterator
         self.tokenizer = tokenizer
         self.sequence_length = sequence_length
         self.prefetch_size = prefetch_size
-        self.buffer_size = buffer_size
-        self.buffer = np.empty(self.buffer_size, dtype=np.int64)
-        self.start = 0    # Start index of data in buffer
-        self.end = 0      # End index (exclusive) of data in buffer
+        self.buffer = []  # List to hold tokens
         self.eos = False  # Indicator for end of stream
 
     def __iter__(self):
         return self
 
     def fetch_data(self) -> None:
-        if self.eos:
-            # Underlying iterator is exhausted, and not enough tokens left
-            # to produce another chunk
-            raise StopIteration
-        else:
-            # Need to add more tokens to the buffer
-            texts = []
-            for _ in range(self.prefetch_size):
-                try:
-                    text = next(self.iterator)
-                    texts.append(text)
-                except StopIteration:
-                    self.eos = True
-                    break
-            if texts:
-                # Efficient batch tokenization
-                encoded_batch = self.tokenizer.batch_encode_plus(
-                    texts,
-                    return_attention_mask=False,
-                    return_token_type_ids=False,
-                )
-                # Flatten the list of token lists into a single NumPy array
-                tokens = np.concatenate(
-                    [np.array(ids) for ids in encoded_batch["input_ids"]]
-                )
-                num_tokens = len(tokens)
-                total_needed = (self.end - self.start) + num_tokens
-                assert self.buffer.dtype == tokens.dtype, f"buffer = {self.buffer.dtype} tokens = {tokens.dtype}"
-                # Ensure the buffer is large enough
-                if total_needed > self.buffer_size:
-                    # Calculate new buffer size
-                    new_buffer_size = max(self.buffer_size * 2, total_needed)
-                    new_buffer = np.empty(new_buffer_size, dtype=np.int64)
-                    # Copy existing data to new buffer
-                    current_data = self.get_current_buffer_contents()
-                    new_buffer[:len(current_data)] = current_data
-                    # Update buffer and indices
-                    self.buffer = new_buffer
-                    self.buffer_size = new_buffer_size
-                    self.start = 0
-                    self.end = len(current_data)
-                # Insert new tokens into buffer
-                insert_pos = self.end % self.buffer_size
-                end_pos = insert_pos + num_tokens
-                if end_pos <= self.buffer_size:
-                    # No wrap-around
-                    self.buffer[insert_pos:end_pos] = tokens
-                else:
-                    # Wrap-around
-                    first_part_size = self.buffer_size - insert_pos
-                    self.buffer[insert_pos:] = tokens[:first_part_size]
-                    self.buffer[:end_pos % self.buffer_size] = tokens[first_part_size:]
-                self.end += num_tokens
-            else:
-                # Underlying iterator is exhausted
+        """Fetches data from the underlying iterator and adds tokens to the buffer."""
+        texts = []
+        for _ in range(self.prefetch_size):
+            try:
+                text = next(self.iterator)
+                texts.append(text)
+            except StopIteration:
                 self.eos = True
+                break
+        if texts:
+            # Efficient batch tokenization
+            encoded_batch = self.tokenizer.batch_encode_plus(
+                texts,
+                return_attention_mask=False,
+                return_token_type_ids=False,
+            )
+            # Flatten the list of token lists and extend the buffer
+            tokens = [id for ids in encoded_batch["input_ids"] for id in ids]
+            self.buffer.extend(tokens)
 
-
-    def __next__(self) -> np.ndarray:
-        available_tokens = self.end - self.start
-
-        # fetch data überschreibt den buffer, d.h. wenn wir konsequent zu wenig samples haben dann wird das nix
-
-        if available_tokens < self.sequence_length + 1:
+    def __next__(self) -> List[int]:
+        # Continue fetching data until we have enough tokens or reach the end
+        while len(self.buffer) < self.sequence_length + 1 and not self.eos:
             self.fetch_data()
         
-        available_tokens = self.end - self.start
-
-        if available_tokens < self.sequence_length + 1:
-            raise StopIteration
-
-        if available_tokens >= self.sequence_length + 1:
-            # We have enough tokens to return a chunk
-            chunk_start = self.start % self.buffer_size
-            chunk_end = chunk_start + self.sequence_length + 1
-            if chunk_end <= self.buffer_size:
-                # No wrap-around
-                chunk = self.buffer[chunk_start:chunk_end]
-            else:
-                # Wrap-around
-                part1 = self.buffer[chunk_start:]
-                part2 = self.buffer[:chunk_end % self.buffer_size]
-                chunk = np.concatenate((part1, part2))
-            # Advance start index by sequence_length (overlap by one token)
-            self.start += self.sequence_length
-            chunk = chunk.tolist()
-            assert chunk is not None
-            assert not any(item is None for item in chunk)
+        if len(self.buffer) >= self.sequence_length + 1:
+            # Return a chunk and remove used tokens from the buffer
+            chunk = self.buffer[:self.sequence_length + 1]
+            # Overlap by one token
+            self.buffer = self.buffer[self.sequence_length:] # todo this might be very inefficient because it copies the remaining buffer.
             return chunk
-
-    def get_current_buffer_contents(self) -> np.ndarray:
-        """Helper method to get current data in the buffer as a contiguous array."""
-        start_idx = self.start % self.buffer_size
-        end_idx = self.end % self.buffer_size
-        if end_idx >= start_idx:
-            return self.buffer[start_idx:end_idx]
         else:
-            return np.concatenate((self.buffer[start_idx:], self.buffer[:end_idx]))
+            # No more tokens to yield
+            raise StopIteration
 
 @typing.no_type_check
 def allow_daemon_spawn() -> None:
@@ -508,7 +443,6 @@ class ResultChunk:
                         # If no more workloads, this property is done
                         deleted_keys.add(property_key)
                         guarantee_stop = True # finish current window with best effort but don't do another best effort one
-                        logger.debug(f"key {property_key} is done. stopping all windows.")
 
                 if nothing_yielded_window:
                     break
