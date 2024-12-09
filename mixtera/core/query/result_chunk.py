@@ -38,12 +38,16 @@ class TokenizingIterator:
         prefetch_size: int = 100,
         buffer_size: int = 100000  # Adjust as needed
     ) -> None:
+        
+        token_test = self.tokenizer.batch_encode_plus("Example", return_attention_mask=False, return_token_type_ids=False)
+        buffer_dtype = token_test["input_ids"].dtype
+
         self.iterator = iterator
         self.tokenizer = tokenizer
         self.sequence_length = sequence_length
         self.prefetch_size = prefetch_size
         self.buffer_size = buffer_size
-        self.buffer = np.empty(self.buffer_size)
+        self.buffer = np.empty(self.buffer_size, dtype=buffer_dtype)
         self.start = 0    # Start index of data in buffer
         self.end = 0      # End index (exclusive) of data in buffer
         self.eos = False  # Indicator for end of stream
