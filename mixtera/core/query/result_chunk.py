@@ -248,7 +248,7 @@ class ResultChunk:
         self._window_size = args.chunk_reading_window_size
 
         # token level stuff
-        self._window_size = 1000
+        self._window_size = self._chunk_size
         self._sequence_length = 1024
         self._per_window_mixture = True
         self._token_level_mixture = True
@@ -473,7 +473,7 @@ class ResultChunk:
             processed_items = {property_key: 0 for property_key, _ in element_counts}
             # This inner while loop represents one window with the correct mixture
             # We continue until the window is full or we don't have enough active iterators (outer condition)
-            while len(active_iterators) > len(deleted_keys) and items_yielded < self._window_size and not guarantee_stop:
+            while len(active_iterators) > len(deleted_keys) and items_yielded < self._window_size:
                 nothing_yielded_window = True
                 for property_key, property_count in element_counts:
                     # We iterate through all mixture keys and yield one item for the key per iteration
@@ -487,7 +487,7 @@ class ResultChunk:
                         # Yield the next sample from the iterator
                         sam = next(active_iterators[property_key])
                         assert isinstance(sam, list), f"sam = {sam}"
-                        assert len(sam) == self._sequence_length +1, f"sam = {sam} \n\n len = {len(sam)}"
+                        assert len(sam) == self._sequence_length + 1, f"sam = {sam} \n\n len = {len(sam)}"
                         yield self._key_id_map[property_key], sam
                         nothing_yielded_window = False
                         processed_items[property_key] += 1
@@ -495,11 +495,13 @@ class ResultChunk:
                         # If the window is full, break the inner for loop, will also break the outer (window) while loop
                         # since the items_yielded >= self._window_size, and then start the next window
                         if items_yielded >= self._window_size:
+                            logger.debug(f"stopping items yielded = {items_yielded} and ws = {self._window_size}")
                             break
                     except StopIteration:
                         # If no more workloads, this property is done
                         deleted_keys.add(property_key)
                         guarantee_stop = True # finish current window with best effort but don't do another best effort one
+                        logger.debug(f"key {property_key} is done. stopping all windows.")
 
                 if nothing_yielded_window:
                     break
