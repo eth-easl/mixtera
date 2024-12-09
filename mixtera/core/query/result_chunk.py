@@ -39,7 +39,7 @@ class TokenizingIterator:
         buffer_size: int = 100000  # Adjust as needed
     ) -> None:
         
-        token_test = self.tokenizer.batch_encode_plus("Example", return_attention_mask=False, return_token_type_ids=False)
+        token_test = tokenizer.batch_encode_plus("Example", return_attention_mask=False, return_token_type_ids=False)
         buffer_dtype = token_test["input_ids"].dtype
 
         self.iterator = iterator
