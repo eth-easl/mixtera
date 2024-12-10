@@ -124,7 +124,8 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         column_str = "input_ids" if self.tokenization else "text"
         for idx, (key_id, sample) in enumerate(MixteraTorchDataset.__iter__(self)):
             assert not any(item is None for item in sample), f"sample = {sample}"
-            yield (f"{self._dp_group_id}-{self._node_id}-{self.worker_id}-{idx}", {column_str: sample, "key_id": [key_id for _ in range(len(sample))]})
+            key_id = [key_id for _ in range(len(sample))] if self.tokenization else key_id
+            yield (f"{self._dp_group_id}-{self._node_id}-{self.worker_id}-{idx}", {column_str: sample, "key_id": key_id})
 
         logger.info(f"[{self._dp_group_id}-{self._node_id}-{self.worker_id}] Reached EOS after sample {idx}")
 
