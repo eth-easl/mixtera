@@ -20,6 +20,8 @@ from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable
 
 _shared_memory_names: set[str] = set()
 
+Sample = str | list[int]
+
 
 def _cleanup_all_shared_memory() -> None:
     """Atexit handler to clean up all shared memory segments."""
@@ -64,6 +66,7 @@ class MixteraTorchDataset(IterableDataset):
         self._checkpoint_path = checkpoint_path
         self.requires_callback = False
         self._return_key_id = return_key_id
+        self._returning_tokens = result_streaming_args.chunk_reading_mixture_type == "token"
         if self._return_key_id:
             self._yield_func = lambda key_id, sample: (key_id, sample)
         else:
@@ -227,7 +230,7 @@ class MixteraTorchDataset(IterableDataset):
             logger.error(f"Error while fetching worker status from shm: {e}")
             return None
 
-    def __iter__(self) -> Generator[tuple[int, str] | str, None, None]:
+    def __iter__(self) -> Generator[tuple[int, Sample] | Sample, None, None]:
         assert self._comp_shm is not None and self._status_shm is not None, "SharedMemory objects are None."
 
         try:

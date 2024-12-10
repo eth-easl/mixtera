@@ -39,7 +39,7 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._infer_mixture = MagicMock(return_value=self.mixture)
 
         self.result_streaming_args.chunk_reading_degree_of_parallelism = 1
-        self.result_streaming_args.chunk_reading_per_window_mixture = True
+        self.result_streaming_args.chunk_reading_mixture_type = "window"
         self.result_streaming_args.chunk_reading_window_size = -1
         self.result_streaming_args.tunnel_via_server = False
         result_chunk.configure_result_streaming(self.mock_client, self.result_streaming_args)
@@ -63,7 +63,7 @@ class TestResultChunk(unittest.TestCase):
         result_chunk._infer_mixture = MagicMock(return_value=self.mixture)
 
         self.result_streaming_args.chunk_reading_degree_of_parallelism = 2
-        self.result_streaming_args.chunk_reading_per_window_mixture = False
+        self.result_streaming_args.chunk_reading_mixture_type = "simple"
         self.result_streaming_args.chunk_reading_window_size = 128
         self.result_streaming_args.tunnel_via_server = False
         result_chunk.configure_result_streaming(self.mock_client, self.result_streaming_args)
@@ -109,8 +109,8 @@ class TestResultChunk(unittest.TestCase):
             mixture=None,
         )
 
-        result_chunk._per_window_mixture = True
-        mock_iterators = [("property1", iter(["sample1", "sample2"]))]
+        result_chunk._mixture_type = "window"
+        mock_iterators = {"key1": iter(["sample1", "sample2"])}
         result_chunk._init_active_iterators = MagicMock()
         result_chunk._init_active_iterators.return_value = mock_iterators
         result_chunk._iterate_window_mixture = MagicMock()
@@ -155,7 +155,6 @@ class TestResultChunk(unittest.TestCase):
             {"key1": 0, "key2": 1, "key3": 2},
             self._default_mix_id,
             mixture=None,
-            prefetch_first_sample=False,
         )
         result_chunk._degree_of_parallelism = 1
         mock_workloads = {"property1": "workload1", "property2": "workload2"}
@@ -181,7 +180,6 @@ class TestResultChunk(unittest.TestCase):
             {"key1": 0, "key2": 1, "key3": 2},
             self._default_mix_id,
             mixture=None,
-            prefetch_first_sample=False,
         )
         result_chunk._degree_of_parallelism = 2  # Trigger the mt path
         mock_workloads = {"property1": "workload1", "property2": "workload2"}
