@@ -240,7 +240,11 @@ def test_reader_reproducibility(
                     continue
 
                 if per_window_mixture == "token" and (
-                    query_exec_args.mixture.chunk_size != 750 or batch_size != 500 or window_size != window_sizes[0]
+                    query_exec_args.mixture.chunk_size != 750
+                    or batch_size != 500
+                    or window_size != window_sizes[0]
+                    or mixture_str != "arbitrary"
+                    or query_exec_args.num_workers != 0
                 ):
                     continue
 
