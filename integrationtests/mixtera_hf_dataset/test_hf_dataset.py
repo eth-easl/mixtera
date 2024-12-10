@@ -18,7 +18,12 @@ from mixtera.core.query.mixture import ArbitraryMixture
 from mixtera.hf import MixteraHFDataset
 from transformers import AutoTokenizer
 
-os.environ["TOKENIZERS_PARALLELISM"] = "True"
+# We test both 0 workers and 8 workers
+# Instantiating a tokenizer for 0 workers and then again for 8 workers apparently breaks
+# Also see https://stackoverflow.com/questions/62691279/how-to-disable-tokenizers-parallelism-true-false-warning/
+# and https://github.com/huggingface/transformers/issues/5486.
+# For this test this is ok, and in an actual training it's not an issue, because we never use tokenizers before iterating.
+os.environ["TOKENIZERS_PARALLELISM"] = "False"
 
 
 def sample_parsing_func(sample):
@@ -142,7 +147,7 @@ def instantiate_hf_dataloader(
     train_dataset = train_dataset.with_format(type="torch")
     train_dataset = split_dataset_by_node(train_dataset, world_size=1, rank=0)
     # If we tokenize we give it more time because we might need to download the tokenizer.
-    timeout_factor = 20 if streaming_args.chunk_reading_mixture_type == "token" else 1
+    timeout_factor = 10 if streaming_args.chunk_reading_mixture_type == "token" else 1
     dl = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -196,9 +201,6 @@ def test_hfds(server_dir: Path) -> None:
 
                             if mixture_type == "token" and mixture_size == 1:
                                 continue
-
-                            if mixture_type == "token" and query_exec_args.num_workers > 0:
-                                query_exec_args.num_workers = 1
 
                             try:
                                 query_exec_args = QueryExecutionArgs(
