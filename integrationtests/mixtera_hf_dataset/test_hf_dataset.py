@@ -84,8 +84,6 @@ def clm_process(
     dataset_overwrite_cache: bool,
     sequence_length: int,
 ):
-
-    # some args not supported by the IterableDataset
     additional_args = (
         {
             "num_proc": dataset_processing_num_proc_per_process,
@@ -117,22 +115,28 @@ def instantiate_hf_dataloader(
     query_execution_args: QueryExecutionArgs,
     streaming_args: ResultStreamingArgs,
     batch_size: int,
+    sequence_length: int,
 ):
     raw_dataset = MixteraHFDataset(client, query, query_execution_args, streaming_args)
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
-    if mp.get_start_method() == "spawn":
-        train_dataset = clm_process(
-            raw_dataset=raw_dataset,
-            tokenizer=tokenizer,
-            text_column_name="text",  # by MixteraHFDataset implementation
-            dataset_processing_num_proc_per_process=-1,  # will be ignored
-            dataset_overwrite_cache=False,  # will be ignored
-            sequence_length=10,
-        )
-    else:
-        print("In a forking environment, using fork for multiprocessing hang when using map! Skipping map.")
+
+    # If using the 'token' mixture type, the data is already tokenized
+    if streaming_args.chunk_reading_mixture_type != "token":
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        if mp.get_start_method() == "spawn":
+            train_dataset = clm_process(
+                raw_dataset=raw_dataset,
+                tokenizer=tokenizer,
+                text_column_name="text",  # By MixteraHFDataset implementation
+                dataset_processing_num_proc_per_process=-1,  # Will be ignored
+                dataset_overwrite_cache=False,  # Will be ignored
+                sequence_length=sequence_length,
+            )
+        else:
+            print("In a forking environment, using fork for multiprocessing hang when using map! Skipping map.")
+            train_dataset = raw_dataset
+    if "train_dataset" not in locals():
         train_dataset = raw_dataset
 
     train_dataset = train_dataset.with_format(type="torch")
@@ -151,16 +155,12 @@ def run_query(
     client: MixteraClient,
     query_exec_args: QueryExecutionArgs,
     batch_size: int,
-    tunnel: bool,
+    streaming_args: ResultStreamingArgs,
+    sequence_length: int,
 ):
-    job_id = (
-        f"hf0_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
-        + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
-    )
+    job_id = streaming_args.job_id
     query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
-    dl = instantiate_hf_dataloader(
-        client, query, query_exec_args, ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel), batch_size
-    )
+    dl = instantiate_hf_dataloader(client, query, query_exec_args, streaming_args, batch_size, sequence_length)
     return list(dl)
 
 
@@ -174,26 +174,76 @@ def test_hfds(server_dir: Path) -> None:
     )
     assert server_client.check_dataset_exists("hf_integrationtest_dataset"), "Dataset does not exist!"
 
-    for batch_size in [1, 500]:
-        for num_workers in [0, 8]:
-            for mixture in [ArbitraryMixture(x) for x in [1, 2000]]:
-                for tunnel in [False]:
-                    try:
-                        query_exec_args = QueryExecutionArgs(
-                            mixture=mixture,
-                            num_workers=num_workers,
-                        )
-                        curr_data = run_query(server_client, query_exec_args, batch_size, tunnel)
-                        assert len(curr_data) > 0  # we need some answer
-                    except Exception as e:
-                        print(
-                            "Error with "
-                            + f"chunk_size = {mixture.chunk_size}, num_workers = {num_workers},"
-                            + f"batch_size = {batch_size}, tunnel = {tunnel}"
-                        )
-                        raise e
+    # Parameters to test
+    batch_sizes = [1, 500]
+    num_workers_list = [0, 8]
+    mixture_sizes = [1, 2000]
+    tunnels = [False]
+    mixture_types = ["simple", "token"]
+    sequence_length = 10
 
-    print("Finished huggingface integration test.")
+    for batch_size in batch_sizes:
+        for num_workers in num_workers_list:
+            for mixture_size in mixture_sizes:
+                mixture = ArbitraryMixture(mixture_size)
+                for tunnel in tunnels:
+                    for mixture_type in mixture_types:
+                        for t_en in [False, True]:
+                            if mixture_type != "token" and not t_en:
+                                continue
+
+                            if mixture_type == "token" and mixture_size == 1:
+                                continue
+
+                            try:
+                                query_exec_args = QueryExecutionArgs(
+                                    mixture=mixture,
+                                    num_workers=num_workers,
+                                )
+                                job_id = (
+                                    f"hf_{mixture_type}_{t_en}_{query_exec_args.mixture.chunk_size}_{batch_size}_{query_exec_args.dp_groups}"
+                                    + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{tunnel}"
+                                )
+                                # Set the streaming_args with the current mixture_type
+                                streaming_args = ResultStreamingArgs(
+                                    job_id=job_id,
+                                    tunnel_via_server=tunnel,
+                                    chunk_reading_mixture_type=mixture_type,
+                                    chunk_reading_sequence_len=sequence_length,
+                                    chunk_reading_tokenizer="gpt2",
+                                    chunk_reading_tokenization_bs=32,
+                                    chunk_reading_token_separate_thread=t_en,
+                                    chunk_reading_token_at_least_one_sample=True,
+                                )
+                                curr_data = run_query(
+                                    server_client, query_exec_args, batch_size, streaming_args, sequence_length
+                                )
+                                assert len(curr_data) > 0, "No data returned from query."
+
+                                # Additional checks for 'token' mixture type
+                                if mixture_type == "token":
+                                    # Now, check that each batch has the correct sequence length
+                                    for batch in curr_data:
+                                        input_ids = batch["input_ids"]
+                                        # input_ids should be of shape (batch_size, sequence_length+1)
+                                        expected_shape = (batch_size, sequence_length + 1)
+                                        actual_shape = input_ids.shape
+                                        # Handle the case where the last batch might be smaller
+                                        if actual_shape[0] != batch_size:
+                                            expected_shape = (actual_shape[0], sequence_length + 1)
+                                        assert (
+                                            actual_shape == expected_shape
+                                        ), f"Expected input_ids shape {expected_shape}, got {actual_shape}"
+
+                            except Exception as e:
+                                print(
+                                    f"Error with mixture_type={mixture_type}, chunk_size={mixture.chunk_size}, "
+                                    f"num_workers={num_workers}, batch_size={batch_size}, tunnel={tunnel}, "
+                                    f"sequence_length={sequence_length}"
+                                )
+                                raise e
+
+    print("Finished huggingface integration test with merged loops.")
 
 
 def main() -> None:

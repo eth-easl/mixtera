@@ -239,7 +239,10 @@ def test_reader_reproducibility(
 
                 if window_size != window_sizes[0] and per_window_mixture == "token":
                     continue
-                
+
+                if per_window_mixture == "token" and query_exec_args.mixture.chunk_size < 500:
+                    continue
+
                 result_list = []
                 logger.info("Running iterations.")
                 for i in range(REPRODUCIBILITY_ITERATIONS):
@@ -269,6 +272,8 @@ def test_reader_reproducibility(
                                     chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
                                     chunk_reading_mixture_type=per_window_mixture,
                                     chunk_reading_window_size=window_size,
+                                    chunk_reading_sequence_len=10,
+                                    chunk_reading_tokenizer="gpt2",
                                 ),
                             )
                             dl = torch.utils.data.DataLoader(

@@ -67,10 +67,7 @@ class MixteraTorchDataset(IterableDataset):
         self.requires_callback = False
         self._return_key_id = return_key_id
         self._returning_tokens = result_streaming_args.chunk_reading_mixture_type == "token"
-        if self._return_key_id:
-            self._yield_func = lambda key_id, sample: (key_id, sample)
-        else:
-            self._yield_func = lambda _, sample: sample
+        self._set_yield_func()
 
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
@@ -105,6 +102,22 @@ class MixteraTorchDataset(IterableDataset):
                     + f"Restoring checkpoint {checkpoint_id} for job {query.job_id}!"
                 )
                 self._client.restore_checkpoint(query.job_id, checkpoint_id)
+
+    def __getstate__(self) -> dict[Any, Any]:
+        state = self.__dict__.copy()
+        if "_yield_func" in state:
+            del state["_yield_func"]
+        return state
+
+    def _set_yield_func(self) -> None:
+        if self._return_key_id:
+            self._yield_func = lambda key_id, sample: (key_id, sample)
+        else:
+            self._yield_func = lambda _, sample: sample
+
+    def __setstate__(self, state: dict[Any, Any]) -> None:
+        self.__dict__.update(state)
+        self._set_yield_func()
 
     def _init_status_shm(self) -> None:
         # This function intiailizes a shared memory segment

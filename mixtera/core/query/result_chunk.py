@@ -221,7 +221,9 @@ class ResultChunk:
             if self._tokenizer_name == "":
                 raise RuntimeError("Did not supply tokenizer name.")
 
+            logger.debug("Instantiating tokenizer - this might take a bit.")
             self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
+            logger.debug("Tokenizer instantiated.")
 
             self._tokenization_batch_size = args.chunk_reading_tokenization_bs
             if self._tokenization_batch_size < 1:
@@ -380,11 +382,10 @@ class ResultChunk:
         )
 
         deleted_keys: set[MixtureKey] = set()
-
         # Continue until all iterators are deleted (best-effort case)
         # Continue until first window cannot guarantee mixture (non best effort case)
         outer_stop = False
-        while len(active_iterators) > len(deleted_keys) and (self._window_best_effort or outer_stop):
+        while len(active_iterators) > len(deleted_keys) and (self._window_best_effort or not outer_stop):
             items_yielded = 0
             processed_items = {property_key: 0 for property_key, _ in element_counts}
             # This inner while loop represents one window with the correct mixture
@@ -413,7 +414,6 @@ class ResultChunk:
                         deleted_keys.add(property_key)
                         # Finish current window with best effort, but don't do another one (IF best effort = False)
                         outer_stop = True
-
                 if nothing_yielded_window:
                     break
 
