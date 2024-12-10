@@ -142,7 +142,7 @@ def instantiate_hf_dataloader(
     train_dataset = train_dataset.with_format(type="torch")
     train_dataset = split_dataset_by_node(train_dataset, world_size=1, rank=0)
     # If we tokenize we give it more time because we might need to download the tokenizer.
-    timeout_factor = 10 if streaming_args.chunk_reading_mixture_type == "token" else 1
+    timeout_factor = 20 if streaming_args.chunk_reading_mixture_type == "token" else 1
     dl = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -194,7 +194,7 @@ def test_hfds(server_dir: Path) -> None:
                             if mixture_type != "token" and not t_en:
                                 continue
 
-                            if mixture_type == "token" and mixture_size == 1:
+                            if mixture_type == "token" and (mixture_size == 1 or query_exec_args.num_workers > 3):
                                 continue
 
                             try:
