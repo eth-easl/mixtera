@@ -141,11 +141,13 @@ def instantiate_hf_dataloader(
 
     train_dataset = train_dataset.with_format(type="torch")
     train_dataset = split_dataset_by_node(train_dataset, world_size=1, rank=0)
+    # If we tokenize we give it more time because we might need to download the tokenizer.
+    timeout_factor = 10 if streaming_args.chunk_reading_mixture_type == "token" else 1
     dl = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=batch_size,
         num_workers=query_execution_args.num_workers,
-        timeout=5 if query_execution_args.num_workers > 0 else 0,
+        timeout=5 * timeout_factor if query_execution_args.num_workers > 0 else 0,
     )
 
     return dl

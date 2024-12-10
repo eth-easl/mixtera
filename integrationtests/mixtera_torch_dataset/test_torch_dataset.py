@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 from copy import deepcopy
@@ -16,6 +17,7 @@ from mixtera.torch import MixteraTorchDataset
 TEST_PYTORCH_INSTANCE_COUNT = 1000
 TEST_PYTORCH_FILE_COUNT = 5
 TEST_PYTORCH_FRACTION_MULTIPLIER = 2
+os.environ["TOKENIZERS_PARALLELISM"] = "True"
 
 
 def sample_parsing_func(sample):
