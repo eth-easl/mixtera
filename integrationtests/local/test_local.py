@@ -40,7 +40,7 @@ def test_filter_javascript(
     result_streaming_args.job_id = (
         f"0_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
-        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
+        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
     )
     query = Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript"))
     client.execute_query(query, query_exec_args)
@@ -61,7 +61,7 @@ def test_filter_html(
     result_streaming_args.job_id = (
         f"1_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
-        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
+        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
     )
     query = Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML"))
     client.execute_query(query, query_exec_args)
@@ -83,7 +83,7 @@ def test_filter_both(
     result_streaming_args.job_id = (
         f"2_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
-        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
+        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
     )
     query = (
         Query.for_job(result_streaming_args.job_id)
@@ -109,7 +109,7 @@ def test_filter_license(
     result_streaming_args.job_id = (
         f"3_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
-        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
+        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
     )
     query = Query.for_job(result_streaming_args.job_id).select(("license", "==", "CC"))
     client.execute_query(query, query_exec_args)
@@ -131,7 +131,7 @@ def test_filter_unknown_license(
     result_streaming_args.job_id = (
         f"4_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
-        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
+        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
     )
     query = Query.for_job(result_streaming_args.job_id).select(("license", "==", "All rights reserved."))
     client.execute_query(query, query_exec_args)
@@ -144,7 +144,7 @@ def test_filter_license_and_html(
     result_streaming_args.job_id = (
         f"5_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
         + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
-        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
+        + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
     )
     query = (
         Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML")).select(("license", "==", "CC"))
@@ -176,7 +176,7 @@ def test_reproducibility(
         result_streaming_args.job_id = (
             f"6_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
             + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
-            + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_per_window_mixture}"
+            + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
             + f"_reproducibility_{i}"
         )
         query = (
@@ -403,7 +403,7 @@ def test_chunk_readers(dir: Path) -> None:
                     result_streaming_args = ResultStreamingArgs(
                         None,
                         chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
-                        chunk_reading_per_window_mixture=per_window_mixture,
+                        chunk_reading_mixture_type=per_window_mixture,
                         chunk_reading_window_size=window_size,
                     )
                     logger.debug(

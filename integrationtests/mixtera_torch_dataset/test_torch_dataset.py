@@ -264,7 +264,7 @@ def test_reader_reproducibility(
                                     node_id=node_id,
                                     tunnel_via_server=tunnel,
                                     chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
-                                    chunk_reading_per_window_mixture=per_window_mixture,
+                                    chunk_reading_mixture_type=per_window_mixture,
                                     chunk_reading_window_size=window_size,
                                 ),
                             )
