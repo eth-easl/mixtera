@@ -17,7 +17,7 @@ from mixtera.torch import MixteraTorchDataset
 TEST_PYTORCH_INSTANCE_COUNT = 1000
 TEST_PYTORCH_FILE_COUNT = 5
 TEST_PYTORCH_FRACTION_MULTIPLIER = 2
-os.environ["TOKENIZERS_PARALLELISM"] = "True"
+os.environ["TOKENIZERS_PARALLELISM"] = "False" # see test_hf_dataset.py file for longer comment on this.
 
 
 def sample_parsing_func(sample):
@@ -244,7 +244,6 @@ def test_reader_reproducibility(
                     or batch_size != 500
                     or window_size != window_sizes[0]
                     or mixture_str != "arbitrary"
-                    or query_exec_args.num_workers != 0
                 ):
                     continue
 
