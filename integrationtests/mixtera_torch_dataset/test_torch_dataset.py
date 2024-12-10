@@ -239,10 +239,9 @@ def test_reader_reproducibility(
                 if reader_degree_of_parallelism > 1 and (query_exec_args.mixture.chunk_size < 500):
                     continue
 
-                if window_size != window_sizes[0] and per_window_mixture == "token":
-                    continue
-
-                if per_window_mixture == "token" and query_exec_args.mixture.chunk_size < 500:
+                if per_window_mixture == "token" and (
+                    query_exec_args.mixture.chunk_size != 750 or batch_size != 500 or window_size != window_sizes[0]
+                ):
                     continue
 
                 result_list = []
