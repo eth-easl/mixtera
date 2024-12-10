@@ -7,7 +7,7 @@ import textwrap
 import typing
 from itertools import islice
 from queue import Empty
-from typing import TYPE_CHECKING, Callable, Iterator, Optional, Type
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Type
 
 import dill
 from loguru import logger
@@ -15,13 +15,21 @@ from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
 from mixtera.core.query.mixture import MixtureKey, StaticMixture
 from mixtera.network.connection import ServerConnection
-from mixtera.utils import PrefetchFirstItemIterator, is_on_github_actions, seed_everything_from_list
+from mixtera.utils import (
+    PrefetchFirstItemIterator,
+    ThreadedTokenizingIterator,
+    TokenizingIterator,
+    is_on_github_actions,
+    seed_everything_from_list,
+)
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
 
 Workload = tuple[int, int, IndexRowRangeType]
 Workloads = list[Workload]
+
+Sample = str | list[int]
 
 MULTIPROCESSING_TIMEOUT = 90
 END_OF_STREAM_OBJECT = "END_OF_STREAM"
@@ -86,7 +94,6 @@ class ResultChunk:
         key_id_map: dict[MixtureKey, int],
         mixture_id: int,
         mixture: Optional[dict[MixtureKey, int]] = None,
-        prefetch_first_sample: bool = True,
     ) -> None:
         allow_daemon_spawn()
 
@@ -96,8 +103,8 @@ class ResultChunk:
         self._parsing_func_dict = parsing_func_dict
         self._chunk_size = chunk_size
         self._mixture = mixture
-        self._samples_to_skip = 0  # TODO(#87): Supply this from server to skip first samples to support interruptions.
-        self._prefetch_first_sample = prefetch_first_sample  # TODO(#147): Make this configurable for a query.
+        self._samples_to_skip = 0
+        self._prefetch_first_sample = False
         self._key_id_map = key_id_map
         self.mixture_id = mixture_id
 
@@ -108,10 +115,19 @@ class ResultChunk:
 
         self._server_connection: ServerConnection | None = None
         self._degree_of_parallelism: int = 1
-        self._per_window_mixture: bool = False
+        self._mixture_type: Literal["simple", "window", "token"] = "simple"
         self._window_size: int = 128
+        self._window_best_effort: bool = True
 
-        self._iterator: Iterator[tuple[int, int, str]] | None = None
+        # Tokenization options
+        self._tokenization_batch_size: int = -1
+        self._sequence_length: int = -1
+        self._tokenizer_name = ""
+        self._tokenizer: Any | None = None
+        self._tokenization_use_thread: bool = True
+        self._tokenization_one_sample: bool = True
+
+        self._iterator: Iterator[tuple[int, int, Sample]] | None = None
 
     def configure_result_streaming(self, client: "MixteraClient", args: "ResultStreamingArgs") -> None:
         """
@@ -125,8 +141,11 @@ class ResultChunk:
         allow_daemon_spawn()
 
         self._degree_of_parallelism = args.chunk_reading_degree_of_parallelism
-        self._per_window_mixture = args.chunk_reading_per_window_mixture
+        self._mixture_type = args.chunk_reading_mixture_type
+        assert self._mixture_type in {"simple", "window", "token"}, f"Unknown mixture type: {self._mixture_type}"
         self._window_size = args.chunk_reading_window_size
+        self._window_best_effort = args.chunk_reading_window_best_effort
+        self._prefetch_first_sample = args.chunk_reading_prefetch_first_sample
 
         from mixtera.core.client.server import ServerStub  # pylint: disable=import-outside-toplevel
 
@@ -146,7 +165,7 @@ class ResultChunk:
                 )
             self._degree_of_parallelism = 1
 
-        if self._per_window_mixture and self._window_size > self._chunk_size:
+        if self._mixture_type == "window" and self._window_size > self._chunk_size:
             if not is_on_github_actions:
                 logger.warning(
                     f"Window size is set to {self._window_size} which is > the chunk size of {self._chunk_size}. "
@@ -154,7 +173,7 @@ class ResultChunk:
                 )
             self._window_size = self._chunk_size
 
-        if self._per_window_mixture and self._window_size < 1:
+        if self._mixture_type == "window" and self._window_size < 1:
             if not is_on_github_actions:
                 logger.warning(
                     f"Window size is set to {self._window_size} which is invalid. " "Setting window size to 128."
@@ -163,7 +182,7 @@ class ResultChunk:
 
         # To determine the number of processes per property combination, we need the mixture
         # for parallel reading. If the mixture is not defined, we infer it from the result index.
-        if (self._per_window_mixture or self._degree_of_parallelism > 1) and (
+        if (self._mixture_type in {"window", "token"} or self._degree_of_parallelism > 1) and (
             self._mixture is None or len(self._mixture) == 0
         ):
             if not is_on_github_actions:
@@ -189,10 +208,35 @@ class ResultChunk:
                 + f"\n{self._mixture}"
             )
 
+        # Handle tokenization options
+        if self._mixture_type == "token":
+            self._window_size = self._chunk_size
+            self._sequence_length = args.chunk_reading_sequence_len
+            if self._sequence_length < 1:
+                raise RuntimeError(f"Invalid sequence length: {self._sequence_length}")
+
+            from transformers import AutoTokenizer  # pylint: disable=import-outside-toplevel
+
+            self._tokenizer_name = args.chunk_reading_tokenizer
+            if self._tokenizer_name == "":
+                raise RuntimeError("Did not supply tokenizer name.")
+
+            logger.debug("Instantiating tokenizer - this might take a bit.")
+            self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
+            logger.debug("Tokenizer instantiated.")
+
+            self._tokenization_batch_size = args.chunk_reading_tokenization_bs
+            if self._tokenization_batch_size < 1:
+                raise RuntimeError(f"Invalid tokenization batch size: {self._tokenization_batch_size}")
+
+            self._tokenization_one_sample = args.chunk_reading_token_at_least_one_sample
+            self._window_best_effort = False  # enforce mixture on token level
+            self._tokenization_use_thread = args.chunk_reading_token_separate_thread
+
     def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
 
-    def _iterate_samples(self) -> Iterator[tuple[int, int, str]]:
+    def _iterate_samples(self) -> Iterator[tuple[int, int, Sample]]:
         """
         Iterate over the samples in the result index. This function yields the samples in the correct mixture
         and window size.
@@ -200,8 +244,8 @@ class ResultChunk:
         Returns:
             An iterator over the samples
         """
-        active_iterators: dict[MixtureKey, Iterator[str]] = self._init_active_iterators()
-        if self._per_window_mixture:
+        active_iterators: dict[MixtureKey, Iterator[Sample]] = self._init_active_iterators()
+        if self._mixture_type in {"token", "window"}:
             yield_source = self._iterate_window_mixture(active_iterators)
         else:
             yield_source = self._iterate_overall_mixture(active_iterators)
@@ -209,14 +253,14 @@ class ResultChunk:
         for idx, (key_id, sample) in enumerate(islice(yield_source, self._samples_to_skip, None)):
             yield idx + self._samples_to_skip, key_id, sample
 
-    def _init_active_iterators(self) -> dict[MixtureKey, Iterator[str]]:
+    def _init_active_iterators(self) -> dict[MixtureKey, Iterator[Sample]]:
         """
         Get the active iterators for the result index. This function prepares the workloads and spins up the
         reader processes if required by the degree of parallelism.
         """
         workloads: dict[MixtureKey, Workloads] = self._prepare_workloads()
 
-        active_iterators: dict[MixtureKey, Iterator[str]] = {}
+        active_iterators: dict[MixtureKey, Iterator[Sample]] = {}
         if self._degree_of_parallelism == 1:
             active_iterators = {
                 property_name: self._get_iterator_for_workload_st(workload)
@@ -232,6 +276,19 @@ class ResultChunk:
             active_iterators = {
                 property_name: self._get_iterator_for_workload_mt(process)
                 for property_name, process in processes.items()
+            }
+
+        if self._mixture_type == "token":
+            it_cls = ThreadedTokenizingIterator if self._tokenization_use_thread else TokenizingIterator
+            active_iterators = {
+                key: it_cls(
+                    iterator,
+                    self._tokenizer,
+                    self._sequence_length,
+                    self._tokenization_batch_size,
+                    self._tokenization_one_sample,
+                )
+                for key, iterator in active_iterators.items()
             }
 
         if self._prefetch_first_sample:
@@ -305,7 +362,9 @@ class ResultChunk:
             for queue, proc in processes_to_remove:
                 processes.remove((queue, proc))
 
-    def _iterate_window_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[tuple[int, str]]:
+    def _iterate_window_mixture(
+        self, active_iterators: dict[MixtureKey, Iterator[Sample]]
+    ) -> Iterator[tuple[int, Sample]]:
         """
         Iterate over the samples in the result index with a windowed mixture. This function yields the samples
         in the correct mixture withing a window.
@@ -323,9 +382,10 @@ class ResultChunk:
         )
 
         deleted_keys: set[MixtureKey] = set()
-
-        # Continue until all iterators are deleted
-        while len(active_iterators) > len(deleted_keys):
+        # Continue until all iterators are deleted (best-effort case)
+        # Continue until first window cannot guarantee mixture (non best effort case)
+        outer_stop = False
+        while len(active_iterators) > len(deleted_keys) and (self._window_best_effort or not outer_stop):
             items_yielded = 0
             processed_items = {property_key: 0 for property_key, _ in element_counts}
             # This inner while loop represents one window with the correct mixture
@@ -337,7 +397,7 @@ class ResultChunk:
                     if property_key in deleted_keys or processed_items[property_key] >= property_count:
                         # However, if we cannot produce any items for this key anymore, (key has been deleted)
                         # OR if we're done for this window, we move to the next property
-                        # We might also want to support stopping here if one property name
+                        # If we are not best effort, we handle this upon the first deletion.
                         continue
                     try:
                         # Yield the next sample from the iterator
@@ -352,11 +412,14 @@ class ResultChunk:
                     except StopIteration:
                         # If no more workloads, this property is done
                         deleted_keys.add(property_key)
-
+                        # Finish current window with best effort, but don't do another one (IF best effort = False)
+                        outer_stop = True
                 if nothing_yielded_window:
                     break
 
-    def _iterate_overall_mixture(self, active_iterators: dict[MixtureKey, Iterator[str]]) -> Iterator[tuple[int, str]]:
+    def _iterate_overall_mixture(
+        self, active_iterators: dict[MixtureKey, Iterator[Sample]]
+    ) -> Iterator[tuple[int, Sample]]:
         """
         Iterate over the samples in the result index with an overall mixture. This function yields the samples
         in the overall correct mixture.
@@ -538,7 +601,7 @@ class ResultChunk:
         self._iterator = self._iterate_samples()
         return self
 
-    def __next__(self) -> tuple[int, int, str]:
+    def __next__(self) -> tuple[int, int, Sample]:
         if self._iterator is None:
             raise StopIteration
         try:
