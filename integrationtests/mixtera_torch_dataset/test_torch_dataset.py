@@ -228,7 +228,7 @@ def test_reader_reproducibility(
         return
 
     reader_degrees_of_parallelisms = [1, 4]
-    per_window_mixtures = [False, True]
+    per_window_mixtures = ["simple", "window", "token"]
     window_sizes = [64, 256]
 
     for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
@@ -237,6 +237,9 @@ def test_reader_reproducibility(
                 if reader_degree_of_parallelism > 1 and (query_exec_args.mixture.chunk_size < 500):
                     continue
 
+                if window_size != window_sizes[0] and per_window_mixture == "token":
+                    continue
+                
                 result_list = []
                 logger.info("Running iterations.")
                 for i in range(REPRODUCIBILITY_ITERATIONS):

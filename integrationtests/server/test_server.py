@@ -411,7 +411,7 @@ def test_server(server_dir: Path) -> None:
     test_check_dataset_exists(client)
 
     reader_degrees_of_parallelisms = [1, 4]
-    per_window_mixtures = [False, True]
+    per_window_mixtures = ["simple", "window"]
     window_sizes = [64, 128]
 
     for chunk_size in [100, 500]:
