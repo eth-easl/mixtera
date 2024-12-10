@@ -194,8 +194,11 @@ def test_hfds(server_dir: Path) -> None:
                             if mixture_type != "token" and not t_en:
                                 continue
 
-                            if mixture_type == "token" and (mixture_size == 1 or query_exec_args.num_workers > 3):
+                            if mixture_type == "token" and mixture_size == 1:
                                 continue
+
+                            if mixture_type == "token" and query_exec_args.num_workers > 0:
+                                query_exec_args.num_workers = 1
 
                             try:
                                 query_exec_args = QueryExecutionArgs(
