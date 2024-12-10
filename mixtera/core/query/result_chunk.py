@@ -4,6 +4,8 @@ import multiprocessing as mp
 import os
 import random
 import textwrap
+import threading
+import time
 import typing
 from itertools import islice
 from queue import Empty
@@ -95,9 +97,127 @@ class TokenizingIterator:
                 # Fetch more data if possible
                 self.fetch_data()
             else:
-                logger.debug(f"Reached EOS for iterator for {self.key} after reading {len(self.text_lens)} texts with {sum(self.text_lens)} chars resulting in {self.yielded_samples} tokenized samples!")
-                # End of data, discard remaining tokens if not enough for a full chunk
-                raise StopIteration
+                # End of data, check if we have yielded at least one sample
+                if self.yielded_samples == 0 and current_length > 0:
+                    # Pad remaining tokens by repeating them to reach the desired length
+                    needed_tokens = self.sequence_length + 1 - current_length
+                    repeats = (needed_tokens + current_length - 1) // current_length
+                    padded_tokens = (self.buffer[self.chunk_index:] * (1 + repeats))[:self.sequence_length + 1]
+                    chunk = padded_tokens
+                    self.yielded_samples += 1
+                    return chunk
+                else:
+                    logger.debug(
+                        f"Reached EOS for iterator for {self.key} after reading {len(self.text_lens)} texts "
+                        f"with {sum(self.text_lens)} chars resulting in {self.yielded_samples} tokenized samples!"
+                    )
+                    # End of data, discard remaining tokens
+                    raise StopIteration
+
+class MultithreadedTokenizingIterator:
+    def __init__(
+        self,
+        iterator: Iterator[str],
+        key: str,
+        tokenizer,
+        sequence_length: int,
+        prefetch_size: int = 100,
+    ) -> None:
+        self.iterator = iterator
+        self.tokenizer = tokenizer
+        self.sequence_length = sequence_length
+        self.prefetch_size = prefetch_size
+        self.buffer = []  # List to hold tokens
+        self.chunk_index = 0  # Index to keep track of where we are in the buffer
+        self.eos = False  # Indicator for end of stream
+        self.text_lens = []
+        self.yielded_samples = 0
+        self.key = key
+        self.sleep_time = 0
+        self.num_sleeps = 0
+
+        # Thread synchronization primitives
+        self.lock = threading.Lock()
+        self.condition = threading.Condition(self.lock)
+        self.background_thread = threading.Thread(target=self.prefetch_loop)
+        self.background_thread.start()
+
+    def __iter__(self):
+        return self
+
+    def prefetch_loop(self):
+        """Background thread function to prefetch data."""
+        while not self.eos:
+            texts = []
+            local_eos = False
+            # Fetch data from the iterator
+            for _ in range(self.prefetch_size):
+                try:
+                    text = next(self.iterator)
+                    texts.append(text)
+                    self.text_lens.append(len(text))
+                except StopIteration:
+                    local_eos = True
+
+            if texts:
+                # Efficient batch tokenization
+                encoded_batch = self.tokenizer.batch_encode_plus(
+                    texts,
+                    return_attention_mask=False,
+                    return_token_type_ids=False,
+                )
+                # Flatten the list of token lists
+                tokens = [id for ids in encoded_batch["input_ids"] for id in ids]
+                with self.lock:
+                    # Extend the buffer with new tokens
+                    self.buffer.extend(tokens)
+                    if local_eos:
+                        self.eos = True
+                    self.condition.notify_all()  # Notify any waiting threads
+            else:
+                # No more texts to process
+                with self.lock:
+                    self.eos = True
+                    self.condition.notify_all()
+                return
+
+    def __next__(self) -> List[int]:
+        while True:
+            with self.lock:
+                current_length = len(self.buffer) - self.chunk_index
+                if current_length >= self.sequence_length + 1:
+                    # Enough tokens are available
+                    start = self.chunk_index
+                    end = start + self.sequence_length + 1
+                    chunk = self.buffer[start:end]
+                    self.chunk_index += self.sequence_length  # Move forward by sequence_length
+                    self.yielded_samples += 1
+                    return chunk
+                elif self.eos:
+                    # End of data, check if any tokens are left
+                    if self.yielded_samples == 0 and current_length > 0:
+                        # Pad the remaining tokens to reach the desired length
+                        needed_tokens = self.sequence_length + 1 - current_length
+                        repeats = (needed_tokens + current_length - 1) // current_length
+                        padded_tokens = (self.buffer[self.chunk_index:] * (1 + repeats))[:self.sequence_length + 1]
+                        chunk = padded_tokens
+                        self.yielded_samples += 1
+                        return chunk
+                    else:
+                        # No more data to yield
+                        logger.debug(
+                            f"Reached EOS for iterator for {self.key} after reading {len(self.text_lens)} texts "
+                            f"with {sum(self.text_lens)} chars resulting in {self.yielded_samples} tokenized samples! "
+                            + f"Slept {self.num_sleeps} times for {self.sleep_time} seconds in total."
+                        )
+                        raise StopIteration
+                else:
+                    self.num_sleeps += 1
+                    sleep_start = time.time()
+                    # Not enough tokens and data is not over, wait for more data
+                    self.condition.wait()
+                    self.sleep_time += time.time() - sleep_start
+
 
 @typing.no_type_check
 def allow_daemon_spawn() -> None:
@@ -324,7 +444,7 @@ class ResultChunk:
 
         if self._token_level_mixture:
             active_iterators = {
-                key: TokenizingIterator(iterator, key, self._tokenizer, self._sequence_length)
+                key: MultithreadedTokenizingIterator(iterator, key, self._tokenizer, self._sequence_length)
                 for key, iterator in active_iterators.items()
             }
 
