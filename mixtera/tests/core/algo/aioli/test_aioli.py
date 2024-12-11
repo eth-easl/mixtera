@@ -7,12 +7,20 @@ from mixtera.core.algo.aioli.aioli import AioliDynamicMixing
 
 class TestAioliDynamicMixing(unittest.TestCase):
     def setUp(self):
-        # Initialize the AdoDynamicMixing instance with default parameters
+        # Initialize the AioliDynamicMixing instance with default parameters
         self.aioli = AioliDynamicMixing()
         self.aioli.initial_mixture = np.array([0.4, 0.6])
+        self.aioli.weights = self.aioli.initial_mixture
+        self.aioli.last_training_steps = 0
+        self.aioli.prior_steps = 50
+        self.aioli.lp_rounds = 1
+        self.aioli.lp_steps = 5
+        self.aioli.update_steps = 20
+        self.aioli.eta = 0.1
 
         # Initialize counts and losses
         self.aioli.domain_count = len(self.aioli.initial_mixture)
+        self.aioli.graph = np.zeros((self.aioli.domain_count, self.aioli.domain_count))
         self.aioli.counts = np.zeros(self.aioli.domain_count, dtype=np.int64)
         self.aioli.losses = np.zeros(self.aioli.domain_count, dtype=np.float32)
 
@@ -34,3 +42,59 @@ class TestAioliDynamicMixing(unittest.TestCase):
         self.assertEqual(dynamic_mixing.aioli_normalize_A, False)
         self.assertEqual(dynamic_mixing.one_hot_factor, 0.9)
         self.assertEqual(dynamic_mixing.aioli_diagonal, False)
+
+    def test_prior_steps(self):
+        # Test calc_mixture method during initial period.
+        new_loss = np.array([1.0, 0.5])
+        new_count = np.array([10, 10])
+        mixture = self.aioli.process_losses(new_loss, new_count, self.aioli.prior_steps - 1)
+
+        self.assertEqual(self.aioli.last_training_steps, self.aioli.prior_steps - 1)
+        np.testing.assert_array_almost_equal(mixture, self.aioli.initial_mixture)
+
+    def test_current_perturbed_domain(self):
+        self.aioli.last_training_steps = 24
+        self.assertEqual(self.aioli.current_perturbed_domain, 0)
+
+    def test_learn_params_subroutine(self):
+        self.aioli.graph = np.array([[-0.5, 0.1], [0.0, -0.2]])
+        self.aioli.one_hot_factor = 0.9
+        self.aioli.aioli_diagonal = False
+
+        weight_matrix = np.zeros((self.aioli.domain_count, self.aioli.domain_count))
+        for i in range(self.aioli.domain_count):
+            weight_row = (
+                np.ones(self.aioli.domain_count) * (1 - self.aioli.one_hot_factor) / (self.aioli.domain_count - 1)
+            )
+            weight_row[i] = self.aioli.one_hot_factor
+            weight_matrix[i] = weight_row
+
+        expected_graph = np.zeros((self.aioli.domain_count, self.aioli.domain_count))
+        for i, row in enumerate(self.aioli.graph):
+            expected_graph[i] = np.linalg.solve(weight_matrix, row)
+
+        self.aioli.learn_params_subroutine()
+        np.testing.assert_array_almost_equal(self.aioli.graph, expected_graph)
+
+    def test_calc_mixture_perturbed_domains(self):
+        self.aioli.one_hot_factor = 0.9
+        self.aioli.prior_steps = 0
+        self.aioli.last_training_steps = 21
+        mixture = self.aioli.calc_mixture()
+        expected_mixture = np.array([0.9, 0.1])
+
+        np.testing.assert_array_almost_equal(expected_mixture, mixture)
+
+    def test_calc_mixture_new_weights(self):
+        self.aioli.graph = np.array([[-0.5, 0.1], [0.0, -0.2]])
+        initial_mixture = np.array([0.4, 0.6])
+        self.aioli.one_hot_factor = 0.9
+        self.aioli.aioli_diagonal = False
+        self.aioli.prior_steps = 0
+        self.aioli.last_training_steps = 14
+
+        mixture = self.aioli.calc_mixture()
+        expected_mixture = np.multiply(initial_mixture, np.exp(self.aioli.eta * self.aioli.graph.sum(axis=0)))
+
+        self.assertEqual(expected_mixture[1], mixture[1])
+        np.testing.assert_array_almost_equal(expected_mixture, mixture)

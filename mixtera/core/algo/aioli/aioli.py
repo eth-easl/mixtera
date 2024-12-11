@@ -43,33 +43,41 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.aioli_diagonal = aioli_diagonal
         self.domain_count = len(self.losses)
         self.graph = np.zeros((self.domain_count, self.domain_count))
-        self.previous_loss = np.array([], dtype=np.float32)
         self.weights = None
         self.one_hot_factor = one_hot_factor
         self.ema_graph = None
         self.ema = None
 
+        self.last_training_steps = -1
+        self.last_perturbed_domain = -1
+        self.domain_loss_map = {}
+
     @property
-    def current_perturbed_domain(self, training_steps: int) -> int:
+    def current_perturbed_domain(self) -> int:
         lp_duration = self.lp_rounds * self.lp_steps * self.domain_count
-        remaining = training_steps % self.update_steps
+        remaining = self.last_training_steps % self.update_steps
 
         if remaining <= lp_duration:
-            return remaining / self.lp_steps
+            return remaining // self.lp_steps
         else:
             logger.info("Currently not in the learn parameters phase.")
             return -1
 
-    def process_losses(
-        self, losses: np.ndarray, counts: np.ndarray, training_steps: int | None = None
-    ) -> np.ndarray | None:
+    def process_losses(self, losses: np.ndarray, counts: np.ndarray, training_steps: int) -> np.ndarray | None:
+        if self.last_training_steps >= training_steps:
+            logger.info("The loss associated with this time step already been processed.")
+            return None
+
+        self.last_training_steps = training_steps
         self._update_state(losses, counts)
 
-        perturbed_domain = self.current_perturbed_domain(training_steps)
+        perturbed_domain = self.current_perturbed_domain
         if perturbed_domain != -1:
-            self.graph[:, perturbed_domain] += self.previous_loss - losses
-            self.previous_loss = losses
-        return self.calc_mixture(training_steps)
+            step_in_interval = training_steps % self.update_steps
+            if step_in_interval % self.lp_steps == 0:
+                self.graph[:, perturbed_domain] += self.losses - losses
+                self.losses = losses
+        return self.calc_mixture()
 
     def learn_params_subroutine(self) -> None:
         self.graph /= self.lp_rounds
@@ -93,7 +101,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
 
             self.graph = A
 
-    def calc_mixture(self, training_steps: int) -> np.ndarray | None:
+    def calc_mixture(self) -> np.ndarray | None:
         """
         Computes the updated mixture coefficients based on the accumulated losses and counts.
 
@@ -103,11 +111,11 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         Returns:
             A numpy array representing the new mixture coefficients, or None if no update is available.
         """
-        if self.prior_steps != -1 and self.prior_steps >= training_steps:
+        if self.prior_steps != -1 and self.prior_steps >= self.last_training_steps:
             self.weights = self.initial_mixture
             return self.weights
 
-        if self.current_perturbed_domain(training_steps) != -1:
+        if self.current_perturbed_domain != -1:
             self.weights = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
             self.weights[self.current_perturbed_domain] = self.one_hot_factor
             return self.weights
@@ -116,23 +124,23 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.learn_params_subroutine()
         weights_init = np.ones(self.domain_count)
 
-        self.logger.info(f"LearnParams done. New graph is {self.graph}")
+        logger.info(f"LearnParams done. New graph is {self.graph}")
 
         if self.aioli_normalize_A:
             min_entry = self.graph.min()
             if min_entry < 0:
                 self.graph -= min_entry
-                self.logger.info(f"Rescaled graph is {self.graph}, previous min entry was {min_entry}")
+                logger.info(f"Rescaled graph is {self.graph}, previous min entry was {min_entry}")
 
                 self.graph /= self.graph.sum()
-                self.logger.info(f"Graph after normalization: {self.graph}")
+                logger.info(f"Graph after normalization: {self.graph}")
 
         if self.ema is not None:
             if self.ema_graph is None:
                 self.ema_graph = self.graph
             else:
                 self.ema_graph = (1 - self.ema) * self.graph + self.ema * self.ema_graph
-            self.logger.info(f"Applying ema, smoothed graph is {self.ema_graph}")
+            logger.info(f"Applying ema, smoothed graph is {self.ema_graph}")
             self.weights = np.multiply(weights_init, np.exp(self.eta * self.ema_graph.sum(axis=0)))
         else:
             if self.weights is None:
@@ -140,5 +148,5 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             else:
                 self.weights = np.multiply(self.weights, np.exp(self.eta * self.graph.sum(axis=0)))
 
-        self.logger.info(f"The new mixture proportions={self.weights/sum(self.weights)}. ")
+        logger.info(f"The new mixture proportions={self.weights/sum(self.weights)}. ")
         return self.weights / sum(self.weights)
