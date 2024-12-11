@@ -23,7 +23,9 @@ class DynamicMixingAlgorithm(ABC):
         self.counts = np.array([], dtype=np.int64)
         self.initial_mixture = np.array([-1], dtype=np.float32)
 
-    def process_losses(self, losses: np.ndarray, counts: np.ndarray) -> np.ndarray | None:
+    def process_losses(
+        self, losses: np.ndarray, counts: np.ndarray, training_steps: int | None = None
+    ) -> np.ndarray | None:
         """
         Receives arrays of losses and counts, accumulates them, and returns the updated mixture if available.
 
