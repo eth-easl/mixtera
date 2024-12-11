@@ -224,7 +224,7 @@ class ServerConnection:
         await write_int(worker_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Get bytes
-        serialized_chunk = await read_bytes_obj(NUM_BYTES_FOR_SIZES, reader)
+        serialized_chunk = await read_bytes_obj(NUM_BYTES_FOR_SIZES, reader, timeout=10 * 60)
         if serialized_chunk is not None:
             serialized_chunk = dill.loads(serialized_chunk)
 
@@ -637,7 +637,7 @@ class ServerConnection:
         await write_int(int(on_disk), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
         # Read success flag from the server
-        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=120)
         return bool(success)
 
     def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
@@ -677,7 +677,9 @@ class ServerConnection:
         # Announce the training steps and the job id.
         await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
         await write_int(feedback.training_steps, NUM_BYTES_FOR_IDENTIFIERS, writer)
+        await write_int(feedback.mixture_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
         await write_numpy_array(feedback.losses, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
         await write_numpy_array(feedback.counts, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
 
-        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+        return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=5 * 60))

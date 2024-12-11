@@ -281,6 +281,7 @@ class QueryResult:
         guarantees are required.
         """
         current_chunk_index = 0
+        mixture_id = -1
         chunker_index_keys = list(self._chunker_index.keys())
         chunker_index_keys_idx = 0
         empty_key_idx: set[int] = set()
@@ -318,6 +319,7 @@ class QueryResult:
             if mixture:
                 if previous_mixture != mixture:
                     logger.debug(f"Obtained new mixture: {mixture}")
+                    mixture_id += 1
                     previous_mixture = mixture
                     self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
                     self._persist_mixture_log()
@@ -400,6 +402,7 @@ class QueryResult:
                             self.parsing_func,
                             base_mixture.chunk_size,
                             self._key_id_map,
+                            mixture_id,
                             mixture=mixture,
                         )
                     else:
@@ -414,6 +417,7 @@ class QueryResult:
             else:
                 if previous_mixture is not None or current_chunk_index == 0:
                     logger.debug("Obtained new None mixture.")
+                    mixture_id += 1
                     previous_mixture = None
                     self._mixture_log.append((current_chunk_index, base_mixture))
                     self._persist_mixture_log()
@@ -447,6 +451,7 @@ class QueryResult:
                         self.parsing_func,
                         base_mixture.chunk_size,
                         self._key_id_map,
+                        mixture_id,
                         mixture=None,
                     )
 
