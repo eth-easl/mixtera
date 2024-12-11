@@ -103,7 +103,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         Returns:
             A numpy array representing the new mixture coefficients, or None if no update is available.
         """
-        if self.prior_steps != -1 and self.prior_steps <= training_steps:
+        if self.prior_steps != -1 and self.prior_steps >= training_steps:
             self.weights = self.initial_mixture
             return self.weights
 
