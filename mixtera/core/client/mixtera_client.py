@@ -2,7 +2,7 @@ import multiprocessing as mp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generator, Type
+from typing import TYPE_CHECKING, Any, Callable, Generator, Literal, Type
 
 from mixtera.core.datacollection import PropertyType
 from mixtera.core.datacollection.datasets import Dataset
@@ -15,6 +15,8 @@ from mixtera.network.client.client_feedback import ClientFeedback
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
     from mixtera.core.client.server import ServerStub
+
+Sample = str | list[int]
 
 
 @dataclass
@@ -33,8 +35,28 @@ class ResultStreamingArgs:
     worker_id: int = 0
     tunnel_via_server: bool = False
     chunk_reading_degree_of_parallelism: int = 1
-    chunk_reading_per_window_mixture: bool = False
-    chunk_reading_window_size: int = 128
+    chunk_reading_prefetch_first_sample: bool = True
+    # `chunk_reading_mixture_type` defines how we yield data from a chunk.
+    # If "simple", then text (string) samples are yielded round-robin between properties
+    # If "window", the mixture is respected in a window of `chunk_reading_window_size`
+    # This can be best effort (if `chunk_reading_window_best_effort == True`) not.
+    # If "token", we guarantee the sample on the token level instead. This means
+    # instead of strings, we yield tokenized samples (list[int]). This might have
+    # performance implications and may lead to waste of data if there are very
+    # long texts for low-percentage domains, but this _guarantees_ the mixture
+    # from the model perspective.
+    chunk_reading_mixture_type: Literal["simple", "window", "token"] = "simple"
+    chunk_reading_window_size: int = 128  # Only for chunk_reading_mixture_type == "window"
+    chunk_reading_window_best_effort: bool = True  # Only for chunk_reading_mixture_type == "window"
+    chunk_reading_tokenizer: str = ""  # Only for chunk_reading_mixture_type == "token"
+    chunk_reading_sequence_len: int = -1  # Only for chunk_reading_mixture_type == "token"
+    # When using chunk_reading_mixture_type == "token", we tokenize batches of text. This defines
+    # the batch size for tokenization.
+    chunk_reading_tokenization_bs: int = 100  # Only for chunk_reading_mixture_type == "token"
+    # We can use a separate thread to prefetch samples and tokenize them.
+    chunk_reading_token_separate_thread: bool = True  # Only for chunk_reading_mixture_type == "token"
+    # We typically want at least one sample per domain, even if we don't have enough tokens.
+    chunk_reading_token_at_least_one_sample: bool = True  # Only for chunk_reading_mixture_type == "token"
 
 
 class MixteraClient(ABC):
@@ -218,7 +240,7 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, args: ResultStreamingArgs) -> Generator[tuple[int, int, str], None, None]:
+    def stream_results(self, args: ResultStreamingArgs) -> Generator[tuple[int, int, Sample], None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
         Args:

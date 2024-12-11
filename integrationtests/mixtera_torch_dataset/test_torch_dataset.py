@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 from copy import deepcopy
@@ -16,6 +17,7 @@ from mixtera.torch import MixteraTorchDataset
 TEST_PYTORCH_INSTANCE_COUNT = 1000
 TEST_PYTORCH_FILE_COUNT = 5
 TEST_PYTORCH_FRACTION_MULTIPLIER = 2
+os.environ["TOKENIZERS_PARALLELISM"] = "False" # see test_hf_dataset.py file for longer comment on this.
 
 
 def sample_parsing_func(sample):
@@ -228,13 +230,21 @@ def test_reader_reproducibility(
         return
 
     reader_degrees_of_parallelisms = [1, 4]
-    per_window_mixtures = [False, True]
+    per_window_mixtures = ["simple", "window", "token"]
     window_sizes = [64, 256]
 
     for reader_degree_of_parallelism in reader_degrees_of_parallelisms:
         for per_window_mixture in per_window_mixtures:
             for window_size in window_sizes:
                 if reader_degree_of_parallelism > 1 and (query_exec_args.mixture.chunk_size < 500):
+                    continue
+
+                if per_window_mixture == "token" and (
+                    query_exec_args.mixture.chunk_size != 750
+                    or batch_size != 500
+                    or window_size != window_sizes[0]
+                    or mixture_str != "arbitrary"
+                ):
                     continue
 
                 result_list = []
@@ -264,8 +274,10 @@ def test_reader_reproducibility(
                                     node_id=node_id,
                                     tunnel_via_server=tunnel,
                                     chunk_reading_degree_of_parallelism=reader_degree_of_parallelism,
-                                    chunk_reading_per_window_mixture=per_window_mixture,
+                                    chunk_reading_mixture_type=per_window_mixture,
                                     chunk_reading_window_size=window_size,
+                                    chunk_reading_sequence_len=10,
+                                    chunk_reading_tokenizer="gpt2",
                                 ),
                             )
                             dl = torch.utils.data.DataLoader(
