@@ -43,41 +43,10 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.aioli_diagonal = aioli_diagonal
         self.domain_count = len(self.losses)
         self.graph = np.zeros((self.domain_count, self.domain_count))
-        self.weights = None
+        self.weights = self.initial_mixture
         self.one_hot_factor = one_hot_factor
         self.ema_graph = None
         self.ema = None
-
-        self.last_training_steps = -1
-        self.last_perturbed_domain = -1
-        self.domain_loss_map = {}
-
-    @property
-    def current_perturbed_domain(self) -> int:
-        lp_duration = self.lp_rounds * self.lp_steps * self.domain_count
-        remaining = self.last_training_steps % self.update_steps
-
-        if remaining <= lp_duration:
-            return remaining // self.lp_steps
-        else:
-            logger.info("Currently not in the learn parameters phase.")
-            return -1
-
-    def process_losses(self, losses: np.ndarray, counts: np.ndarray, training_steps: int) -> np.ndarray | None:
-        if self.last_training_steps >= training_steps:
-            logger.info("The loss associated with this time step already been processed.")
-            return None
-
-        self.last_training_steps = training_steps
-        self._update_state(losses, counts)
-
-        perturbed_domain = self.current_perturbed_domain
-        if perturbed_domain != -1:
-            step_in_interval = training_steps % self.update_steps
-            if step_in_interval % self.lp_steps == 0:
-                self.graph[:, perturbed_domain] += self.losses - losses
-                self.losses = losses
-        return self.calc_mixture()
 
     def learn_params_subroutine(self) -> None:
         self.graph /= self.lp_rounds
@@ -101,52 +70,82 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
 
             self.graph = A
 
-    def calc_mixture(self) -> np.ndarray | None:
+    def process_losses(self, losses, counts, mixture_id):
+        update_at_client = False
+        if mixture_id > self.last_received_mixture:
+            update_at_client = True
+            self.last_received_mixture = mixture_id
+
+        if update_at_client:
+            perturbed_domain = self.last_received_mixture % (self.domain_count + 1)
+            if perturbed_domain != self.domain_count:
+                self.graph[:, perturbed_domain] += self.losses - losses
+
+        self._update_state(losses, counts)
+        return self.calc_mixture(update_at_client)
+
+    def _update_state(self, losses: np.ndarray, counts: np.ndarray) -> None:
         """
-        Computes the updated mixture coefficients based on the accumulated losses and counts.
+        Accumulates the losses and counts, adjusting internal arrays as needed to accommodate new domains.
 
         Args:
-            training_steps: The current training steps of the model.
-
-        Returns:
-            A numpy array representing the new mixture coefficients, or None if no update is available.
+            losses: A numpy array of losses per domain.
+            counts: A numpy array of counts per domain.
         """
-        if self.prior_steps != -1 and self.prior_steps >= self.last_training_steps:
-            self.weights = self.initial_mixture
+        num_incoming_domains = len(losses)
+        num_internal_domains = len(self.losses)
+        num_domains = max(num_incoming_domains, num_internal_domains)
+
+        if num_internal_domains < num_domains:
+            # Expand the internal arrays to accommodate new domains
+            size_diff = num_domains - num_internal_domains
+            self.losses = np.concatenate([self.losses, np.zeros(size_diff, dtype=self.losses.dtype)])
+            self.counts = np.concatenate([self.counts, np.zeros(size_diff, dtype=self.counts.dtype)])
+
+        # Assign the incoming losses and counts
+        self.losses[:num_incoming_domains] = losses
+        self.counts[:num_incoming_domains] = counts
+
+    def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
+        if not updated_at_client:
             return self.weights
 
-        if self.current_perturbed_domain != -1:
-            self.weights = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
-            self.weights[self.current_perturbed_domain] = self.one_hot_factor
-            return self.weights
+        # Find which step we are in the algorithm given the mixture id.
+        perturbed_domain = self.last_received_mixture % (self.domain_count + 1)
 
         # If we are out of the learn params phase, we compute the relationship graph.
-        self.learn_params_subroutine()
-        weights_init = np.ones(self.domain_count)
+        if perturbed_domain == self.domain_count:
+            self.learn_params_subroutine()
+            weights_init = np.ones(self.domain_count)
 
-        logger.info(f"LearnParams done. New graph is {self.graph}")
+            logger.info(f"LearnParams done. New graph is {self.graph}")
 
-        if self.aioli_normalize_A:
-            min_entry = self.graph.min()
-            if min_entry < 0:
-                self.graph -= min_entry
-                logger.info(f"Rescaled graph is {self.graph}, previous min entry was {min_entry}")
+            if self.aioli_normalize_A:
+                min_entry = self.graph.min()
+                if min_entry < 0:
+                    self.graph -= min_entry
+                    logger.info(f"Rescaled graph is {self.graph}, previous min entry was {min_entry}")
 
-                self.graph /= self.graph.sum()
-                logger.info(f"Graph after normalization: {self.graph}")
+                    self.graph /= self.graph.sum()
+                    logger.info(f"Graph after normalization: {self.graph}")
 
-        if self.ema is not None:
-            if self.ema_graph is None:
-                self.ema_graph = self.graph
+            if self.ema is not None:
+                if self.ema_graph is None:
+                    self.ema_graph = self.graph
+                else:
+                    self.ema_graph = (1 - self.ema) * self.graph + self.ema * self.ema_graph
+                logger.info(f"Applying ema, smoothed graph is {self.ema_graph}")
+                self.weights = np.multiply(weights_init, np.exp(self.eta * self.ema_graph.sum(axis=0)))
             else:
-                self.ema_graph = (1 - self.ema) * self.graph + self.ema * self.ema_graph
-            logger.info(f"Applying ema, smoothed graph is {self.ema_graph}")
-            self.weights = np.multiply(weights_init, np.exp(self.eta * self.ema_graph.sum(axis=0)))
+                if len(self.weights) < self.domain_count:
+                    self.weights = np.multiply(weights_init, np.exp(self.eta * self.graph.sum(axis=0)))
+                else:
+                    self.weights = np.multiply(self.weights, np.exp(self.eta * self.graph.sum(axis=0)))
+
+            logger.info(f"The new mixture proportions={self.weights/sum(self.weights)}. ")
+            self.weights = self.weights / sum(self.weights)
+            return self.weights
         else:
-            if self.weights is None:
-                self.weights = np.multiply(weights_init, np.exp(self.eta * self.graph.sum(axis=0)))
-            else:
-                self.weights = np.multiply(self.weights, np.exp(self.eta * self.graph.sum(axis=0)))
-
-        logger.info(f"The new mixture proportions={self.weights/sum(self.weights)}. ")
-        return self.weights / sum(self.weights)
+            self.weights = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
+            self.weights[perturbed_domain] = self.one_hot_factor
+            return self.weights
