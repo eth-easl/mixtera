@@ -86,7 +86,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
 
     def _update_state(self, losses: np.ndarray, counts: np.ndarray) -> None:
         """
-        Accumulates the losses and counts, adjusting internal arrays as needed to accommodate new domains.
+        Updates the losses and counts, adjusting internal arrays as needed to accommodate new domains.
 
         Args:
             losses: A numpy array of losses per domain.

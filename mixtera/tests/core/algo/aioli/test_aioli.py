@@ -100,5 +100,4 @@ class TestAioliDynamicMixing(unittest.TestCase):
         mixture = self.aioli.process_losses(losses, counts, 2)
         expected_mixture = np.multiply(self.aioli.weights, np.exp(self.aioli.eta * self.aioli.graph.sum(axis=0)))
         expected_mixture = expected_mixture / sum(expected_mixture)
-        self.assertEqual(expected_mixture[0], mixture[0])
-        # np.testing.assert_array_almost_equal(expected_mixture, mixture)
+        np.testing.assert_array_almost_equal(expected_mixture, mixture)
