@@ -16,7 +16,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         lp_steps: int = 10,
         lp_rounds: int = 1,
         update_steps: int = 1000,
-        aioli_normalize_A: bool = False,
+        aioli_normalize_a: bool = False,
         aioli_diagonal: bool = False,
         one_hot_factor: float = 1,
         prior_steps: int = -1,
@@ -29,7 +29,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             - lp_rounds: number of sweeps through the k dataset
             - lp_steps: number of contiguous batches to take for each dataset
             - update_steps: how many steps to update weights
-            - aioli_normalize_A: whether or not to normalize the graph matrix before softmaxxing
+            - aioli_normalize_a: whether or not to normalize the graph matrix before softmaxxing
             - aioli_diagonal: whether or not only considering self interactions
             - one_hot_factor: perturbation amount for the mixture coefficients
         """
@@ -39,7 +39,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.lp_rounds = lp_rounds
         self.lp_steps = lp_steps
         self.update_steps = update_steps
-        self.aioli_normalize_A = aioli_normalize_A
+        self.aioli_normalize_a = aioli_normalize_a
         self.aioli_diagonal = aioli_diagonal
         self.domain_count = len(self.losses)
         self.graph = np.zeros((self.domain_count, self.domain_count))
@@ -57,18 +57,18 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
                 weight_row[i] = self.one_hot_factor
                 weight_matrix[i] = weight_row
 
-            A = np.zeros((self.domain_count, self.domain_count))
+            new_graph = np.zeros((self.domain_count, self.domain_count))
             for i, row in enumerate(self.graph):
-                A[i] = np.linalg.solve(weight_matrix, row)
+                new_graph[i] = np.linalg.solve(weight_matrix, row)
 
-            self.graph = A
+            self.graph = new_graph
 
         elif self.one_hot_factor != 1 and self.aioli_diagonal:
-            A = np.zeros((self.domain_count, self.domain_count))
+            new_graph = np.zeros((self.domain_count, self.domain_count))
             for i in range(self.domain_count):
-                A[i, i] = self.graph[i, i] / self.one_hot_factor
+                new_graph[i, i] = self.graph[i, i] / self.one_hot_factor
 
-            self.graph = A
+            self.graph = new_graph
 
     def process_losses(self, losses, counts, mixture_id):
         update_at_client = False
@@ -120,7 +120,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
 
             logger.info(f"LearnParams done. New graph is {self.graph}")
 
-            if self.aioli_normalize_A:
+            if self.aioli_normalize_a:
                 min_entry = self.graph.min()
                 if min_entry < 0:
                     self.graph -= min_entry
@@ -145,7 +145,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             logger.info(f"The new mixture proportions={self.weights/sum(self.weights)}. ")
             self.weights = self.weights / sum(self.weights)
             return self.weights
-        else:
-            self.weights = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
-            self.weights[perturbed_domain] = self.one_hot_factor
-            return self.weights
+
+        self.weights = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
+        self.weights[perturbed_domain] = self.one_hot_factor
+        return self.weights

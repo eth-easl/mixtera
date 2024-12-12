@@ -30,7 +30,7 @@ class TestAioliDynamicMixing(unittest.TestCase):
             lp_rounds=1,
             lp_steps=10,
             update_steps=1000,
-            aioli_normalize_A=False,
+            aioli_normalize_a=False,
             aioli_diagonal=False,
             one_hot_factor=0.9,
             prior_steps=10,
@@ -39,7 +39,7 @@ class TestAioliDynamicMixing(unittest.TestCase):
         self.assertEqual(dynamic_mixing.lp_rounds, 1)
         self.assertEqual(dynamic_mixing.lp_steps, 10)
         self.assertEqual(dynamic_mixing.update_steps, 1000)
-        self.assertEqual(dynamic_mixing.aioli_normalize_A, False)
+        self.assertEqual(dynamic_mixing.aioli_normalize_a, False)
         self.assertEqual(dynamic_mixing.one_hot_factor, 0.9)
         self.assertEqual(dynamic_mixing.aioli_diagonal, False)
 
