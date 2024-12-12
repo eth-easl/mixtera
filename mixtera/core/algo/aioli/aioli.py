@@ -70,7 +70,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
 
             self.graph = new_graph
 
-    def process_losses(self, losses, counts, mixture_id):
+    def process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int):
         update_at_client = False
         if mixture_id > self.last_received_mixture:
             update_at_client = True
