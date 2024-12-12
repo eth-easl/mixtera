@@ -70,7 +70,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
 
             self.graph = new_graph
 
-    def process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int):
+    def process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int) -> np.ndarray | None:
         update_at_client = False
         if mixture_id > self.last_received_mixture:
             update_at_client = True
@@ -101,10 +101,12 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             size_diff = num_domains - num_internal_domains
             self.losses = np.concatenate([self.losses, np.zeros(size_diff, dtype=self.losses.dtype)])
             self.counts = np.concatenate([self.counts, np.zeros(size_diff, dtype=self.counts.dtype)])
+            self.graph = np.zeros((num_domains, num_domains))
 
         # Assign the incoming losses and counts
         self.losses[:num_incoming_domains] = losses
         self.counts[:num_incoming_domains] = counts
+        self.domain_count = len(self.losses)
 
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         if not updated_at_client:
