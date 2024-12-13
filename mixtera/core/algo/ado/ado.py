@@ -20,11 +20,13 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
     This class implements the ADO algorithm for dynamically adjusting mixture coefficients
     based on domain-specific scaling laws fitted to the accumulated losses and counts.
 
-    There currently are 2 known differences to the paper:
+    There currently are 3 known differences to the paper:
         1) We use a different  clip_min_probability implementation and clip pi_t,
             while the paper implementation clips rho_t.
         2) We normalize rho_t and pi_bar_t to be a true distribution after weighting
             its components, but the paper implementation does not normalize.
+        3) The paper first updates the history and then calculates the distribution,
+            while we do it the other way around currently.
     """
 
     def __init__(
