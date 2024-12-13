@@ -43,10 +43,12 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.aioli_diagonal = aioli_diagonal
         self.domain_count = len(self.losses)
         self.graph = np.zeros((self.domain_count, self.domain_count))
-        self.weights = self.initial_mixture
+        self.weights: np.ndarray = None  # The latest weights after update steps have been completed.
         self.one_hot_factor = one_hot_factor
         self.ema_graph = None
         self.ema = None
+
+        self.last_generated_mixture = None  # The latest generated mixture weights. Can be perturbed or normal.
 
     def learn_params_subroutine(self) -> None:
         self.graph /= self.lp_rounds
@@ -110,7 +112,9 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
 
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         if not updated_at_client:
-            return self.weights
+            if self.weights is None:
+                return self.initial_mixture
+            return self.last_generated_mixture
 
         # Find which step we are in the algorithm given the mixture id.
         perturbed_domain = self.last_received_mixture % (self.domain_count + 1)
@@ -139,15 +143,16 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
                 logger.info(f"Applying ema, smoothed graph is {self.ema_graph}")
                 self.weights = np.multiply(weights_init, np.exp(self.eta * self.ema_graph.sum(axis=0)))
             else:
-                if len(self.weights) < self.domain_count:
+                if self.weights is None:
                     self.weights = np.multiply(weights_init, np.exp(self.eta * self.graph.sum(axis=0)))
                 else:
                     self.weights = np.multiply(self.weights, np.exp(self.eta * self.graph.sum(axis=0)))
 
             logger.info(f"The new mixture proportions={self.weights/sum(self.weights)}. ")
             self.weights = self.weights / sum(self.weights)
+            self.last_generated_mixture = self.weights
             return self.weights
 
-        self.weights = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
-        self.weights[perturbed_domain] = self.one_hot_factor
-        return self.weights
+        self.last_generated_mixture = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
+        self.last_generated_mixture[perturbed_domain] = self.one_hot_factor
+        return self.last_generated_mixture

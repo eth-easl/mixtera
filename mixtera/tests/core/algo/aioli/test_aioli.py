@@ -64,6 +64,7 @@ class TestAioliDynamicMixing(unittest.TestCase):
         np.testing.assert_array_almost_equal(self.aioli.graph, expected_graph)
 
     def test_calc_mixture_no_update(self):
+        self.aioli.weights = None
         mixture = self.aioli.calc_mixture(updated_at_client=False)
         np.testing.assert_almost_equal(self.aioli.initial_mixture, mixture)
 
@@ -77,18 +78,21 @@ class TestAioliDynamicMixing(unittest.TestCase):
 
     def test_calc_mixture_new_weights(self):
         self.aioli.graph = np.array([[-0.5, 0.1], [0.0, -0.2]])
-        initial_mixture = np.array([0.4, 0.6])
+        self.aioli.initial_mixture = np.array([0.4, 0.6])
 
-        self.aioli.weights = initial_mixture
         self.aioli.one_hot_factor = 0.9
         self.aioli.last_received_mixture = -1
+        self.aioli.aioli_normalize_a = True
         self.aioli.aioli_diagonal = False
+        self.aioli.eta = 0.1
 
         counts = np.array([100, 200])
         losses = np.array([10.0, 5.0])
 
         mixture = self.aioli.process_losses(losses, counts, 0)
         expected_mixture = np.array([0.9, 0.1])
+
+        np.testing.assert_almost_equal(losses, self.aioli.losses)
         np.testing.assert_array_almost_equal(expected_mixture, mixture)
 
         losses = np.array([9.0, 6.0])
@@ -98,6 +102,8 @@ class TestAioliDynamicMixing(unittest.TestCase):
 
         losses = np.array([8.0, 7.0])
         mixture = self.aioli.process_losses(losses, counts, 2)
-        expected_mixture = np.multiply(self.aioli.weights, np.exp(self.aioli.eta * self.aioli.graph.sum(axis=0)))
+        expected_mixture = np.multiply(
+            self.aioli.initial_mixture, np.exp(self.aioli.eta * self.aioli.graph.sum(axis=0))
+        )
         expected_mixture = expected_mixture / sum(expected_mixture)
         np.testing.assert_array_almost_equal(expected_mixture, mixture)
