@@ -84,7 +84,6 @@ class ServerStub(MixteraClient):
     def _stream_result_chunks(
         self, job_id: str, dp_group_id: int, node_id: int, worker_id: int
     ) -> Generator[ResultChunk, None, None]:
-        logger.info("Streaming result chunks from server connection...")
         yield from self.server_connection._stream_result_chunks(job_id, dp_group_id, node_id, worker_id)
 
     def _get_result_metadata(

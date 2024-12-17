@@ -227,6 +227,7 @@ class ResultChunk:
 
             logger.debug("Instantiating tokenizer - this might take a bit.")
             self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
+
             logger.debug("Tokenizer instantiated.")
 
             self._tokenization_batch_size = args.chunk_reading_tokenization_bs
