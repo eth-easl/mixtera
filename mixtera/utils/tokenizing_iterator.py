@@ -2,7 +2,7 @@ import threading
 from typing import Any, Iterator
 
 
-class TokenizingIterator:
+class TokenizingIterator: # TODO implement overlapping here
     def __init__(
         self, iterator: Iterator[str], tokenizer: Any, sequence_length: int, batch_size: int, at_least_one_sample: bool
     ) -> None:
@@ -68,13 +68,23 @@ class TokenizingIterator:
 
 class ThreadedTokenizingIterator:
     def __init__(
-        self, iterator: Iterator[str], tokenizer: Any, sequence_length: int, batch_size: int, at_least_one_sample: bool
+        self, iterator: Iterator[str], tokenizer: Any, sequence_length: int, batch_size: int, at_least_one_sample: bool, overlap: bool, eos: bool, bos: bool
     ) -> None:
         self.iterator = iterator
         self.tokenizer = tokenizer
         self.sequence_length = sequence_length
         self.batch_size = batch_size
         self.at_least_one_sample = at_least_one_sample
+        self.overlap = overlap
+        self.eos = eos
+        self.bos = bos
+
+        self._step_size = sequence_length if  overlap  else sequence_length + 1
+
+        if eos and not tokenizer.eos_token_id:
+            raise RuntimeError("eos is enabled but no eos token id on tokenizer set.")
+        if bos and not tokenizer.bos_token_id:
+            raise RuntimeError("bos is enabled but no bos token id on tokenizer set.")
 
         self.buffer: list[int] = []
         self.chunk_index = 0
@@ -105,6 +115,16 @@ class ThreadedTokenizingIterator:
                     return_attention_mask=False,
                     return_token_type_ids=False,
                 )
+                if self.bos:
+                    bos_id = self.tokenizer.bos_token_id
+                    for idx, ids in enumerate(encoded_batch["input_ids"]):
+                        encoded_batch["input_ids"][idx] = [bos_id] + ids
+
+                if self.eos:
+                    eos_id = self.tokenizer.eos_token_id
+                    for ids in encoded_batch["input_ids"]:
+                        ids.append(eos_id)
+
                 with self.lock:
                     self.buffer.extend([id for ids in encoded_batch["input_ids"] for id in ids])
                     if local_eos:
@@ -124,7 +144,7 @@ class ThreadedTokenizingIterator:
                     start = self.chunk_index
                     end = start + self.sequence_length + 1
                     chunk = self.buffer[start:end]
-                    self.chunk_index += self.sequence_length
+                    self.chunk_index += self._step_size
                     self.yielded_samples += 1
                     return chunk
 
