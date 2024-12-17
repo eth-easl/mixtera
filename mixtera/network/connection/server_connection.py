@@ -207,6 +207,7 @@ class ServerConnection:
             An ResultChunk object representing the next result chunk,
             or None if there are no more results or the connection fails.
         """
+        logger.info("get next result called!")
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
