@@ -81,9 +81,9 @@ class ThreadedTokenizingIterator:
 
         self._step_size = sequence_length if  overlap  else sequence_length + 1
 
-        if eos and not tokenizer.eos_token_id:
+        if eos and tokenizer.eos_token_id is None:
             raise RuntimeError("eos is enabled but no eos token id on tokenizer set.")
-        if bos and not tokenizer.bos_token_id:
+        if bos and tokenizer.bos_token_id is None:
             raise RuntimeError("bos is enabled but no bos token id on tokenizer set.")
 
         self.buffer: list[int] = []
