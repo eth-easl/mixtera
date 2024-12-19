@@ -2,6 +2,7 @@
 # Mathematical notation with snake-case is harder to read.
 
 import json
+import os
 from typing import Any
 
 import numpy as np
@@ -12,6 +13,7 @@ from scipy.signal import savgol_filter
 from scipy.special import logsumexp
 from tqdm import tqdm
 import multiprocessing as mp
+from multiprocessing import shared_memory
 
 
 class AdoDynamicMixing(DynamicMixingAlgorithm):
@@ -377,20 +379,31 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.scaling_law_params = np.zeros((num_domains, 3))  # [log_beta_k, log_epsilon_k, alpha_k]
         assert self.scaling_law_params is not None
 
+        logger.debug("Creating initial numpy arrays")
         counts_over_time = np.array(self.per_step_counts)
         losses_over_time = np.array(self.per_step_losses)
 
-        args_list = []
-        for k in range(num_domains):
-            counts_over_time_k = counts_over_time[:, k]
-            losses_over_time_k = losses_over_time[:, k]
-            steps_k = np.arange(len(counts_over_time_k))
+        logger.debug("Creating shared counts")
+        counts_shm = shared_memory.SharedMemory(create=True, size=counts_over_time.nbytes)
+        shm_counts_over_time = np.ndarray(counts_over_time.shape, dtype=counts_over_time.dtype, buffer=counts_shm.buf)
+        np.copyto(shm_counts_over_time, counts_over_time)
 
+        logger.debug("Creating shared losses")
+        losses_shm = shared_memory.SharedMemory(create=True, size=losses_over_time.nbytes)
+        shm_losses_over_time = np.ndarray(losses_over_time.shape, dtype=losses_over_time.dtype, buffer=losses_shm.buf)
+        np.copyto(shm_losses_over_time, losses_over_time)
+
+
+        args_list = []
+        for k in tqdm(range(num_domains), desc="Preparing multiprocesisng arguments"):
             args = (
                 k,
-                counts_over_time_k,
-                losses_over_time_k,
-                steps_k,
+                counts_over_time.shape,
+                counts_over_time.dtype.str,
+                counts_shm.name,
+                losses_over_time.shape,
+                losses_over_time.dtype.str,
+                losses_shm.name,
                 self.use_same_step_size,
                 self.ignore_initial_steps,
                 self.savgol,
@@ -400,10 +413,18 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 self.total_steps,
             )
             args_list.append(args)
-        pool = mp.Pool()
-        results = pool.map(fit_scaling_law_for_domain, args_list)
-        pool.close()
-        pool.join()
+
+        num_cores = os.cpu_count() or 1
+        num_workers = max(num_cores - 4, 1) 
+        num_workers = max(min(num_workers, len(args_list)), 1)
+
+        with mp.Pool(num_workers) as pool:
+            results = pool.map(fit_scaling_law_for_domain, args_list)
+
+        counts_shm.close()
+        counts_shm.unlink()
+        losses_shm.close()
+        losses_shm.unlink()
 
         for result in results:
             k, best_params, domain_log = result
@@ -639,9 +660,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 def fit_scaling_law_for_domain(args):
     (
         k,
-        counts_over_time_k,
-        losses_over_time_k,
-        steps_k,
+        counts_over_time_shape,
+        counts_over_time_dtype,
+        counts_over_time_name,
+        losses_over_time_shape,
+        losses_over_time_dtype,
+        losses_over_time_name,
         use_same_step_size,
         ignore_initial_steps,
         savgol,
@@ -650,6 +674,14 @@ def fit_scaling_law_for_domain(args):
         logging_path,
         total_steps,
     ) = args
+
+    existing_counts_shm = shared_memory.SharedMemory(name=counts_over_time_name)
+    counts_over_time = np.ndarray(counts_over_time_shape, dtype=counts_over_time_dtype, buffer=existing_counts_shm.buf)
+    existing_losses_shm = shared_memory.SharedMemory(name=losses_over_time_name)
+    losses_over_time = np.ndarray(losses_over_time_shape, dtype=losses_over_time_dtype, buffer=existing_losses_shm.buf)
+
+    counts_over_time_k = counts_over_time[:, k]
+    losses_over_time_k = losses_over_time[:, k]
 
     nonc_counts_k = counts_over_time_k  # Non cumulative counts over time
     counts_k = np.cumsum(counts_over_time_k)
