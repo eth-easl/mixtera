@@ -42,6 +42,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         scaling_law_update_interval: int = 1000,
         subsampling_interval: int = 10,
         ignore_initial_steps: int = 500,
+        start_step: int = 1000,
         savgol: bool = True,
         use_same_step_size: bool = True,
         count_normalizer: None | int = None,
@@ -82,6 +83,10 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.logging_path = logging_path
         self.use_same_step_size = use_same_step_size
         self.count_normalizer = count_normalizer
+        self.start_step = start_step
+
+        if self.start_step <= self.ignore_initial_steps:
+            raise ValueError("start step must be bigger than ignore initial steps!")
 
         # Initialize per-domain data structures
         self.total_steps = 0  # Total number of steps processed
@@ -242,7 +247,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             ), f"len(self.mu_k) = {len(self.mu_k)} != num_domains = {num_domains}\n\n{self.mu_k}"
 
         # **Warm-up Handling**
-        if self.total_steps <= self.ignore_initial_steps + self.scaling_law_update_interval:
+        if self.total_steps < self.start_step:
             # During warm-up, we use the initial mixture and do not update it
             # Since we cannot use the first information during self.ignore_initial_steps,
             # we need to wait an additional interval before actually starting the update.
@@ -254,7 +259,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "losses": self.losses.tolist() if self.losses is not None else None,
                 }
                 self.log_entries.append(step_log)
-                if self.total_steps % 50 == 0:
+                if self.total_steps % 5000 == 0:
                     self.write_logs()
             return None
 
@@ -263,10 +268,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         updated_scaling_laws = False
         # Fit scaling laws immediately after the warm-up period ends, and then at intervals
-        if (self.total_steps == self.ignore_initial_steps + 1) or (
-            self.total_steps > self.ignore_initial_steps
-            and (self.total_steps - self.ignore_initial_steps - 1) % self.scaling_law_update_interval == 0
-        ):
+        if (self.total_steps == self.start_step) or ((self.total_steps - self.start_step)  % self.scaling_law_update_interval == 0):
             self.fit_scaling_laws()
             updated_scaling_laws = True
 
@@ -344,7 +346,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         self.handed_out_first_update = True
 
-        if (self.total_steps % 50 == 0) or force_log:
+        if (self.total_steps % 5000 == 0) or force_log:
             self.write_logs()
 
         return self.pi_t
