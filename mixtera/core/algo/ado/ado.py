@@ -682,6 +682,7 @@ def fit_scaling_law_for_domain(args):
 
     counts_over_time_k = counts_over_time[:, k]
     losses_over_time_k = losses_over_time[:, k]
+    steps_k = np.arange(len(counts_over_time_k))
 
     nonc_counts_k = counts_over_time_k  # Non cumulative counts over time
     counts_k = np.cumsum(counts_over_time_k)
