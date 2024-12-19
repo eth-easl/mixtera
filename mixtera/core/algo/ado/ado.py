@@ -11,6 +11,7 @@ from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 from scipy.special import logsumexp
 from tqdm import tqdm
+import multiprocessing as mp
 
 
 class AdoDynamicMixing(DynamicMixingAlgorithm):
@@ -364,6 +365,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.h_t = gamma1 * self.pi_t + (1 - gamma1) * self.h_t
         self.last_update_step = self.total_steps
 
+
+
+
     def fit_scaling_laws(self) -> None:
         """
         Fits scaling laws to the accumulated counts and losses for each domain.
@@ -376,154 +380,39 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         counts_over_time = np.array(self.per_step_counts)
         losses_over_time = np.array(self.per_step_losses)
 
-        # Compute cumulative counts per domain
-        cumulative_counts = np.cumsum(counts_over_time, axis=0)
+        args_list = []
+        for k in range(num_domains):
+            counts_over_time_k = counts_over_time[:, k]
+            losses_over_time_k = losses_over_time[:, k]
+            steps_k = np.arange(len(counts_over_time_k))
 
-        # TODO(#create issue): We could use a multiprocessing Pool here.
-        for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
-            nonc_counts_k = counts_over_time[:, k]  # Non cumulative counts over time
-            counts_k = cumulative_counts[:, k]
-            losses_k = losses_over_time[:, k]
-            steps_k = np.arange(len(counts_k))
+            args = (
+                k,
+                counts_over_time_k,
+                losses_over_time_k,
+                steps_k,
+                self.use_same_step_size,
+                self.ignore_initial_steps,
+                self.savgol,
+                self.subsampling_interval,
+                self.count_normalizer,
+                self.logging_path,
+                self.total_steps,
+            )
+            args_list.append(args)
+        pool = mp.Pool()
+        results = pool.map(fit_scaling_law_for_domain, args_list)
+        pool.close()
+        pool.join()
 
-            # First, we need to clean up the y data (losses)
-            # We either impute values (as per the official implementation)
-            # or remove them.
-
-            if self.use_same_step_size:
-                # When using the same step size, we impute missing losses
-                # This aligns with the paper but we could also make this a flag at some point
-                # to either impute losses or select only losses > 0.
-                for t in range(1, len(losses_k)):
-                    if losses_k[t] == 0:
-                        losses_k[t] = losses_k[t - 1]
-            else:
-                # If fitting on x data for each domain, select only items where loses are > 0
-                valid_indices = losses_k > 0
-                counts_k = counts_k[valid_indices]
-                losses_k = losses_k[valid_indices]
-                steps_k = steps_k[valid_indices]
-                nonc_counts_k = nonc_counts_k[valid_indices]
-
-            # After having a continous set of losses, we optionally apply a savgol filter
-            applied_savgol = False
-            if self.savgol:
-                window_length = min(101, len(counts_k))
-                if window_length % 2 == 0:
-                    window_length -= 1  # window_length must be odd
-                    logger.debug(f"Adjusted window length to {window_length} for domain {k}")
-                if window_length > 3:
-                    losses_k = savgol_filter(losses_k.copy(), window_length=window_length, polyorder=3)
-                    applied_savgol = True
-                else:
-                    logger.debug(f"Not enough data points to apply Savitzky-Golay filter for domain {k}.")
-
-            # As a third step, we only select entries in our time series where we sampled data up to that point.
-            # At the beginning, we might have domains that we did not sample yet, and there we cannot run any prediction
-            # Hence, this filters out those points at the start.
-            valid_indices = counts_k > 0
-            counts_k = counts_k[valid_indices]
-            losses_k = losses_k[valid_indices]
-            steps_k = steps_k[valid_indices]
-            nonc_counts_k = nonc_counts_k[valid_indices]
-
-            # Last, we filter out losses that were collected before the ignore_initial_steps option.
-            valid_indices = steps_k > self.ignore_initial_steps
-            counts_k = counts_k[valid_indices]
-            losses_k = losses_k[valid_indices]
-            steps_k = steps_k[valid_indices]
-            nonc_counts_k = nonc_counts_k[valid_indices]
-
-            # Subsample data
-            subsampled = False
-            if self.subsampling_interval > 1:
-                counts_k = counts_k[:: self.subsampling_interval]
-                losses_k = losses_k[:: self.subsampling_interval]
-                steps_k = steps_k[:: self.subsampling_interval]
-                subsampled = True
-
-            if len(counts_k) < 1:
-                logger.debug(
-                    f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain."
-                )
-                if self.counts[k] > 0:
-                    raise RuntimeError(
-                        f"We sampled domain {k}"
-                        + "during the initial steps but not between that and fitting the first scaling laws."
-                        + "Please either increase your interval size or"
-                        + "decrease or warm up steps to ensure this does not happen."
-                    )
-
-                self.scaling_law_params[k] = (-1, -1, -1)
-                continue
-
-            x_data = counts_k
-            y_data = losses_k
-
-            if self.count_normalizer is not None and self.count_normalizer > 1:
-                # Can be used to convert tokens into samples
-                x_data = x_data / float(self.count_normalizer)
-
-            # **Define the grid of initializations as per the paper**
-            alpha_grid = np.array([0.1 * i for i in range(1, 8)])
-            log_beta_grid = np.array(list(range(-2, 6)))
-            # Note that the paper enforces log epsilon > 0.5 but nevertheless uses this as the init grid.
-            # To get the same results as the paper, we use this grid.
-            log_epsilon_grid = np.array([-2.0, -1.5, -1.0, -0.5, 1.0, 1.5])
-
-            # Create all combinations of initial guesses
-            grid_search = [
-                (log_beta_0, log_epsilon_0, alpha_0)
-                for alpha_0 in alpha_grid
-                for log_beta_0 in log_beta_grid
-                for log_epsilon_0 in log_epsilon_grid
-            ]
-
-            best_loss = np.inf
-            best_params = None
-
-            for initial_guess in grid_search:
-                # We don't use the bounds parameter since this gives different results than the paper.
-                # Instead, as in the original implementation, we rely on penalty terms in the loss.
-                result = minimize(
-                    AdoDynamicMixing.scaling_law_loss,
-                    initial_guess,
-                    args=(x_data, y_data),
-                    method="L-BFGS-B",
-                    options={"maxiter": 200, "gtol": 1e-5},
-                )
-
-                if result.success and result.fun < best_loss:
-                    # logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
-                    best_loss = result.fun
-                    best_params = result.x
-
-            if best_params is not None:
-                assert self.scaling_law_params is not None
-                self.scaling_law_params[k] = best_params
-                logger.debug(f"Selected best_params {best_params} with loss = {best_loss}")
-            else:
-                # Handle optimization failure (e.g., keep previous parameters or use default)
-                raise RuntimeError(f"Error while fitting scaling law!\n{result}")
-
-            if self.logging_path is not None:
-                domain_log = {
-                    "step": self.total_steps,
-                    "domain_index": k,
-                    "counts_k": counts_k.tolist(),
-                    "losses_k": losses_k.tolist(),
-                    "x_data": x_data.tolist(),
-                    "y_data": y_data.tolist(),
-                    "steps_k": steps_k.tolist(),
-                    "best_params": best_params.tolist() if best_params is not None else None,
-                    "window_length": window_length if "window_length" in locals() else None,
-                    "best_loss": best_loss,
-                    "applied_savgol": applied_savgol,
-                    "subsampled": subsampled,
-                }
+        for result in results:
+            k, best_params, domain_log = result
+            self.scaling_law_params[k] = best_params
+            if domain_log is not None and self.logging_path is not None:
                 self.log_scaling_laws.append(domain_log)
 
         logger.debug("Finished fitting scaling laws.")
+
 
     @staticmethod
     def scaling_law_loss(params: tuple[float, float, float], counts_k: int, losses_k: float) -> float | np.floating:
@@ -746,3 +635,155 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             self.per_step_counts.append(increment)
         else:
             self.per_step_counts.append(counts.copy())
+
+def fit_scaling_law_for_domain(args):
+    (
+        k,
+        counts_over_time_k,
+        losses_over_time_k,
+        steps_k,
+        use_same_step_size,
+        ignore_initial_steps,
+        savgol,
+        subsampling_interval,
+        count_normalizer,
+        logging_path,
+        total_steps,
+    ) = args
+
+    nonc_counts_k = counts_over_time_k  # Non cumulative counts over time
+    counts_k = np.cumsum(counts_over_time_k)
+    losses_k = losses_over_time_k
+
+    # First, we need to clean up the y data (losses)
+    # We either impute values (as per the official implementation)
+    # or remove them.
+
+    if use_same_step_size:
+        # When using the same step size, we impute missing losses
+        # This aligns with the paper but we could also make this a flag at some point
+        # to either impute losses or select only losses > 0.
+        for t in range(1, len(losses_k)):
+            if losses_k[t] == 0:
+                losses_k[t] = losses_k[t - 1]
+    else:
+        # If fitting on x data for each domain, select only items where loses are > 0
+        valid_indices = losses_k > 0
+        counts_k = counts_k[valid_indices]
+        losses_k = losses_k[valid_indices]
+        steps_k = steps_k[valid_indices]
+        nonc_counts_k = nonc_counts_k[valid_indices]
+
+    # After having a continous set of losses, we optionally apply a savgol filter
+    applied_savgol = False
+    if savgol:
+        window_length = min(101, len(counts_k))
+        if window_length % 2 == 0:
+            window_length -= 1  # window_length must be odd
+            logger.debug(f"Adjusted window length to {window_length} for domain {k}")
+        if window_length > 3:
+            losses_k = savgol_filter(losses_k.copy(), window_length=window_length, polyorder=3)
+            applied_savgol = True
+        else:
+            logger.debug(f"Not enough data points to apply Savitzky-Golay filter for domain {k}.")
+
+    # As a third step, we only select entries in our time series where we sampled data up to that point.
+    # At the beginning, we might have domains that we did not sample yet, and there we cannot run any prediction
+    # Hence, this filters out those points at the start.
+    valid_indices = counts_k > 0
+    counts_k = counts_k[valid_indices]
+    losses_k = losses_k[valid_indices]
+    steps_k = steps_k[valid_indices]
+    nonc_counts_k = nonc_counts_k[valid_indices]
+
+    # Last, we filter out losses that were collected before the ignore_initial_steps option.
+    valid_indices = steps_k > ignore_initial_steps
+    counts_k = counts_k[valid_indices]
+    losses_k = losses_k[valid_indices]
+    steps_k = steps_k[valid_indices]
+    nonc_counts_k = nonc_counts_k[valid_indices]
+
+    # Subsample data
+    subsampled = False
+    if subsampling_interval > 1:
+        counts_k = counts_k[:: subsampling_interval]
+        losses_k = losses_k[:: subsampling_interval]
+        steps_k = steps_k[:: subsampling_interval]
+        subsampled = True
+
+    if len(counts_k) < 1:
+        best_params = np.array([-1, -1, -1])
+        domain_log = {
+            "step": total_steps,
+            "domain_index": k,
+            "error": "Too little data to fit scaling laws.",
+        }
+        return k, best_params, domain_log
+
+
+    x_data = counts_k
+    y_data = losses_k
+
+    if count_normalizer is not None and count_normalizer > 1:
+        # Can be used to convert tokens into samples
+        x_data = x_data / float(count_normalizer)
+
+    # **Define the grid of initializations as per the paper**
+    alpha_grid = np.array([0.1 * i for i in range(1, 8)])
+    log_beta_grid = np.array(list(range(-2, 6)))
+    # Note that the paper enforces log epsilon > 0.5 but nevertheless uses this as the init grid.
+    # To get the same results as the paper, we use this grid.
+    log_epsilon_grid = np.array([-2.0, -1.5, -1.0, -0.5, 1.0, 1.5])
+
+    # Create all combinations of initial guesses
+    grid_search = [
+        (log_beta_0, log_epsilon_0, alpha_0)
+        for alpha_0 in alpha_grid
+        for log_beta_0 in log_beta_grid
+        for log_epsilon_0 in log_epsilon_grid
+    ]
+
+    best_loss = np.inf
+    best_params = None
+
+    for initial_guess in grid_search:
+        # We don't use the bounds parameter since this gives different results than the paper.
+        # Instead, as in the original implementation, we rely on penalty terms in the loss.
+        result = minimize(
+            AdoDynamicMixing.scaling_law_loss,
+            initial_guess,
+            args=(x_data, y_data),
+            method="L-BFGS-B",
+            options={"maxiter": 200, "gtol": 1e-5},
+        )
+
+        if result.success and result.fun < best_loss:
+            # logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
+            best_loss = result.fun
+            best_params = result.x
+
+    if best_params is not None:
+        logger.debug(f"Selected best_params {best_params} with loss = {best_loss}")
+    else:
+        # Handle optimization failure (e.g., keep previous parameters or use default)
+        raise RuntimeError(f"Error while fitting scaling law!\n{result}")
+
+    domain_log = None
+    if logging_path is not None:
+        domain_log = {
+            "step": total_steps,
+            "domain_index": k,
+            "counts_k": counts_k.tolist(),
+            "losses_k": losses_k.tolist(),
+            "x_data": x_data.tolist(),
+            "y_data": y_data.tolist(),
+            "steps_k": steps_k.tolist(),
+            "best_params": best_params.tolist() if best_params is not None else None,
+            "window_length": window_length if "window_length" in locals() else None,
+            "best_loss": best_loss,
+            "applied_savgol": applied_savgol,
+            "subsampled": subsampled,
+        }
+
+    return k, best_params, domain_log
+
