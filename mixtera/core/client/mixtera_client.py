@@ -11,7 +11,6 @@ from mixtera.core.processing import ExecutionMode
 from mixtera.core.query import Query, ResultChunk
 from mixtera.core.query.mixture import Mixture
 from mixtera.network.client.client_feedback import ClientFeedback
-from loguru import logger
 
 if TYPE_CHECKING:
     from mixtera.core.client.local import LocalStub
@@ -58,9 +57,12 @@ class ResultStreamingArgs:
     chunk_reading_token_separate_thread: bool = True  # Only for chunk_reading_mixture_type == "token"
     # We typically want at least one sample per domain, even if we don't have enough tokens.
     chunk_reading_token_at_least_one_sample: bool = True  # Only for chunk_reading_mixture_type == "token"
-    chunk_reading_token_overlapping: bool = True # Whether the returned chunks overlap by one token. True for nanotron, False for torchtitan.
-    chunk_reading_eos: bool = False # Whether to add an EOS token after tokenization. False for nanotron, True for torchtitan.
-    chunk_reading_bos: bool = False # Whether to add an EOS token after tokenization. False for nanotron, True for torchtitan.
+    # Whether the returned chunks overlap by one token. True for nanotron, False for torchtitan.
+    chunk_reading_token_overlapping: bool = True
+    # Whether to add an EOS token after tokenization. False for nanotron, True for torchtitan.
+    chunk_reading_eos: bool = False
+    # Whether to add an EOS token after tokenization. False for nanotron, True for torchtitan.
+    chunk_reading_bos: bool = False
 
 
 class MixteraClient(ABC):

@@ -297,7 +297,7 @@ class ResultChunk:
                     self._tokenization_one_sample,
                     self._tokenization_overlap,
                     self._tokenization_eos,
-                    self._tokenization_bos
+                    self._tokenization_bos,
                 )
                 for key, iterator in active_iterators.items()
             }

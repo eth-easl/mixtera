@@ -2,7 +2,9 @@
 # Mathematical notation with snake-case is harder to read.
 
 import json
+import multiprocessing as mp
 import os
+from multiprocessing import shared_memory
 from typing import Any
 
 import numpy as np
@@ -12,8 +14,6 @@ from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 from scipy.special import logsumexp
 from tqdm import tqdm
-import multiprocessing as mp
-from multiprocessing import shared_memory
 
 
 class AdoDynamicMixing(DynamicMixingAlgorithm):
@@ -268,7 +268,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         updated_scaling_laws = False
         # Fit scaling laws immediately after the warm-up period ends, and then at intervals
-        if (self.total_steps == self.start_step) or ((self.total_steps - self.start_step)  % self.scaling_law_update_interval == 0):
+        if (self.total_steps == self.start_step) or (
+            (self.total_steps - self.start_step) % self.scaling_law_update_interval == 0
+        ):
             self.fit_scaling_laws()
             updated_scaling_laws = True
 
@@ -369,9 +371,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.h_t = gamma1 * self.pi_t + (1 - gamma1) * self.h_t
         self.last_update_step = self.total_steps
 
-
-
-
     def fit_scaling_laws(self) -> None:
         """
         Fits scaling laws to the accumulated counts and losses for each domain.
@@ -395,7 +394,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         shm_losses_over_time = np.ndarray(losses_over_time.shape, dtype=losses_over_time.dtype, buffer=losses_shm.buf)
         np.copyto(shm_losses_over_time, losses_over_time)
 
-
         args_list = []
         for k in tqdm(range(num_domains), desc="Preparing multiprocesisng arguments"):
             args = (
@@ -417,7 +415,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             args_list.append(args)
 
         num_cores = os.cpu_count() or 1
-        num_workers = max(num_cores - 4, 1) 
+        num_workers = max(num_cores - 4, 1)
         num_workers = max(min(num_workers, len(args_list)), 1)
 
         with mp.Pool(num_workers) as pool:
@@ -435,7 +433,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 self.log_scaling_laws.append(domain_log)
 
         logger.debug("Finished fitting scaling laws.")
-
 
     @staticmethod
     def scaling_law_loss(params: tuple[float, float, float], counts_k: int, losses_k: float) -> float | np.floating:
@@ -659,6 +656,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         else:
             self.per_step_counts.append(counts.copy())
 
+
 def fit_scaling_law_for_domain(args):
     (
         k,
@@ -741,9 +739,9 @@ def fit_scaling_law_for_domain(args):
     # Subsample data
     subsampled = False
     if subsampling_interval > 1:
-        counts_k = counts_k[:: subsampling_interval]
-        losses_k = losses_k[:: subsampling_interval]
-        steps_k = steps_k[:: subsampling_interval]
+        counts_k = counts_k[::subsampling_interval]
+        losses_k = losses_k[::subsampling_interval]
+        steps_k = steps_k[::subsampling_interval]
         subsampled = True
 
     if len(counts_k) < 1:
@@ -754,7 +752,6 @@ def fit_scaling_law_for_domain(args):
             "error": "Too little data to fit scaling laws.",
         }
         return k, best_params, domain_log
-
 
     x_data = counts_k
     y_data = losses_k
@@ -821,4 +818,3 @@ def fit_scaling_law_for_domain(args):
         }
 
     return k, best_params, domain_log
-

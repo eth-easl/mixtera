@@ -22,6 +22,7 @@ from mixtera.network.network_utils import (
 )
 from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
+from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import QueryExecutionArgs
@@ -84,7 +85,7 @@ class ServerConnection:
         yield from lines.split("\n")
 
     async def _connect_to_server(
-        self, max_retries: int = 5, retry_delay: int = 1
+        self, max_retries: int = 10
     ) -> tuple[Optional[asyncio.StreamReader], Optional[asyncio.StreamWriter]]:
         """
         Asynchronously establishes a connection to the server, retrying upon failure up to a maximum number of attempts.
@@ -97,25 +98,19 @@ class ServerConnection:
             A tuple containing the StreamReader and StreamWriter objects if the connection is successful,
             or (None, None) if the connection ultimately fails after the maximum number of retries.
         """
-        for attempt in range(1, max_retries + 1):
-            try:
-                reader, writer = await asyncio.wait_for(asyncio.open_connection(self._host, self._port), timeout=5.0)
-                return reader, writer
-            except asyncio.TimeoutError:
-                logger.error(f"Connection to {self._host}:{self._port} timed out (attempt {attempt}/{max_retries}).")
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error(
-                    "Failed to connect to"
-                    + f"{self._host}:{self._port}. Is the server running? (attempt {attempt}/{max_retries}):{e}"
-                )
-
-            if attempt < max_retries:
-                await asyncio.sleep(retry_delay)
-            else:
-                logger.error(
-                    "Maximum number of connection attempts"
-                    + f"({max_retries}) reached. Unable to connect to {self._host}:{self._port}."
-                )
+        try:
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(max_retries),
+                wait=wait_random_exponential(multiplier=1, min=2, max=60),
+                reraise=True,
+            ):
+                with attempt:
+                    reader, writer = await asyncio.wait_for(
+                        asyncio.open_connection(self._host, self._port), timeout=5.0
+                    )
+                    return reader, writer
+        except:
+            return None, None
 
         return None, None
 

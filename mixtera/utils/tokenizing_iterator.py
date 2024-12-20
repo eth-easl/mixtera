@@ -2,7 +2,7 @@ import threading
 from typing import Any, Iterator
 
 
-class TokenizingIterator: # TODO implement overlapping here
+class TokenizingIterator:  # TODO(create issue) implement overlapping here
     def __init__(
         self, iterator: Iterator[str], tokenizer: Any, sequence_length: int, batch_size: int, at_least_one_sample: bool
     ) -> None:
@@ -68,7 +68,15 @@ class TokenizingIterator: # TODO implement overlapping here
 
 class ThreadedTokenizingIterator:
     def __init__(
-        self, iterator: Iterator[str], tokenizer: Any, sequence_length: int, batch_size: int, at_least_one_sample: bool, overlap: bool, eos: bool, bos: bool
+        self,
+        iterator: Iterator[str],
+        tokenizer: Any,
+        sequence_length: int,
+        batch_size: int,
+        at_least_one_sample: bool,
+        overlap: bool,
+        eos: bool,
+        bos: bool,
     ) -> None:
         self.iterator = iterator
         self.tokenizer = tokenizer
@@ -79,7 +87,7 @@ class ThreadedTokenizingIterator:
         self.eos = eos
         self.bos = bos
 
-        self._step_size = sequence_length if  overlap  else sequence_length + 1
+        self._step_size = sequence_length if overlap else sequence_length + 1
 
         if eos and tokenizer.eos_token_id is None:
             raise RuntimeError("eos is enabled but no eos token id on tokenizer set.")

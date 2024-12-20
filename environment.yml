@@ -1,4 +1,4 @@
-name: mixtera
+name: mixterawtf
 
 channels:
   - conda-forge
@@ -24,6 +24,7 @@ dependencies:
   - gzip
   - xopen
   - scipy
+  - tenacity
   - pip: # Both duckdb and polars recommend their pip build over conda
     - duckdb
     - polars==1.15
