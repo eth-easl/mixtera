@@ -15,6 +15,7 @@ from mixtera.network.connection import ServerConnection
 
 class ServerStub(MixteraClient):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__()
         if len(args) == 1 and isinstance(args[0], tuple):
             host, port = args[0]
         elif len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], int):
@@ -72,7 +73,7 @@ class ServerStub(MixteraClient):
 
         return True
 
-    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
+    def process_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         if not self.server_connection.receive_feedback(job_id, feedback):
             logger.error("Could not send the message to the server!")
             return False

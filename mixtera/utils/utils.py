@@ -392,3 +392,43 @@ def deserialize_chunker_index(input_dir: str | Path) -> "ChunkerIndex":
         chunker_index.update(mixture_key_dict)
 
     return chunker_index
+
+
+def to_numpy_array(data: Any) -> np.ndarray | None:
+    """
+    Convert input data to a NumPy array, handling various types like:
+    - NumPy arrays
+    - Python lists and tuples
+    - PyTorch tensors
+    - TensorFlow tensors
+    - Other array-like structures
+
+    Parameters:
+    data: The input data to be converted.
+
+    Returns:
+    A NumPy ndarray.
+
+    Raises:
+    TypeError: If the data type is not supported for conversion.
+    """
+    if isinstance(data, np.ndarray):
+        return data
+
+    if isinstance(data, (list, tuple)):
+        return np.array(data)
+
+    # Check for PyTorch tensor without requiring torch to be installed
+    if type(data).__module__ == "torch":
+        return data.detach().cpu().numpy()
+
+    # Check for TensorFlow tensor without requiring tensorflow to be installed
+    if type(data).__module__.startswith("tensorflow"):
+        return data.numpy()
+
+    # Attempt to convert using NumPy's array function
+    try:
+        return np.array(data)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error(f"Unsupported data type ({type(data)}) for conversion to NumPy array:\n{e}")
+        return None

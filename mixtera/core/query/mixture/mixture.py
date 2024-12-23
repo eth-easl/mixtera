@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+import numpy as np
 from mixtera.core.query.mixture.mixture_key import MixtureKey
+from mixtera.network.client.client_feedback import ClientFeedback
 
 if TYPE_CHECKING:
     from mixtera.core.datacollection.index import ChunkerIndex
@@ -18,6 +20,7 @@ class Mixture(ABC):
             chunk_size: the size of a chunk in number of instances
         """
         self.chunk_size = chunk_size
+        self.current_step = 0
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
@@ -44,15 +47,44 @@ class Mixture(ABC):
         raise NotImplementedError("Method must be implemented in subclass!")
 
     @abstractmethod
-    def inform(self, chunker_index: "ChunkerIndex") -> None:
+    def process_index(self, chunker_index: "ChunkerIndex") -> None:
         """
         Function that is called to inform the mixture class about the overall chunker index, i.e.,
         the overall distribution in the QueryResult.
         """
         raise NotImplementedError("Method must be implemented in subclass!")
 
+    def process_client_feedback(self, feedback: ClientFeedback) -> None:
+        """
+        Updates the mixture according to the received feedback.
+
+        Args:
+            feedback: The received feedback from trainig.
+        """
+        self._update_training_step(feedback.training_steps)
+        if feedback.counts is not None and feedback.losses is not None:
+            self._process_losses(feedback.losses, feedback.counts, feedback.mixture_id)
+
+    def _update_training_step(self, training_steps: int) -> None:
+        """
+        Updates the current training step according to the received feedback.
+        The training steps can only increase.
+
+        Args:
+            training_steps: The current training step of the model.
+        """
+        self.current_step = max(self.current_step, training_steps)
+
     def stringified_mixture(self) -> dict[str, int]:
         """
         Helper fuction that returns the current mixture representation using string keys.
         """
         return {str(key): val for key, val in self.mixture_in_rows().items()}
+
+    def process_id_map(self, key_id_map: dict[MixtureKey, int]) -> None:
+        del key_id_map
+
+    def _process_losses(self, losses: np.ndarray, counts: np.ndarray, mixture_id: int) -> None:
+        del losses
+        del counts
+        del mixture_id

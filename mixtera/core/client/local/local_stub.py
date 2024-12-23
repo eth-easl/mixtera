@@ -19,6 +19,7 @@ from mixtera.utils import wait_for_key_in_dict
 
 class LocalStub(MixteraClient):
     def __init__(self, directory: Path | str) -> None:
+        super().__init__()
         if isinstance(directory, str):
             self.directory = Path(directory)
         else:
@@ -37,9 +38,6 @@ class LocalStub(MixteraClient):
         self._training_query_map_lock = mp.Lock()
         self._training_query_map: dict[str, tuple[ChunkDistributor, Query, Mixture]] = {}  # (query, mixture_object)
         self._query_cache = QueryCache(self.directory / "querycache", self._mdc)
-
-        self.feedback_queue_map: dict[str, list[ClientFeedback]] = {}
-        self._feedback_queue_map_lock = mp.Lock()
 
     def register_dataset(
         self,
@@ -88,6 +86,7 @@ class LocalStub(MixteraClient):
             ), "We cached a query that already has returned items, this should not happen!"
             query.results._query_log_dir = self.mixture_log_directory / query.job_id
             query.results._query_log_dir.mkdir(exist_ok=True)
+            query.results._key_id_map = {}  # reset map to trigger update of mixture id map
             query.results.update_mixture(args.mixture)
         else:
             query.execute(self._mdc, args.mixture, self.mixture_log_directory / query.job_id)
@@ -171,7 +170,7 @@ class LocalStub(MixteraClient):
     def _get_query_result(self, job_id: str) -> QueryResult:
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
             raise RuntimeError(f"Unknown job {job_id}")
-        return self._training_query_map[job_id][1].results
+        return self._training_query_map[job_id][0]._query_result
 
     def _get_query_chunk_distributor(self, job_id: str) -> ChunkDistributor:
         if not wait_for_key_in_dict(self._training_query_map, job_id, 60.0):
@@ -209,21 +208,12 @@ class LocalStub(MixteraClient):
                 mixture if mixture is not None else distri._query_result._mixture,
             )
 
-    def send_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
+    def process_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         if job_id not in self._training_query_map:
             logger.warning(f"There is no job with the id: {job_id}!")
             return False
 
-        with self._feedback_queue_map_lock:
-            if job_id not in self.feedback_queue_map:
-                self.feedback_queue_map[job_id] = [feedback]
-            else:
-                self.feedback_queue_map[job_id].append(feedback)
+        with self._training_query_map_lock:
+            # logger.debug(f"Received feedback: {feedback}")
+            self._get_query_result(job_id)._mixture.process_client_feedback(feedback)
             return True
-
-    def process_feedback(self, job_id: str) -> ClientFeedback | None:
-        with self._feedback_queue_map_lock:
-            if job_id not in self.feedback_queue_map or len(self.feedback_queue_map) == 0:
-                return None
-
-            return self.feedback_queue_map[job_id].pop(0)

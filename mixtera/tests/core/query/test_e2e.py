@@ -77,7 +77,13 @@ class TestQueryE2E(unittest.TestCase):
         query = Query.for_job("job_id").select(("language", "==", "Go"))
         args = QueryExecutionArgs(mixture=mixture)
         assert self.client.execute_query(query, args)
-        res = list(iter(query.results))
+
+        res = []
+        for result in query.results:
+            if result is None:
+                break
+            res.append(result)
+
         # Note while this looks like a wrong order at first, it's actually ok:
         # Across chunks, there is no need for intervals in the same file to be ordered
         # The ordering here just depends on the hash function,

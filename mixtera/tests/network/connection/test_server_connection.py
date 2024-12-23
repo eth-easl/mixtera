@@ -5,6 +5,7 @@ from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import dill
+import numpy as np
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
@@ -194,7 +195,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
             ]
         )
         mock_write_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
-        mock_read_bytes_obj.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
+        mock_read_bytes_obj.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader, timeout=600)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
@@ -451,7 +452,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
             ],
             any_order=False,
         )
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=120)
 
     @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     @patch("mixtera.network.connection.server_connection.read_int")
@@ -487,28 +488,47 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         )
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=900)
 
-    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
-    @patch("mixtera.network.connection.server_connection.read_int")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
+    @patch("mixtera.network.connection.server_connection.write_numpy_array")
+    @patch("mixtera.network.connection.server_connection.read_int")
+    @patch("mixtera.network.connection.server_connection.ServerConnection._connect_to_server")
     async def test_receive_feedback(
-        self, mock_write_utf8_string, mock_write_int, mock_read_int, mock_connect_to_server
+        self,
+        mock_connect_to_server,
+        mock_read_int,
+        mock_write_numpy_array,
+        mock_write_utf8_string,
+        mock_write_int,
     ):
-        job_id = "job_id"
-        mock_reader = create_mock_reader()
+        job_id = "test_job_id"
+        feedback = ClientFeedback(
+            training_steps=100,
+            losses=np.array([0.1, 0.2, 0.3], dtype=np.float32),
+            counts=np.array([1, 2, 3], dtype=np.int32),
+        )
+
+        mock_reader = MagicMock()
         mock_writer = create_mock_writer()
-        mock_connect_to_server.return_value = mock_reader, mock_writer
-        mock_read_int.return_value = 1
-        feedback = ClientFeedback(100)
+        mock_connect_to_server.return_value = (mock_reader, mock_writer)
+        mock_read_int.return_value = 1  # Simulate server returning success = True
 
         success = await self.server_connection._receive_feedback(job_id, feedback)
 
         self.assertTrue(success)
         mock_connect_to_server.assert_awaited_once()
         mock_write_int.assert_has_calls(
-            [call(int(ServerTask.RECEIVE_FEEDBACK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
+            [
+                call(int(ServerTask.RECEIVE_FEEDBACK), NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+                call(feedback.training_steps, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
+            ]
         )
-        mock_write_int.assert_has_calls([call(feedback.training_steps, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
-        mock_write_utf8_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
-
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
+        mock_write_utf8_string.assert_called_once_with(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+        self.assertEqual(mock_write_numpy_array.call_count, 2)
+        mock_write_numpy_array.assert_has_calls(
+            [
+                call(feedback.losses, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, mock_writer),
+                call(feedback.counts, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, mock_writer),
+            ]
+        )
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=300)

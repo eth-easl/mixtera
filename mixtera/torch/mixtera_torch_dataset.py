@@ -20,6 +20,8 @@ from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable
 
 _shared_memory_names: set[str] = set()
 
+Sample = str | list[int]
+
 
 def _cleanup_all_shared_memory() -> None:
     """Atexit handler to clean up all shared memory segments."""
@@ -46,6 +48,8 @@ class MixteraTorchDataset(IterableDataset):
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
         checkpoint_path: Path | None = None,
+        # Note that you most likely need a custom collate_fn if you use return_key_id with a PyTorch Dataloader
+        return_key_id: bool = False,
         execute_query: bool = True,
         _status_shm: shared_memory.SharedMemory | None = None,
         _comp_shm: shared_memory.SharedMemory | None = None,
@@ -60,6 +64,10 @@ class MixteraTorchDataset(IterableDataset):
         self._status_shm = _status_shm
         self._comp_shm = _comp_shm
         self._checkpoint_path = checkpoint_path
+        self.requires_callback = False
+        self._return_key_id = return_key_id
+        self._returning_tokens = result_streaming_args.chunk_reading_mixture_type == "token"
+        self._set_yield_func()
 
         assert self._dp_group_id < query_execution_args.dp_groups
         assert self._node_id < query_execution_args.nodes_per_group
@@ -94,6 +102,22 @@ class MixteraTorchDataset(IterableDataset):
                     + f"Restoring checkpoint {checkpoint_id} for job {query.job_id}!"
                 )
                 self._client.restore_checkpoint(query.job_id, checkpoint_id)
+
+    def __getstate__(self) -> dict[Any, Any]:
+        state = self.__dict__.copy()
+        if "_yield_func" in state:
+            del state["_yield_func"]
+        return state
+
+    def _set_yield_func(self) -> None:
+        if self._return_key_id:
+            self._yield_func = lambda key_id, sample: (key_id, sample)
+        else:
+            self._yield_func = lambda _, sample: sample
+
+    def __setstate__(self, state: dict[Any, Any]) -> None:
+        self.__dict__.update(state)
+        self._set_yield_func()
 
     def _init_status_shm(self) -> None:
         # This function intiailizes a shared memory segment
@@ -219,7 +243,7 @@ class MixteraTorchDataset(IterableDataset):
             logger.error(f"Error while fetching worker status from shm: {e}")
             return None
 
-    def __iter__(self) -> Generator[str, None, None]:
+    def __iter__(self) -> Generator[tuple[int, Sample] | Sample, None, None]:
         assert self._comp_shm is not None and self._status_shm is not None, "SharedMemory objects are None."
 
         try:
@@ -235,9 +259,9 @@ class MixteraTorchDataset(IterableDataset):
             completion_array[self.worker_id] = 0
             self._res_str_args.worker_id = self.worker_id
 
-            for sample_chnk_idx, sample in self._client.stream_results(self._res_str_args):
+            for sample_chnk_idx, key_id, sample in self._client.stream_results(self._res_str_args):
                 status_array[self.worker_id] = sample_chnk_idx
-                yield sample
+                yield self._yield_func(key_id, sample)
 
             with self.completion_lock:
                 completion_array[self.worker_id] = 1

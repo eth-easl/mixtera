@@ -28,7 +28,7 @@ class InferringMixture(Mixture):
         """String representation of this mixture object."""
         return f'{{"mixture": "{self._mixture}", "chunk_size": {self.chunk_size}}}'
 
-    def inform(self, chunker_index: "ChunkerIndex") -> None:
+    def process_index(self, chunker_index: "ChunkerIndex") -> None:
         logger.info("InferringMixture starts inferring mixture.")
         total, inferred_mixture_dict = infer_mixture_from_chunkerindex(chunker_index)
         logger.debug(f"total={total}, inferred_dict = {inferred_mixture_dict}")

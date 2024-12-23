@@ -3,6 +3,7 @@ This submodule contains general utility functions
 """
 
 from .prefetch_iterator import PrefetchFirstItemIterator
+from .tokenizing_iterator import ThreadedTokenizingIterator, TokenizingIterator
 from .utils import (  # noqa: F401
     DummyPool,
     defaultdict_to_dict,
@@ -34,4 +35,6 @@ __all__ = [
     "serialize_chunker_index",
     "deserialize_chunker_index",
     "PrefetchFirstItemIterator",
+    "TokenizingIterator",
+    "ThreadedTokenizingIterator",
 ]

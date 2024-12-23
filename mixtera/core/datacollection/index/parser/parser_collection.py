@@ -120,6 +120,57 @@ class MsCocoParser(MetadataParser):
         self.add_metadata(sample_id=line_number, parity=parity)
 
 
+<<<<<<< HEAD
+=======
+class PileaMetadataParser(MetadataParser):
+    """
+    Metadata parser class for The Pile dataset.
+    """
+
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="pile_set_name",
+                dtype="ENUM",
+                multiple=False,
+                nullable=False,
+                enum_options={
+                    "Pile-CC",
+                    "PubMed Central",
+                    "Books3",
+                    "OpenWebText2",
+                    "ArXiv",
+                    "Github",
+                    "FreeLaw",
+                    "StackExchange",
+                    "USPTO Backgrounds",
+                    "PubMed Abstracts",
+                    "Gutenberg (PG-19)",
+                    "OpenSubtitles",
+                    "Wikipedia (en)",
+                    "DM Mathematics",
+                    "Ubuntu IRC",
+                    "BookCorpus2",
+                    "EuroParl",
+                    "HackerNews",
+                    "YoutubeSubtitles",
+                    "PhilPapers",
+                    "NIH ExPorter",
+                    "Enron Emails",
+                },
+            ),
+        ]
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        pile_set_name = payload.get("meta", {}).get("pile_set_name")
+        if pile_set_name is None:
+            raise RuntimeError("Property 'pile_set_name' is not nullable and is missing.")
+
+        self.add_metadata(sample_id=line_number, pile_set_name=pile_set_name)
+
+
+>>>>>>> main
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
 
@@ -131,6 +182,10 @@ class MetadataParserFactory:
             "IMAGENET_WEB_DATASET": ImagenetWebDatasetMetadataParser,
             "FINEWEB": FineWebMetadataParser,
             "MSCOCO": MsCocoParser,
+<<<<<<< HEAD
+=======
+            "PILE": PileaMetadataParser,
+>>>>>>> main
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
