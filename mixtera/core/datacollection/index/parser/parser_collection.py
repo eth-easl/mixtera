@@ -120,8 +120,6 @@ class MsCocoParser(MetadataParser):
         self.add_metadata(sample_id=line_number, parity=parity)
 
 
-<<<<<<< HEAD
-=======
 class PileaMetadataParser(MetadataParser):
     """
     Metadata parser class for The Pile dataset.
@@ -170,7 +168,6 @@ class PileaMetadataParser(MetadataParser):
         self.add_metadata(sample_id=line_number, pile_set_name=pile_set_name)
 
 
->>>>>>> main
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
 
@@ -182,10 +179,7 @@ class MetadataParserFactory:
             "IMAGENET_WEB_DATASET": ImagenetWebDatasetMetadataParser,
             "FINEWEB": FineWebMetadataParser,
             "MSCOCO": MsCocoParser,
-<<<<<<< HEAD
-=======
             "PILE": PileaMetadataParser,
->>>>>>> main
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
