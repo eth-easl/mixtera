@@ -99,19 +99,23 @@ class ServerConnection:
             or (None, None) if the connection ultimately fails after the maximum number of retries.
         """
         try:
+            attempts = -1
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(max_retries),
                 wait=wait_random_exponential(multiplier=1, min=2, max=60),
                 reraise=True,
             ):
                 with attempt:
+                    attempts += 1
                     reader, writer = await asyncio.wait_for(
                         asyncio.open_connection(self._host, self._port), timeout=5.0
                     )
                     return reader, writer
-        except:
+        except Exception as e:
+            logger.error(f"[attempts = {attempts}] Error while connecting to server: {e}")
             return None, None
 
+        logger.error("This should not happen.")
         return None, None
 
     async def _execute_query(self, query: "Query", args: "QueryExecutionArgs") -> bool:
@@ -664,6 +668,7 @@ class ServerConnection:
         reader, writer = await self._connect_to_server()
 
         if reader is None or writer is None:
+            logger.error("Cannot send feedback as reader/writer are None.")
             return False
 
         # Announce we want to send a message to server.
