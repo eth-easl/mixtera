@@ -35,13 +35,44 @@ class StaticMixture(Mixture):
             assert val >= 0, "Mixture values must be non-negative."
             assert isinstance(key, MixtureKey), "Mixture keys must be of type MixtureKey."
 
-        mixture = {key: int(chunk_size * val) for key, val in user_mixture.items()}
 
-        # Ensure approximation errors do not affect final chunk size
-        if (diff := chunk_size - sum(mixture.values())) > 0:
-            mixture[list(mixture.keys())[0]] += diff
+        # todo think about this.
+        
+        # Calculate ideal counts and their floor counts
+        ideal_counts = {key: chunk_size * val for key, val in user_mixture.items()}
+        floor_counts = {key: int(ideal_count) for key, ideal_count in ideal_counts.items()}
+        fractions = {key: ideal_counts[key] - floor_counts[key] for key in user_mixture.keys()}
 
+        # Calculate total floor count and the difference to distribute
+        total_floor_count = sum(floor_counts.values())
+        diff = chunk_size - total_floor_count  # Number of counts to adjust
+
+        if diff > 0:
+            # Distribute additional counts to items with the largest fractional parts
+            sorted_keys = sorted(fractions.keys(), key=lambda k: fractions[k], reverse=True)
+            index = 0
+            num_keys = len(sorted_keys)
+            while diff > 0:
+                key = sorted_keys[index % num_keys]
+                floor_counts[key] += 1
+                diff -= 1
+                index += 1
+        elif diff < 0:
+            # Reduce counts from items with the smallest fractional parts
+            sorted_keys = sorted(fractions.keys(), key=lambda k: fractions[k])
+            index = 0
+            num_keys = len(sorted_keys)
+            while diff < 0:
+                key = sorted_keys[index % num_keys]
+                if floor_counts[key] > 0:
+                    floor_counts[key] -= 1
+                    diff += 1
+                index += 1
+
+        # The floor_counts now sum up to chunk_size
+        mixture = floor_counts
         return mixture
+
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
