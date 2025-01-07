@@ -51,6 +51,7 @@ class StaticMixture(Mixture):
         diff = chunk_size - total_floor_count  # Number of counts to adjust
 
         assert diff >= 0, f"Unexpected diff = {diff}. Did the weights sum up to 1?"
+        # largest remainders method: https://en.wikipedia.org/wiki/Quota_method
         if diff > 0:
             # Distribute additional counts to items with the largest fractional parts
             sorted_keys = sorted(fractions.keys(), key=lambda k: fractions[k], reverse=True)
