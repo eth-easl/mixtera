@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 from loguru import logger
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
+from numpy.typing import NDArray
 from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 from scipy.special import logsumexp
@@ -386,12 +387,16 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         logger.debug("Creating shared counts")
         counts_shm = shared_memory.SharedMemory(create=True, size=counts_over_time.nbytes)
-        shm_counts_over_time = np.ndarray(counts_over_time.shape, dtype=counts_over_time.dtype, buffer=counts_shm.buf)
+        shm_counts_over_time: NDArray[Any] = np.ndarray(
+            counts_over_time.shape, dtype=counts_over_time.dtype, buffer=counts_shm.buf
+        )
         np.copyto(shm_counts_over_time, counts_over_time)
 
         logger.debug("Creating shared losses")
         losses_shm = shared_memory.SharedMemory(create=True, size=losses_over_time.nbytes)
-        shm_losses_over_time = np.ndarray(losses_over_time.shape, dtype=losses_over_time.dtype, buffer=losses_shm.buf)
+        shm_losses_over_time: NDArray[Any] = np.ndarray(
+            losses_over_time.shape, dtype=losses_over_time.dtype, buffer=losses_shm.buf
+        )
         np.copyto(shm_losses_over_time, losses_over_time)
 
         args_list = []
@@ -657,7 +662,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             self.per_step_counts.append(counts.copy())
 
 
-def fit_scaling_law_for_domain(args):
+def fit_scaling_law_for_domain(
+    args: tuple[int, Any, str, str, Any, str, str, bool, int, bool, int, int | None, str | None, int]
+) -> tuple[int, Any, None | dict[str, Any]]:
     (
         k,
         counts_over_time_shape,
@@ -676,9 +683,13 @@ def fit_scaling_law_for_domain(args):
     ) = args
 
     existing_counts_shm = shared_memory.SharedMemory(name=counts_over_time_name)
-    counts_over_time = np.ndarray(counts_over_time_shape, dtype=counts_over_time_dtype, buffer=existing_counts_shm.buf)
+    counts_over_time: NDArray[Any] = np.ndarray(
+        counts_over_time_shape, dtype=counts_over_time_dtype, buffer=existing_counts_shm.buf
+    )
     existing_losses_shm = shared_memory.SharedMemory(name=losses_over_time_name)
-    losses_over_time = np.ndarray(losses_over_time_shape, dtype=losses_over_time_dtype, buffer=existing_losses_shm.buf)
+    losses_over_time: NDArray[Any] = np.ndarray(
+        losses_over_time_shape, dtype=losses_over_time_dtype, buffer=existing_losses_shm.buf
+    )
 
     counts_over_time_k = counts_over_time[:, k]
     losses_over_time_k = losses_over_time[:, k]
@@ -744,6 +755,8 @@ def fit_scaling_law_for_domain(args):
         steps_k = steps_k[::subsampling_interval]
         subsampled = True
 
+    domain_log: dict[str, Any] | None = None
+
     if len(counts_k) < 1:
         best_params = np.array([-1, -1, -1])
         domain_log = {
@@ -800,7 +813,6 @@ def fit_scaling_law_for_domain(args):
         # Handle optimization failure (e.g., keep previous parameters or use default)
         raise RuntimeError(f"Error while fitting scaling law!\n{result}")
 
-    domain_log = None
     if logging_path is not None:
         domain_log = {
             "step": total_steps,
