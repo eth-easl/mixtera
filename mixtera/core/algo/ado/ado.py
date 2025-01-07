@@ -774,7 +774,7 @@ def fit_scaling_law_for_domain(
         x_data = x_data / float(count_normalizer)
 
     # **Define the grid of initializations as per the paper**
-    alpha_grid = np.array([0.1 * i for i in range(1, 8)])
+    alpha_grid = np.array([0.1 * i for i in range(0, 8)])
     log_beta_grid = np.array(list(range(-2, 6)))
     # Note that the paper enforces log epsilon > 0.5 but nevertheless uses this as the init grid.
     # To get the same results as the paper, we use this grid.
