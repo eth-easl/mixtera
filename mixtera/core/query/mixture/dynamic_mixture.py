@@ -86,12 +86,15 @@ class DynamicMixture(Mixture):
         assert mixture_id >= 0
 
         if (mixture_np := self._mixing_alg.process_losses(losses, counts, mixture_id)) is not None:
-            logger.debug("DynamicMixture received new mixture from mixing algorithm!")
+            logger.debug(
+                "Updated dynamic mixing algorithm.\n"
+                + f"key_id_map = {self._key_id_map}\n id_key_map = {self._id_key_map}\n mixture_np = {mixture_np}"
+            )
             assert np.isclose(mixture_np.sum(), 1), (
                 f"Mixture result is {mixture_np}, which sums to {mixture_np.sum()} instead of 1. "
                 + "There is an issue in the dynamic mixing algorithm."
             )
-            self._current_mixture = StaticMixture(
-                self.chunk_size, {self._id_key_map[idx]: val for idx, val in enumerate(mixture_np) if val > 0}
-            )
+            weight_map = {self._id_key_map[idx]: val for idx, val in enumerate(mixture_np) if val > 0}
+            logger.debug(f"weight_map = {weight_map}")
+            self._current_mixture = StaticMixture(self.chunk_size, weight_map)
             logger.debug(f"New mixture is {self._current_mixture}")
