@@ -69,13 +69,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(writer)
             mock_open_connection.assert_awaited_once_with(self.host, self.port)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.read_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")
-    async def test_fetch_file_async(
-        self, mock_write_int, mock_write_utf8_string, mock_read_utf8_string, mock_open_connection
-    ):
+    async def test_fetch_file_async(self, mock_write_int, mock_write_utf8_string, mock_read_utf8_string):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -112,13 +109,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lines, ["line1", "line2", "line3"])
         mock_fetch_file.assert_awaited_once_with(file_path)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.read_int")
     @patch("mixtera.network.connection.server_connection.write_pickeled_object")
     @patch("mixtera.network.connection.server_connection.write_int")
-    async def test_execute_query_async(
-        self, mock_write_int, mock_write_pickeled_object, mock_read_int, mock_open_connection
-    ):
+    async def test_execute_query_async(self, mock_write_int, mock_write_pickeled_object, mock_read_int):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -147,13 +141,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mock_write_pickeled_object.await_count, 2)
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=60 * 15)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.read_pickeled_object")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
-    async def test_get_query_result_meta_async(
-        self, mock_write_string, mock_write_int, mock_read_pickeled_object, mock_open_connection
-    ):
+    async def test_get_query_result_meta_async(self, mock_write_string, mock_write_int, mock_read_pickeled_object):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -187,11 +178,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result_list, [[1, 2, 3], [4, 5, 6]])
         mock_get_next_result.assert_has_calls([call(job_id, 1, 1, 1), call(job_id, 1, 1, 1), call(job_id, 1, 1, 1)])
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.read_bytes_obj")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
-    async def test_get_next_result(self, mock_write_string, mock_write_int, mock_read_bytes_obj, mock_open_connection):
+    async def test_get_next_result(self, mock_write_string, mock_write_int, mock_read_bytes_obj):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -221,14 +211,11 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_string.assert_has_calls([call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_read_bytes_obj.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader, timeout=600)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_pickeled_object")
     @patch("mixtera.network.connection.server_connection.read_int")
-    async def test_register_dataset(
-        self, mock_read_int, mock_write_pickeled_object, mock_write_int, mock_write_string, mock_open_connection
-    ):
+    async def test_register_dataset(self, mock_read_int, mock_write_pickeled_object, mock_write_int, mock_write_string):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -265,13 +252,12 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_string.assert_has_calls([call(metadata_parser_identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_pickeled_object")
     @patch("mixtera.network.connection.server_connection.read_int")
     async def test_register_metadata_parser(
-        self, mock_read_int, mock_write_pickeled_object, mock_write_int, mock_write_string, mock_open_connection
+        self, mock_read_int, mock_write_pickeled_object, mock_write_int, mock_write_string
     ):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
@@ -296,11 +282,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_string.assert_has_calls([call(identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_write_pickeled_object.assert_has_calls([call(parser, NUM_BYTES_FOR_SIZES, mock_writer)])
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.read_int")
-    async def test_check_dataset_exists(self, mock_read_int, mock_write_int, mock_write_string, mock_open_connection):
+    async def test_check_dataset_exists(self, mock_read_int, mock_write_int, mock_write_string):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -324,10 +309,9 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_string.assert_has_calls([call(identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.read_pickeled_object")
-    async def test_list_datasets(self, mock_read_pickeled_object, mock_write_int, mock_open_connection):
+    async def test_list_datasets(self, mock_read_pickeled_object, mock_write_int):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -347,11 +331,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_int.assert_has_calls([call(int(ServerTask.LIST_DATASETS), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_read_pickeled_object.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.read_int")
-    async def test_remove_dataset(self, mock_read_int, mock_write_string, mock_write_int, mock_open_connection):
+    async def test_remove_dataset(self, mock_read_int, mock_write_string, mock_write_int):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -373,7 +356,6 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_string.assert_has_calls([call(dataset_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_pickeled_object")
@@ -386,7 +368,6 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_pickeled_object,
         mock_write_string,
         mock_write_int,
-        mock_open_connection,
     ):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
@@ -441,13 +422,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         mock_write_pickeled_object.assert_has_calls([call(setup_func, NUM_BYTES_FOR_SIZES, mock_writer)])
         mock_write_pickeled_object.assert_has_calls([call(calc_func, NUM_BYTES_FOR_SIZES, mock_writer)])
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.read_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
-    async def test_checkpoint(
-        self, mock_write_utf8_string, mock_write_int, mock_read_utf8_string, mock_open_connection
-    ):
+    async def test_checkpoint(self, mock_write_utf8_string, mock_write_int, mock_read_utf8_string):
         """Test the _checkpoint method of ServerConnection."""
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
@@ -489,12 +467,14 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         )
         mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader, timeout=900)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.read_int")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     async def test_checkpoint_completed(
-        self, mock_write_utf8_string, mock_write_int, mock_read_int, mock_open_connection
+        self,
+        mock_write_utf8_string,
+        mock_write_int,
+        mock_read_int,
     ):
         """Test the _checkpoint_completed method of ServerConnection."""
         mock_reader = create_mock_reader()
@@ -532,13 +512,10 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
         )
         mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=120)
 
-    @patch("asyncio.open_connection")
     @patch("mixtera.network.connection.server_connection.read_int")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
-    async def test_restore_checkpoint(
-        self, mock_write_utf8_string, mock_write_int, mock_read_int, mock_open_connection
-    ):
+    async def test_restore_checkpoint(self, mock_write_utf8_string, mock_write_int, mock_read_int):
         """Test the _restore_checkpoint method of ServerConnection."""
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
@@ -576,10 +553,8 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_numpy_array")
     @patch("mixtera.network.connection.server_connection.read_int")
-    @patch("asyncio.open_connection")
     async def test_receive_feedback(
         self,
-        mock_open_connection,
         mock_read_int,
         mock_write_numpy_array,
         mock_write_utf8_string,
