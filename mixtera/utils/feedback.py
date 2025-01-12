@@ -33,4 +33,4 @@ def handle_mixtera_feedback(
 
     success = torch_dataset._client.process_feedback(job_id, feedback)
     if not success:
-        logger.error("Error while procesisng client feedback.")
+        logger.error("Error while processing client feedback.")

@@ -2,12 +2,15 @@
 # Mathematical notation with snake-case is harder to read.
 
 import json
+import multiprocessing as mp
+import os
+from multiprocessing import shared_memory
 from typing import Any
 
 import numpy as np
 from loguru import logger
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
-from scipy.interpolate import UnivariateSpline
+from numpy.typing import NDArray
 from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 from scipy.special import logsumexp
@@ -20,6 +23,14 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
     This class implements the ADO algorithm for dynamically adjusting mixture coefficients
     based on domain-specific scaling laws fitted to the accumulated losses and counts.
+
+    There currently are 3 known differences to the paper:
+        1) We use a different  clip_min_probability implementation and clip pi_t,
+            while the paper implementation clips rho_t.
+        2) We normalize rho_t and pi_bar_t to be a true distribution after weighting
+            its components, but the paper implementation does not normalize.
+        3) The paper first updates the history and then calculates the distribution,
+            while we do it the other way around currently.
     """
 
     def __init__(
@@ -32,12 +43,10 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         scaling_law_update_interval: int = 1000,
         subsampling_interval: int = 10,
         ignore_initial_steps: int = 500,
+        start_step: int = 1000,
         savgol: bool = True,
-        spline_before_savgol: bool = False,
         use_same_step_size: bool = True,
         count_normalizer: None | int = None,
-        use_rho_history_adjustment: bool = False,
-        rho_history_gamma: float = 0.9,
         logging_path: str | None = None,
     ) -> None:
         """
@@ -47,17 +56,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             variant: The variant of the algorithm ('vanilla', 'adjusted_v1', 'adjusted_v2').
             gamma1: The smoothing factor for the credit assignment score h(t).
             gamma2: The smoothing factor for the data policy pi(t).
-                    Note that while the paper mentions 0.9 as a default, to align with their experiments,
-                    this needs to be 0.1
             s: The exponent used in computing the credit assignment score lambda_k(t).
             delta_min: The minimum probability assigned to each domain that has been sampled at least once.
             scaling_law_update_interval: The number of steps between each scaling law parameter update.
             subsampling_interval: For subsampling during scaling law fitting
             ignore_initial_steps: Number of initial steps to ignore before fitting scaling laws.
             savgol: Whether to apply a savgol filter on the losses to smoothen them
-            spline_before_savgol: Whether to fit all x values onto a common grid using spline interpolation.
-                                  Applied _per domain_. Mutually exclusive with use_same_step_size.
-                                  Not in the original paper.
             use_same_step_size: If True, all sampled domains increase their count. Done in the original paper
                                 to more scaling laws more comparable and account for transfer learning.
             count_normalizer: If set to a positive int, we divide all counts by this when interacting with scaling laws.
@@ -65,8 +69,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                               for parameters are provided by the original paper.
                               They used sample count with 1024 tokens/sample. Hence, to align with the paper, _if_
                               your inputs are tokens (default assumption by Mixtera), this needs to be 1024.
-            use_p_history_adjustment: If True, applies p_history adjustment to rho_t computation.
-            p_history_gamma: Smoothing factor for updating p_history.
             logging_path: If provided, we will save debug json logs to this path.
         """
         super().__init__()
@@ -79,15 +81,13 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.ignore_initial_steps = ignore_initial_steps
         self.subsampling_interval = subsampling_interval
         self.savgol = savgol
-        self.spline_before_savgol = spline_before_savgol
         self.logging_path = logging_path
         self.use_same_step_size = use_same_step_size
         self.count_normalizer = count_normalizer
-        self.use_rho_history_adjustment = use_rho_history_adjustment
-        self.rho_history_gamma = rho_history_gamma
+        self.start_step = start_step
 
-        if use_same_step_size and spline_before_savgol:
-            raise RuntimeError("Can only use either `use_same_step_size` or `spline_before_savgol`")
+        if self.start_step <= self.ignore_initial_steps:
+            raise ValueError("start step must be bigger than ignore initial steps!")
 
         # Initialize per-domain data structures
         self.total_steps = 0  # Total number of steps processed
@@ -98,7 +98,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.pi_t: np.ndarray | None = None  # Data policy pi_k(t)
         self.pi_bar_t_minus_1: np.ndarray | None = None  # Previous moving average pī_k(t-1)
         self.scaling_law_params: np.ndarray | None = None  # Scaling law parameters [log_beta_k, log_epsilon_k, alpha_k]
-        self.rho_history: np.ndarray | None = None
 
         # Keep track of per-step counts and losses
         self.per_step_counts: list[np.ndarray] = []  # List of counts per step per domain
@@ -122,9 +121,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "subsampling_interval": subsampling_interval,
                 "ignore_initial_steps": ignore_initial_steps,
                 "savgol": savgol,
-                "spline_before_savgol": spline_before_savgol,
-                "use_rho_history_adjustment": use_rho_history_adjustment,
-                "rho_history_gamma": rho_history_gamma,
             }
             self.log_entries: list[Any] = []
             self.log_scaling_laws: list[Any] = []
@@ -216,6 +212,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "entries": self.log_entries,
                 "scaling_laws": self.log_scaling_laws,
                 "log_counts": self.log_counts,
+                "mu_k": self.mu_k.tolist() if self.mu_k is not None else None,
             }
             with open(self.logging_path, "w+", encoding="utf-8") as f:
                 json.dump(log_data, f, indent=4)
@@ -251,7 +248,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             ), f"len(self.mu_k) = {len(self.mu_k)} != num_domains = {num_domains}\n\n{self.mu_k}"
 
         # **Warm-up Handling**
-        if self.total_steps <= self.ignore_initial_steps + self.scaling_law_update_interval:
+        if self.total_steps < self.start_step:
             # During warm-up, we use the initial mixture and do not update it
             # Since we cannot use the first information during self.ignore_initial_steps,
             # we need to wait an additional interval before actually starting the update.
@@ -261,10 +258,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                     "step": self.total_steps,
                     "counts": self.counts.tolist() if self.counts is not None else None,
                     "losses": self.losses.tolist() if self.losses is not None else None,
-                    "rho_history": self.rho_history.tolist() if self.rho_history is not None else None,
                 }
                 self.log_entries.append(step_log)
-                if self.total_steps % 50 == 0:
+                if self.total_steps % 5000 == 0:
                     self.write_logs()
             return None
 
@@ -273,9 +269,8 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
         updated_scaling_laws = False
         # Fit scaling laws immediately after the warm-up period ends, and then at intervals
-        if (self.total_steps == self.ignore_initial_steps + 1) or (
-            self.total_steps > self.ignore_initial_steps
-            and (self.total_steps - self.ignore_initial_steps - 1) % self.scaling_law_update_interval == 0
+        if (self.total_steps == self.start_step) or (
+            (self.total_steps - self.start_step) % self.scaling_law_update_interval == 0
         ):
             self.fit_scaling_laws()
             updated_scaling_laws = True
@@ -349,13 +344,12 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 "rho_t": self.rho_t.tolist() if hasattr(self, "rho_t") else None,
                 "dL_dn": dL_dn.tolist() if "dL_dn" in locals() else None,
                 "scaling_law_params": self.scaling_law_params.tolist() if self.scaling_law_params is not None else None,
-                "rho_history": self.rho_history.tolist() if self.rho_history is not None else None,
             }
             self.log_entries.append(step_log)
 
         self.handed_out_first_update = True
 
-        if (self.total_steps % 50 == 0) or force_log:
+        if (self.total_steps % 5000 == 0) or force_log:
             self.write_logs()
 
         return self.pi_t
@@ -387,182 +381,60 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         self.scaling_law_params = np.zeros((num_domains, 3))  # [log_beta_k, log_epsilon_k, alpha_k]
         assert self.scaling_law_params is not None
 
+        logger.debug("Creating initial numpy arrays")
         counts_over_time = np.array(self.per_step_counts)
         losses_over_time = np.array(self.per_step_losses)
 
-        # Compute cumulative counts per domain
-        cumulative_counts = np.cumsum(counts_over_time, axis=0)
+        logger.debug("Creating shared counts")
+        counts_shm = shared_memory.SharedMemory(create=True, size=counts_over_time.nbytes)
+        shm_counts_over_time: NDArray[Any] = np.ndarray(
+            counts_over_time.shape, dtype=counts_over_time.dtype, buffer=counts_shm.buf
+        )
+        np.copyto(shm_counts_over_time, counts_over_time)
 
-        # TODO(#create issue): We could use a multiprocessing Pool here.
-        for k in tqdm(range(num_domains), desc="Fitting per-domain scaling laws.", total=num_domains, unit="domains"):
-            nonc_counts_k = counts_over_time[:, k]  # Non cumulative counts over time
-            counts_k = cumulative_counts[:, k]
-            losses_k = losses_over_time[:, k]
-            steps_k = np.arange(len(counts_k))
+        logger.debug("Creating shared losses")
+        losses_shm = shared_memory.SharedMemory(create=True, size=losses_over_time.nbytes)
+        shm_losses_over_time: NDArray[Any] = np.ndarray(
+            losses_over_time.shape, dtype=losses_over_time.dtype, buffer=losses_shm.buf
+        )
+        np.copyto(shm_losses_over_time, losses_over_time)
 
-            # Select only items where counts are > 0
-            valid_indices = counts_k > 0
-            counts_k = counts_k[valid_indices]
-            losses_k = losses_k[valid_indices]
-            steps_k = steps_k[valid_indices]
-            nonc_counts_k = nonc_counts_k[valid_indices]
+        args_list = []
+        for k in tqdm(range(num_domains), desc="Preparing multiprocesisng arguments"):
+            args = (
+                k,
+                counts_over_time.shape,
+                counts_over_time.dtype.str,
+                counts_shm.name,
+                losses_over_time.shape,
+                losses_over_time.dtype.str,
+                losses_shm.name,
+                self.use_same_step_size,
+                self.ignore_initial_steps,
+                self.savgol,
+                self.subsampling_interval,
+                self.count_normalizer,
+                self.logging_path,
+                self.total_steps,
+            )
+            args_list.append(args)
 
-            if self.use_same_step_size:
-                # When using the same step size, we impute missing losses
-                # This aligns with the paper but we could also make this a flag at some point
-                # to either impute losses or select only losses > 0.
-                for t in range(1, len(losses_k)):
-                    if losses_k[t] == 0:
-                        losses_k[t] = losses_k[t - 1]
-            else:
-                # If fitting on x data for each domain, select only items where loses are > 0
-                valid_indices = losses_k > 0
-                counts_k = counts_k[valid_indices]
-                losses_k = losses_k[valid_indices]
-                steps_k = steps_k[valid_indices]
-                nonc_counts_k = nonc_counts_k[valid_indices]
+        num_cores = os.cpu_count() or 1
+        num_workers = max(num_cores - 4, 1)
+        num_workers = max(min(num_workers, len(args_list)), 1)
 
-            # Apply filter for initial steps
-            valid_indices = steps_k > self.ignore_initial_steps
-            counts_k = counts_k[valid_indices]
-            losses_k = losses_k[valid_indices]
-            steps_k = steps_k[valid_indices]
-            nonc_counts_k = nonc_counts_k[valid_indices]
+        with mp.Pool(num_workers) as pool:
+            results = pool.map(fit_scaling_law_for_domain, args_list)
 
-            # Apply sampling if we have a bit of data
-            subsampled = False
-            if len(counts_k) > 4 * self.subsampling_interval:
-                counts_k = counts_k[:: self.subsampling_interval]
-                losses_k = losses_k[:: self.subsampling_interval]
-                steps_k = steps_k[:: self.subsampling_interval]
-                subsampled = True
+        counts_shm.close()
+        counts_shm.unlink()
+        losses_shm.close()
+        losses_shm.unlink()
 
-            if len(counts_k) < 1:
-                logger.debug(
-                    f"Too little data to fit scaling laws for domain {k}. Most likely due to unsampled domain."
-                )
-                if self.counts[k] > 0:
-                    raise RuntimeError(
-                        f"We sampled domain {k}"
-                        + "during the initial steps but not between that and fitting the first scaling laws."
-                        + "Please either increase your interval size or"
-                        + "decrease or warm up steps to ensure this does not happen."
-                    )
-
-                self.scaling_law_params[k] = (-1, -1, -1)
-                continue
-
-            x_data = counts_k
-            y_data = losses_k
-            applied_savgol = False
-
-            if self.savgol:
-                interpolated_losses = losses_k
-                num_x = len(counts_k)
-                if self.spline_before_savgol:
-                    counts_diffs = np.diff(counts_k)
-                    median_diff = np.median(counts_diffs)
-                    if median_diff <= 0:
-                        logger.debug(f"median_diff = {median_diff} falling back to linear spacing")
-                        # If the median difference is zero or negative, fall back to linear spacing
-                        median_diff = (counts_k[-1] - counts_k[0]) / (len(counts_k) - 1)
-                        logger.debug(f"median_diff now = {median_diff}")
-
-                    if median_diff <= 0:
-                        logger.debug("All counts are the same; cannot create a grid")
-                        counts_grid = counts_k.copy()
-                    else:
-                        # Create evenly spaced counts grid using the median difference
-                        num_points = int(np.ceil((counts_k[-1] - counts_k[0]) / median_diff)) + 1
-                        counts_grid = np.linspace(counts_k[0], counts_k[0] + median_diff * (num_points - 1), num_points)
-
-                    # Use spline interpolation to map losses onto the counts grid
-                    spline = UnivariateSpline(counts_k, losses_k, s=0, k=3)
-                    interpolated_losses = spline(counts_grid)
-                    num_x = len(counts_grid)
-                    x_data = counts_grid
-
-                window_length = min(101, num_x)
-                if window_length % 2 == 0:
-                    window_length -= 1  # window_length must be odd
-                    logger.debug(f"Adjusted window length to {window_length} for domain {k}")
-                if window_length > 3:
-                    y_data = savgol_filter(interpolated_losses, window_length=window_length, polyorder=3)
-                    applied_savgol = True
-                else:
-                    logger.debug(
-                        f"Not enough data points to apply Savitzky-Golay filter for domain {k}. Using original data"
-                    )
-                    x_data = counts_k
-                    y_data = losses_k
-
-            if self.count_normalizer is not None and self.count_normalizer > 1:
-                # Can be used to convert tokens into samples
-                x_data = x_data / float(self.count_normalizer)
-
-            # **Define the grid of initializations as per the paper**
-            alpha_grid = np.array([0.1 * i for i in range(1, 8)])  # [0.1, 0.2, ..., 0.7]
-            log_beta_grid = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-            log_epsilon_grid = np.array([0.75, 1.0, 1.5, 2.0, 4.0, 7.0])
-
-            # Create all combinations of initial guesses
-            grid_search = [
-                (log_beta_0, log_epsilon_0, alpha_0)
-                for alpha_0 in alpha_grid
-                for log_beta_0 in log_beta_grid
-                for log_epsilon_0 in log_epsilon_grid
-            ]
-
-            best_loss = np.inf
-            best_params = None
-
-            bounds = [
-                (0.5, 6.5),  # log_beta_k ∈ [0.5, 6.5]
-                (0.5, 10.0),  # log_epsilon_k ∈ [0.5, 10.0]
-                (0.05, 0.8),
-            ]  # alpha_k ∈ [0.05, 0.8]
-
-            for initial_guess in grid_search:
-                result = minimize(
-                    AdoDynamicMixing.scaling_law_loss,
-                    initial_guess,
-                    args=(x_data, y_data),
-                    bounds=bounds,
-                    method="L-BFGS-B",
-                    options={"maxiter": 200},
-                )
-
-                if result.success and result.fun < best_loss:
-                    # logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
-                    best_loss = result.fun
-                    best_params = result.x
-
-            if best_params is not None:
-                assert self.scaling_law_params is not None
-                self.scaling_law_params[k] = best_params
-                logger.debug(f"Selected best_params {best_params} with loss = {best_loss}")
-            else:
-                # Handle optimization failure (e.g., keep previous parameters or use default)
-                raise RuntimeError(f"Error while fitting scaling law!\n{result}")
-
-            if self.logging_path is not None:
-                domain_log = {
-                    "step": self.total_steps,
-                    "domain_index": k,
-                    "counts_k": counts_k.tolist(),
-                    "losses_k": losses_k.tolist(),
-                    "x_data": x_data.tolist(),
-                    "y_data": y_data.tolist(),
-                    "steps_k": steps_k.tolist(),
-                    "interpolated_losses": interpolated_losses.tolist() if "interpolated_losses" in locals() else None,
-                    "best_params": best_params.tolist() if best_params is not None else None,
-                    "window_length": window_length if "window_length" in locals() else None,
-                    "num_points": num_points if "num_points" in locals() else None,
-                    "median_diff": median_diff if "median_diff" in locals() else None,
-                    "best_loss": best_loss,
-                    "applied_savgol": applied_savgol,
-                    "subsampled": subsampled,
-                }
+        for result in results:
+            k, best_params, domain_log = result
+            self.scaling_law_params[k] = best_params
+            if domain_log is not None and self.logging_path is not None:
                 self.log_scaling_laws.append(domain_log)
 
         logger.debug("Finished fitting scaling laws.")
@@ -606,7 +478,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         # Constraints to keep parameters in reasonable ranges
         penalty = 0.0
         penalty += max(0, alpha_k - 0.8) * 1e3  # α_k <= 0.8
-        penalty += max(0, 0.05 - alpha_k) * 1e3  # α_k >= 0.05
+        penalty += max(0, 0.001 - alpha_k) * 1e3  # α_k >= 0 roughly (as in the original implementation)
         penalty += max(0, log_beta_k - 6.5) * 1e3  # log_beta_k <= 6.5
         penalty += max(0, 0.5 - log_epsilon_k) * 1e3  # log_epsilon_k >= 0.5
         loss = np.mean(squared_loss) + penalty
@@ -662,15 +534,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         lambda_k_t = self.h_t.copy() ** self.s
 
         rho_num = self.mu_k * lambda_k_t * (-dL_dn)
-
-        if self.use_rho_history_adjustment:
-            assert self.rho_history is not None, "p_history should have been initialized."
-            assert (
-                self.rho_history.shape == rho_num.shape
-            ), f"self.rho_history.shape = {self.rho_history.shape} != rho_num.shape = {rho_num.shape}"
-            adjustment_factor = np.sqrt(self.rho_history * (1 - self.rho_history))
-            rho_num *= adjustment_factor
-
         rho_num = np.maximum(rho_num, 0)
 
         rho_den: float | np.floating = np.sum(rho_num)
@@ -705,6 +568,9 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
         Returns:
             The data policy pi_k(t) after enforcing minimum probabilities.
         """
+        # Note that this currently does NOT align with the papers implementation.
+        # The paper IMPLEMENTATION uses a different redistribution mechanism and clips rho_t,
+        # while we currently clip pi_t.
         assert self.pi_t is not None and self.mu_k is not None
 
         pi_t_adjusted = self.pi_t.copy()
@@ -768,8 +634,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
                 self.pi_bar_t_minus_1 = np.concatenate(
                     [self.pi_bar_t_minus_1, np.zeros(size_diff, dtype=self.pi_bar_t_minus_1.dtype)]
                 )
-            if self.rho_history is not None:
-                self.rho_history = np.concatenate([self.rho_history, np.zeros(size_diff, dtype=self.rho_history.dtype)])
 
         # Keep track of per-step counts and losses
         # Adjust the lengths if necessary
@@ -792,16 +656,177 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             assert num_valid_domains > 0
             total_tokens = counts.sum()
             increment = np.zeros_like(counts, dtype=counts.dtype)
-            increment[self.counts > 0] = int(total_tokens / num_valid_domains)
+            increment[self.counts > 0] = int(total_tokens)
             self.per_step_counts.append(increment)
         else:
             self.per_step_counts.append(counts.copy())
 
-        if self.use_rho_history_adjustment:
-            count_sum = counts.sum()
-            if count_sum > 0:
-                count_dist = counts / count_sum
-                if self.rho_history is None:
-                    self.rho_history = np.zeros_like(counts, dtype=np.float32)
-                gamma = self.rho_history_gamma
-                self.rho_history = gamma * self.rho_history + (1 - gamma) * count_dist
+
+def fit_scaling_law_for_domain(
+    args: tuple[int, Any, str, str, Any, str, str, bool, int, bool, int, int | None, str | None, int]
+) -> tuple[int, Any, None | dict[str, Any]]:
+    (
+        k,
+        counts_over_time_shape,
+        counts_over_time_dtype,
+        counts_over_time_name,
+        losses_over_time_shape,
+        losses_over_time_dtype,
+        losses_over_time_name,
+        use_same_step_size,
+        ignore_initial_steps,
+        savgol,
+        subsampling_interval,
+        count_normalizer,
+        logging_path,
+        total_steps,
+    ) = args
+
+    existing_counts_shm = shared_memory.SharedMemory(name=counts_over_time_name)
+    counts_over_time: NDArray[Any] = np.ndarray(
+        counts_over_time_shape, dtype=counts_over_time_dtype, buffer=existing_counts_shm.buf
+    )
+    existing_losses_shm = shared_memory.SharedMemory(name=losses_over_time_name)
+    losses_over_time: NDArray[Any] = np.ndarray(
+        losses_over_time_shape, dtype=losses_over_time_dtype, buffer=existing_losses_shm.buf
+    )
+
+    counts_over_time_k = counts_over_time[:, k]
+    losses_over_time_k = losses_over_time[:, k]
+    steps_k = np.arange(len(counts_over_time_k))
+
+    nonc_counts_k = counts_over_time_k  # Non cumulative counts over time
+    counts_k = np.cumsum(counts_over_time_k)
+    losses_k = losses_over_time_k
+
+    # First, we need to clean up the y data (losses)
+    # We either impute values (as per the official implementation)
+    # or remove them.
+
+    if use_same_step_size:
+        # When using the same step size, we impute missing losses
+        # This aligns with the paper but we could also make this a flag at some point
+        # to either impute losses or select only losses > 0.
+        for t in range(1, len(losses_k)):
+            if losses_k[t] == 0:
+                losses_k[t] = losses_k[t - 1]
+    else:
+        # If fitting on x data for each domain, select only items where loses are > 0
+        valid_indices = losses_k > 0
+        counts_k = counts_k[valid_indices]
+        losses_k = losses_k[valid_indices]
+        steps_k = steps_k[valid_indices]
+        nonc_counts_k = nonc_counts_k[valid_indices]
+
+    # After having a continous set of losses, we optionally apply a savgol filter
+    applied_savgol = False
+    if savgol:
+        window_length = min(101, len(counts_k))
+        if window_length % 2 == 0:
+            window_length -= 1  # window_length must be odd
+            logger.debug(f"Adjusted window length to {window_length} for domain {k}")
+        if window_length > 3:
+            losses_k = savgol_filter(losses_k.copy(), window_length=window_length, polyorder=3)
+            applied_savgol = True
+        else:
+            logger.debug(f"Not enough data points to apply Savitzky-Golay filter for domain {k}.")
+
+    # As a third step, we only select entries in our time series where we sampled data up to that point.
+    # At the beginning, we might have domains that we did not sample yet, and there we cannot run any prediction
+    # Hence, this filters out those points at the start.
+    valid_indices = counts_k > 0
+    counts_k = counts_k[valid_indices]
+    losses_k = losses_k[valid_indices]
+    steps_k = steps_k[valid_indices]
+    nonc_counts_k = nonc_counts_k[valid_indices]
+
+    # Last, we filter out losses that were collected before the ignore_initial_steps option.
+    valid_indices = steps_k > ignore_initial_steps
+    counts_k = counts_k[valid_indices]
+    losses_k = losses_k[valid_indices]
+    steps_k = steps_k[valid_indices]
+    nonc_counts_k = nonc_counts_k[valid_indices]
+
+    # Subsample data
+    subsampled = False
+    if subsampling_interval > 1:
+        counts_k = counts_k[::subsampling_interval]
+        losses_k = losses_k[::subsampling_interval]
+        steps_k = steps_k[::subsampling_interval]
+        subsampled = True
+
+    domain_log: dict[str, Any] | None = None
+
+    if len(counts_k) < 1:
+        best_params = np.array([-1, -1, -1])
+        domain_log = {
+            "step": total_steps,
+            "domain_index": k,
+            "error": "Too little data to fit scaling laws.",
+        }
+        return k, best_params, domain_log
+
+    x_data = counts_k
+    y_data = losses_k
+
+    if count_normalizer is not None and count_normalizer > 1:
+        # Can be used to convert tokens into samples
+        x_data = x_data / float(count_normalizer)
+
+    # **Define the grid of initializations as per the paper**
+    alpha_grid = np.array([0.1 * i for i in range(0, 8)])
+    log_beta_grid = np.array(list(range(-2, 6)))
+    # Note that the paper enforces log epsilon > 0.5 but nevertheless uses this as the init grid.
+    # To get the same results as the paper, we use this grid.
+    log_epsilon_grid = np.array([-2.0, -1.5, -1.0, -0.5, 1.0, 1.5])
+
+    # Create all combinations of initial guesses
+    grid_search = [
+        (log_beta_0, log_epsilon_0, alpha_0)
+        for alpha_0 in alpha_grid
+        for log_beta_0 in log_beta_grid
+        for log_epsilon_0 in log_epsilon_grid
+    ]
+
+    best_loss = np.inf
+    best_params = None
+
+    for initial_guess in grid_search:
+        # We don't use the bounds parameter since this gives different results than the paper.
+        # Instead, as in the original implementation, we rely on penalty terms in the loss.
+        result = minimize(
+            AdoDynamicMixing.scaling_law_loss,
+            initial_guess,
+            args=(x_data, y_data),
+            method="L-BFGS-B",
+            options={"maxiter": 200, "gtol": 1e-5},
+        )
+
+        if result.success and result.fun < best_loss:
+            # logger.debug(f"Found new params = {result.x} with loss {result.fun} < {best_loss}")
+            best_loss = result.fun
+            best_params = result.x
+
+    if best_params is not None:
+        logger.debug(f"Selected best_params {best_params} with loss = {best_loss}")
+    else:
+        # Handle optimization failure (e.g., keep previous parameters or use default)
+        raise RuntimeError(f"Error while fitting scaling law!\n{result}")
+
+    if logging_path is not None:
+        domain_log = {
+            "step": total_steps,
+            "domain_index": k,
+            "counts_k": counts_k.tolist(),
+            "losses_k": losses_k.tolist(),
+            "x_data": x_data.tolist(),
+            "y_data": y_data.tolist(),
+            "steps_k": steps_k.tolist(),
+            "best_params": best_params.tolist() if best_params is not None else None,
+            "window_length": window_length if "window_length" in locals() else None,
+            "best_loss": best_loss,
+            "applied_savgol": applied_savgol,
+            "subsampled": subsampled,
+        }
+
+    return k, best_params, domain_log

@@ -127,6 +127,10 @@ class ResultChunk:
         self._tokenization_use_thread: bool = True
         self._tokenization_one_sample: bool = True
 
+        self._tokenization_eos = False
+        self._tokenization_bos = False
+        self._tokenization_overlap = True
+
         self._iterator: Iterator[tuple[int, int, Sample]] | None = None
 
     def configure_result_streaming(self, client: "MixteraClient", args: "ResultStreamingArgs") -> None:
@@ -223,6 +227,7 @@ class ResultChunk:
 
             logger.debug("Instantiating tokenizer - this might take a bit.")
             self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
+
             logger.debug("Tokenizer instantiated.")
 
             self._tokenization_batch_size = args.chunk_reading_tokenization_bs
@@ -232,6 +237,9 @@ class ResultChunk:
             self._tokenization_one_sample = args.chunk_reading_token_at_least_one_sample
             self._window_best_effort = False  # enforce mixture on token level
             self._tokenization_use_thread = args.chunk_reading_token_separate_thread
+            self._tokenization_eos = args.chunk_reading_eos
+            self._tokenization_bos = args.chunk_reading_bos
+            self._tokenization_overlap = args.chunk_reading_token_overlapping
 
     def _infer_mixture(self) -> dict[MixtureKey, int]:
         return StaticMixture(*infer_mixture_from_chunkerindex(self._result_index)).mixture_in_rows()
@@ -287,6 +295,9 @@ class ResultChunk:
                     self._sequence_length,
                     self._tokenization_batch_size,
                     self._tokenization_one_sample,
+                    self._tokenization_overlap,
+                    self._tokenization_eos,
+                    self._tokenization_bos,
                 )
                 for key, iterator in active_iterators.items()
             }
@@ -311,7 +322,7 @@ class ResultChunk:
             self._mixture, dict
         ), "Mixture must be defined for parallel reading when getting the process counts, this should not happen."
 
-        #  Determine the number of processes to use
+        #  Determine the number of processes to use
         reader_count = min(
             self._degree_of_parallelism if self._degree_of_parallelism is not None else mp.cpu_count(),
             mp.cpu_count(),
@@ -458,7 +469,7 @@ class ResultChunk:
         total_counts = sum(count for _, count in initial_counts)
         remainder = self._window_size - total_counts
 
-        #  Adjust the counts to ensure that the window size is met
+        #  Adjust the counts to ensure that the window size is met
         adjusted_counts = [
             (key, count + remainder if i == 0 else count) for i, (key, count) in enumerate(initial_counts)
         ]
@@ -591,7 +602,7 @@ class ResultChunk:
                 for file_id, ranges in file_entries.items():
                     workloads[property_combination].append((dataset_id, file_id, ranges))
 
-            #  Shuffle the workloads to ensure that the order of the files is (reproducibly) random
+            #  Shuffle the workloads to ensure that the order of the files is (reproducibly) random
             seed_everything_from_list([property_combination])
             random.shuffle(workloads[property_combination])
 
