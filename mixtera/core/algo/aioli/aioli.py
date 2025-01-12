@@ -43,7 +43,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.aioli_diagonal = aioli_diagonal
         self.domain_count = len(self.losses)
         self.graph = np.zeros((self.domain_count, self.domain_count))
-        self.weights: np.ndarray = None  # The latest weights after update steps have been completed.
+        self.weights: np.ndarray | None = None  # The latest weights after update steps have been completed.
         self.one_hot_factor = one_hot_factor
         self.ema_graph = None
         self.ema = None
@@ -57,6 +57,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             for i in range(self.domain_count):
                 weight_row = np.ones(self.domain_count) * (1 - self.one_hot_factor) / (self.domain_count - 1)
                 weight_row[i] = self.one_hot_factor
+                # TODO(bguney): Vectorize the weight matrix
                 weight_matrix[i] = weight_row
 
             new_graph = np.zeros((self.domain_count, self.domain_count))
@@ -98,11 +99,10 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         num_internal_domains = len(self.losses)
         num_domains = max(num_incoming_domains, num_internal_domains)
 
+        super()._update_state(losses, counts)
+
         if num_internal_domains < num_domains:
-            # Expand the internal arrays to accommodate new domains
-            size_diff = num_domains - num_internal_domains
-            self.losses = np.concatenate([self.losses, np.zeros(size_diff, dtype=self.losses.dtype)])
-            self.counts = np.concatenate([self.counts, np.zeros(size_diff, dtype=self.counts.dtype)])
+            # Updating the relationship graph
             self.graph = np.zeros((num_domains, num_domains))
 
         # Assign the incoming losses and counts
@@ -136,20 +136,17 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
                     logger.info(f"Graph after normalization: {self.graph}")
 
             if self.ema is not None:
-                if self.ema_graph is None:
-                    self.ema_graph = self.graph
-                else:
-                    self.ema_graph = (1 - self.ema) * self.graph + self.ema * self.ema_graph
+                self.ema_graph = (
+                    self.graph if self.ema_graph is None else (1 - self.ema) * self.graph + self.ema * self.ema_graph
+                )
                 logger.info(f"Applying ema, smoothed graph is {self.ema_graph}")
                 self.weights = np.multiply(weights_init, np.exp(self.eta * self.ema_graph.sum(axis=0)))
             else:
-                if self.weights is None:
-                    self.weights = np.multiply(weights_init, np.exp(self.eta * self.graph.sum(axis=0)))
-                else:
-                    self.weights = np.multiply(self.weights, np.exp(self.eta * self.graph.sum(axis=0)))
+                weights = weights_init if self.weights is None else self.weights
+                self.weights = np.multiply(weights, np.exp(self.eta * self.graph.sum(axis=0)))
 
             logger.info(f"The new mixture proportions={self.weights/sum(self.weights)}. ")
-            self.weights = self.weights / sum(self.weights)
+            self.weights = self.weights / np.sum(self.weights)
             self.last_generated_mixture = self.weights
             return self.weights
 
