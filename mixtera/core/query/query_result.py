@@ -334,7 +334,10 @@ class QueryResult:
                 }
                 original_sizes = remaining_sizes.copy()
 
-                while any(remaining_sizes.values()):
+                global_progress_made = True
+                while global_progress_made and any(remaining_sizes.values()):
+                    global_progress_made = False
+
                     # Sort to guarantee same handling for semantically same mixtures
                     for mixture_key in sorted(remaining_sizes.keys()):
                         logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
@@ -382,6 +385,7 @@ class QueryResult:
                                                 # are sorted as well, we use a merge operation.
 
                                         progress_made = True
+                                        global_progress_made = True
 
                                         if remaining_sizes[mixture_key] == 0:
                                             logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
