@@ -324,7 +324,8 @@ class QueryResult:
                 return
 
             mixture = base_mixture.mixture_in_rows()
-            is_strict = base_mixture.strict  # best-effort mode if False
+            is_strict = mixture.is_strict
+
             chunk_success = False
             if mixture:
                 if previous_mixture != mixture:
@@ -337,11 +338,11 @@ class QueryResult:
 
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
-                        key: size for key, size in mixture.items()
+                    key: size for key, size in mixture.items()
                 }
                 original_sizes = remaining_sizes.copy()
 
-                while any(size > 0 for size in remaining_sizes.values()):
+                while any(remaining_sizes.values()):
                     # Sort to guarantee same handling for semantically same mixtures
                     for mixture_key in sorted(remaining_sizes.keys()):
                         logger.debug(
@@ -366,10 +367,10 @@ class QueryResult:
                                         )
 
                                         assert (
-                                            chunk_size <= remaining_sizes[mixture_key]
+                                                chunk_size <= remaining_sizes[mixture_key]
                                         ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
                                         remaining_sizes[mixture_key] = (
-                                            remaining_sizes[mixture_key] - chunk_size
+                                                remaining_sizes[mixture_key] - chunk_size
                                         )
 
                                         # logger.debug(
@@ -382,7 +383,7 @@ class QueryResult:
                                                 chunk[mixture_key][dataset_id][file_id] = (
                                                     ranges
                                                     if file_id
-                                                    not in chunk[mixture_key][dataset_id]
+                                                       not in chunk[mixture_key][dataset_id]
                                                     else merge_sorted_lists(
                                                         chunk[mixture_key][dataset_id][file_id],
                                                         ranges,
@@ -432,7 +433,7 @@ class QueryResult:
                                         remaining_sizes[key] += samples_to_distribute[i]
 
                 # Check if we have enough data for all mixture keys
-                if not remaining_sizes or all(size == 0 for size in remaining_sizes.values()):
+                if all(size == 0 for size in remaining_sizes.values()):
                     chunk_success = True
                     no_success_counter = 0
                     if current_chunk_index == target_chunk_index:
@@ -470,9 +471,7 @@ class QueryResult:
                     chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
                     if chunker_index_keys_idx in empty_key_idx:
                         # Note that this can be removed but needs some adjustments in the tests (only impacts ordering)
-                        chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(
-                            chunker_index_keys
-                        )
+                        chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
                         continue
 
                     key = chunker_index_keys[chunker_index_keys_idx]
@@ -502,6 +501,7 @@ class QueryResult:
 
             if chunk_success:
                 current_chunk_index += 1
+
 
     @property
     def chunk_size(self) -> int:
