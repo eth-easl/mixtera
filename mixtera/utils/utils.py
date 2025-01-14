@@ -233,6 +233,49 @@ def numpy_to_native(value: Any) -> Any:
     return value  # Assume it's already a native type
 
 
+def distribute_by_ratio(n: int, ratios: list[float]) -> list[int]:
+    """
+    Distribute the integer n into buckets according to the given ratios,
+    which are assumed to sum up to 1. The returned list of integers will sum to n.
+
+    Args:
+        n (int): The total number to be distributed.
+        ratios (list[float]): A list of floating-point ratios that sum to 1.
+
+    Returns:
+        list[int]: A list of integers assigned to each ratio bucket, summing to n.
+    """
+    if not ratios:
+        return []
+    if abs(sum(ratios) - 1.0) > 1e-9:
+        raise ValueError("Ratios must sum up to 1.")
+
+    # First pass: take the floor of (ratio_i * n)
+    assigned = []
+    fractional_parts = []
+    for i, ratio in enumerate(ratios):
+        exact = ratio * n
+        floored = int(exact)
+        assigned.append(floored)
+        fractional_parts.append((exact - floored, i))  # store (fractional_part, index)
+
+    # Compute how many units are left undistributed because of flooring
+    allocated = sum(assigned)
+    remainder = n - allocated
+
+    # Sort by the largest fractional_part descending
+    fractional_parts.sort(key=lambda x: x[0], reverse=True)
+
+    # Distribute 1 unit to each bucket with the largest fractional parts
+    idx = 0
+    while remainder > 0 and idx < len(fractional_parts):
+        original_index = fractional_parts[idx][1]
+        assigned[original_index] += 1
+        remainder -= 1
+        idx += 1
+
+    return assigned
+
 class DummyPool:
     def __init__(self, num_workers: int) -> None:
         del num_workers

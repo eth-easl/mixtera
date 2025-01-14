@@ -21,6 +21,7 @@ from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import (
     defaultdict_to_dict,
     deserialize_chunker_index,
+    distribute_by_ratio,
     merge_sorted_lists,
     seed_everything_from_list,
     serialize_chunker_index,
@@ -77,7 +78,7 @@ class QueryResult:
         self._lock = mp.Lock()
         self._index = mp.Value("i", 0)
 
-        #  The generator will be created lazily when calling __next__
+        # The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
         logger.debug("QueryResult instantiated.")
@@ -121,7 +122,10 @@ class QueryResult:
         with open(self._query_log_dir / "mixture.log", "w", encoding="utf-8") as fp:
             json.dump(
                 {
-                    "log:": {chk_id: mixture.stringified_mixture() for chk_id, mixture in self._mixture_log},
+                    "log:": {
+                        chk_id: mixture.stringified_mixture()
+                        for chk_id, mixture in self._mixture_log
+                    },
                     "curr_chunk_idx": curr_chunk_idx,
                 },
                 fp,
@@ -217,7 +221,9 @@ class QueryResult:
         current_cardinality = 0
 
         # dataset_id -> file_id -> list[intervals]
-        current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
+        current_partition: dict[Any, dict[Any, list[tuple[int, int]]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
 
         for dataset_id, document_entries in sorted(target_ranges.items(), key=lambda x: x[0]):
             for file_id, ranges in sorted(document_entries.items(), key=lambda x: x[0]):
@@ -239,7 +245,9 @@ class QueryResult:
                             # occupied by this range), create a new chunk, and split the current range such that we
                             # do not consider the range added to the previous chunk.
                             diff = current_cardinality + range_cardinality - component_cardinality
-                            current_partition[dataset_id][file_id].append((current_range[0], current_range[1] - diff))
+                            current_partition[dataset_id][file_id].append(
+                                (current_range[0], current_range[1] - diff)
+                            )
                             component_cardinality = yield defaultdict_to_dict(current_partition)
 
                             # Prepare the rest of the range and new component
@@ -294,7 +302,8 @@ class QueryResult:
 
         # Initialize component iterators
         component_iterators = {
-            key: self._generate_per_mixture_component_chunks(self._chunker_index, key) for key in chunker_index_keys
+            key: self._generate_per_mixture_component_chunks(self._chunker_index, key)
+            for key in chunker_index_keys
         }
         for iterator in component_iterators.values():
             try:
@@ -315,6 +324,7 @@ class QueryResult:
                 return
 
             mixture = base_mixture.mixture_in_rows()
+            is_strict = base_mixture.strict  # best-effort mode if False
             chunk_success = False
             if mixture:
                 if previous_mixture != mixture:
@@ -327,69 +337,104 @@ class QueryResult:
 
                 chunk: ChunkerIndex = create_chunker_index()
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
-                    key: size for key, size in mixture.items()
+                        key: size for key, size in mixture.items()
                 }
+                original_sizes = remaining_sizes.copy()
 
-                # Sort to guarantee same handling for semantically same mixtures
-                for mixture_key in sorted(remaining_sizes.keys()):
-                    # logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+                while any(size > 0 for size in remaining_sizes.values()):
+                    # Sort to guarantee same handling for semantically same mixtures
+                    for mixture_key in sorted(remaining_sizes.keys()):
+                        logger.debug(
+                            f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}"
+                        )
 
-                    progress_made = True
-                    while remaining_sizes[mixture_key] > 0 and progress_made:
-                        progress_made = False
-                        for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
-                            if mixture_key == component_key:
-                                try:
-                                    component_chunk: ChunkerIndexDatasetEntries = iterator.send(
-                                        remaining_sizes[mixture_key]
+                        progress_made = True
+                        while remaining_sizes[mixture_key] > 0 and progress_made:
+                            progress_made = False
+                            for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
+                                if mixture_key == component_key:
+                                    try:
+                                        component_chunk: ChunkerIndexDatasetEntries = (
+                                            iterator.send(remaining_sizes[mixture_key])
+                                        )
+
+                                        # Update remaining size
+                                        chunk_size = sum(
+                                            sum(end - start for start, end in ranges)
+                                            for files in component_chunk.values()
+                                            for ranges in files.values()
+                                        )
+
+                                        assert (
+                                            chunk_size <= remaining_sizes[mixture_key]
+                                        ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
+                                        remaining_sizes[mixture_key] = (
+                                            remaining_sizes[mixture_key] - chunk_size
+                                        )
+
+                                        # logger.debug(
+                                        #    f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
+                                        # )
+
+                                        # Merge the component chunk into the main chunk
+                                        for dataset_id, files in component_chunk.items():
+                                            for file_id, ranges in files.items():
+                                                chunk[mixture_key][dataset_id][file_id] = (
+                                                    ranges
+                                                    if file_id
+                                                    not in chunk[mixture_key][dataset_id]
+                                                    else merge_sorted_lists(
+                                                        chunk[mixture_key][dataset_id][file_id],
+                                                        ranges,
+                                                    )
+                                                )
+                                                # If we extended the ranges of that file, we need to sort them since, e.g.,
+                                                # the JSONL file wrapper expects them in sorted order
+                                                # Since we now ranges are sorted and the existing ranges
+                                                # are sorted as well, we use a merge operation.
+
+                                        progress_made = True
+
+                                        if remaining_sizes[mixture_key] == 0:
+                                            logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
+                                            break  # Do not consider another iterator if we're done
+
+                                    except StopIteration:
+                                        continue
+
+                            # No matching components found or all are exhausted
+                            if not progress_made:
+                                if is_strict:  # Unable to complete chunk
+                                    logger.debug(
+                                        "Did not make progress, unable to complete chunk."
+                                    )
+                                else:
+                                    # best-effort generation
+                                    num_missing_samples = remaining_sizes.pop(mixture_key)
+
+                                    if not remaining_sizes:
+                                        logger.debug("All mixture components are exhausted.")
+                                        return
+
+                                    # redistribute missing samples among other mixture keys
+                                    total_original_size_remaining = sum(
+                                        original_sizes[key] for key in sorted(remaining_sizes.keys())
                                     )
 
-                                    # Update remaining size
-                                    chunk_size = sum(
-                                        sum(end - start for start, end in ranges)
-                                        for files in component_chunk.values()
-                                        for ranges in files.values()
-                                    )
+                                    ratios = [
+                                        original_sizes[key] / total_original_size_remaining
+                                        for key in sorted(remaining_sizes.keys())
+                                    ]
 
-                                    assert (
-                                        chunk_size <= remaining_sizes[mixture_key]
-                                    ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
-                                    remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
+                                    samples_to_distribute = distribute_by_ratio(num_missing_samples, ratios)
 
-                                    # logger.debug(
-                                    #    f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
-                                    # )
+                                    for i, key in enumerate(sorted(remaining_sizes.keys())):
+                                        remaining_sizes[key] += samples_to_distribute[i]
 
-                                    # Merge the component chunk into the main chunk
-                                    for dataset_id, files in component_chunk.items():
-                                        for file_id, ranges in files.items():
-                                            chunk[mixture_key][dataset_id][file_id] = (
-                                                ranges
-                                                if file_id not in chunk[mixture_key][dataset_id]
-                                                else merge_sorted_lists(chunk[mixture_key][dataset_id][file_id], ranges)
-                                            )
-                                            # If we extended the ranges of that file, we need to sort them since, e.g.,
-                                            # the JSONL file wrapper expects them in sorted order
-                                            # Since we now ranges are sorted and the existing ranges
-                                            # are sorted as well, we use a merge operation.
-
-                                    progress_made = True
-
-                                    if remaining_sizes[mixture_key] == 0:
-                                        # logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
-                                        break  # Do not consider another iterator if we're done
-
-                                except StopIteration:
-                                    continue
-
-                        # No matching components found or all are exhausted, unable to complete the chunk
-                        if not progress_made:
-                            logger.debug("Did not make progress, unable to complete chunk.")
+                                    break
 
                 # Check if we have enough data for all mixture keys
-                # TODO(#111): Make it possible to support best effort here.
-                # Right now, if we cannot fulfill the mixture for that chunk, we stop.
-                if all(size == 0 for size in remaining_sizes.values()):
+                if not remaining_sizes or all(size == 0 for size in remaining_sizes.values()):
                     chunk_success = True
                     no_success_counter = 0
                     if current_chunk_index == target_chunk_index:
@@ -427,7 +472,9 @@ class QueryResult:
                     chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
                     if chunker_index_keys_idx in empty_key_idx:
                         # Note that this can be removed but needs some adjustments in the tests (only impacts ordering)
-                        chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(chunker_index_keys)
+                        chunker_index_keys_idx = (chunker_index_keys_idx + 1) % len(
+                            chunker_index_keys
+                        )
                         continue
 
                     key = chunker_index_keys[chunker_index_keys_idx]
@@ -563,7 +610,9 @@ class QueryResult:
         serialization.
         """
         if not os.path.isdir(path):
-            raise RuntimeError("QueryResult::to_file is expected to be called with a directory path.")
+            raise RuntimeError(
+                "QueryResult::to_file is expected to be called with a directory path."
+            )
 
         logger.info("Starting to cache QueryResult.")
         # Handle attributes that should not be stored via pickle/dill
@@ -625,7 +674,10 @@ class QueryResult:
         # Replay the chunks
         for i in range(num_chunks_replay):
             # Update mixture if the current chunk index matches a mixture change point
-            if next_mixture_change_chunk_index is not None and i == next_mixture_change_chunk_index:
+            if (
+                next_mixture_change_chunk_index is not None
+                and i == next_mixture_change_chunk_index
+            ):
                 assert next_mixture is not None
                 self.update_mixture(next_mixture)
                 mixture_log_index += 1
@@ -638,7 +690,9 @@ class QueryResult:
             try:
                 _ = next(self)
             except StopIteration as e:
-                raise RuntimeError(f"Generator exhausted during replay at chunk index {i} - should not happen!") from e
+                raise RuntimeError(
+                    f"Generator exhausted during replay at chunk index {i} - should not happen!"
+                ) from e
 
         logger.debug("Finished chunk replay.")
         assert self._num_returns_gen == num_chunks_replay

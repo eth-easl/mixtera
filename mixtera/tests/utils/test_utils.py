@@ -4,7 +4,13 @@ import time
 
 import numpy as np
 import pytest
-from mixtera.utils import flatten, numpy_to_native_type, run_async_until_complete, wait_for_key_in_dict
+from mixtera.utils import (
+    flatten,
+    numpy_to_native_type,
+    run_async_until_complete,
+    wait_for_key_in_dict,
+    distribute_by_ratio,
+)
 
 
 def test_flatten():
@@ -100,3 +106,35 @@ def test_timeout():
     end_time = time.time()
     assert not result
     assert end_time - start_time >= 0.5, "Timeout did not work correctly"
+
+
+def test_distribute_by_ratio():
+    result = distribute_by_ratio(10, [])
+    assert result == [], f"Expected empty for empty ratios, got {result}"
+
+    result = distribute_by_ratio(0, [0.5, 0.5])
+    assert result == [0, 0], f"Expected [0, 0] for n=0, got {result}"
+
+    # 3. Ratios must sum to 1 => expect a ValueError if not
+    try:
+        distribute_by_ratio(10, [0.4, 0.4])
+        assert False, "Expected ValueError when ratios don't sum to 1"
+    except ValueError:
+        pass  # test passes
+
+    ratios = [0.2, 0.3, 0.5]
+    n = 10
+    result = distribute_by_ratio(n, ratios)
+    assert sum(result) == n, f"Sum is {sum(result)} instead of {n}"
+    assert result == [2, 3, 5], f"Expected [2, 3, 5], got {result}"
+
+    ratios = [0.3333, 0.3333, 0.3334]  # sums to ~ 1.0
+    n = 6
+    result = distribute_by_ratio(n, ratios)
+    assert sum(result) == 6, f"Expected total 6, got {result}"
+
+    ratios = [0.1, 0.2, 0.7]
+    n = 10_000
+    result = distribute_by_ratio(n, ratios)
+    assert sum(result) == n, "Does not sum to 10000"
+    assert result == [1000, 2000, 7000], f"Expected [1000, 2000, 7000], got {result}"
