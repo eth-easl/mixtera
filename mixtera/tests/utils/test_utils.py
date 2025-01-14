@@ -5,11 +5,11 @@ import time
 import numpy as np
 import pytest
 from mixtera.utils import (
+    distribute_by_ratio,
     flatten,
     numpy_to_native_type,
     run_async_until_complete,
     wait_for_key_in_dict,
-    distribute_by_ratio,
 )
 
 
@@ -110,7 +110,7 @@ def test_timeout():
 
 def test_distribute_by_ratio():
     result = distribute_by_ratio(10, [])
-    assert result == [], f"Expected empty for empty ratios, got {result}"
+    assert not result, f"Expected empty for empty ratios, got {result}"
 
     result = distribute_by_ratio(0, [0.5, 0.5])
     assert result == [0, 0], f"Expected [0, 0] for n=0, got {result}"

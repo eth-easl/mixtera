@@ -276,6 +276,7 @@ def distribute_by_ratio(n: int, ratios: list[float]) -> list[int]:
 
     return assigned
 
+
 class DummyPool:
     def __init__(self, num_workers: int) -> None:
         del num_workers
