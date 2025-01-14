@@ -435,6 +435,7 @@ class QueryResult:
                             self._key_id_map,
                             mixture_id,
                             mixture=mixture,
+                            strict_mixture=base_mixture.strict,
                         )
                     else:
                         logger.debug(

@@ -94,6 +94,7 @@ class ResultChunk:
         key_id_map: dict[MixtureKey, int],
         mixture_id: int,
         mixture: Optional[dict[MixtureKey, int]] = None,
+        strict_mixture: bool = True,
     ) -> None:
         allow_daemon_spawn()
 
@@ -103,6 +104,7 @@ class ResultChunk:
         self._parsing_func_dict = parsing_func_dict
         self._chunk_size = chunk_size
         self._mixture = mixture
+        self._strict_mixture = strict_mixture
         self._samples_to_skip = 0
         self._prefetch_first_sample = False
         self._key_id_map = key_id_map
@@ -204,7 +206,11 @@ class ResultChunk:
                 self._mixture = {key: value for key, value in self._mixture.items() if value > 0}
 
         # If we have a mixture, ensure that the mixture supports the chunk
-        if self._mixture is not None and (not self._mixture.keys() == self._result_index.keys()):
+        if (
+            self._strict_mixture
+            and self._mixture is not None
+            and (not self._mixture.keys() == self._result_index.keys())
+        ):
             raise RuntimeError(
                 "The received chunk has keys that do not match the mixture. That should not happen.\n"
                 + f"{self._result_index.keys()}"
