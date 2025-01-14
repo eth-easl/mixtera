@@ -431,8 +431,6 @@ class QueryResult:
                                     for i, key in enumerate(sorted(remaining_sizes.keys())):
                                         remaining_sizes[key] += samples_to_distribute[i]
 
-                                    break
-
                 # Check if we have enough data for all mixture keys
                 if not remaining_sizes or all(size == 0 for size in remaining_sizes.values()):
                     chunk_success = True
