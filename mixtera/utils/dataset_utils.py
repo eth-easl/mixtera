@@ -5,6 +5,58 @@ from loguru import logger
 from mixtera.torch import MixteraTorchDataset
 
 
+def _find_mixtera_torch_dataset_in_attrs(obj: Any, visited: set | None = None):
+    """
+    Recursively searches the attributes of an object to find an instance of MixteraTorchDataset.
+
+    Args:
+        obj (Any): The object whose attributes are to be searched.
+        visited (set, optional): A set of object IDs that have already been visited to prevent infinite loops.
+
+    Returns:
+        MixteraTorchDataset | None: The found MixteraTorchDataset instance if present; otherwise, None.
+    """
+    if visited is None:
+        visited = set()
+    obj_id = id(obj)
+    if obj_id in visited:
+        return None  # Avoid infinite loops in circular references
+    visited.add(obj_id)
+
+    if isinstance(obj, MixteraTorchDataset):
+        return obj
+
+    for attr_name in dir(obj):
+        # Skip special and private attributes
+        if attr_name.startswith("__") and attr_name.endswith("__"):
+            continue
+        try:
+            attr_value = getattr(obj, attr_name)
+        except AttributeError:
+            continue
+        except Exception:
+            continue
+
+        if isinstance(attr_value, MixteraTorchDataset):
+            return attr_value
+        elif isinstance(attr_value, (list, tuple, set)):
+            for item in attr_value:
+                result = _find_mixtera_torch_dataset_in_attrs(item, visited)
+                if result is not None:
+                    return result
+        elif isinstance(attr_value, dict):
+            for item in attr_value.values():
+                result = _find_mixtera_torch_dataset_in_attrs(item, visited)
+                if result is not None:
+                    return result
+        elif hasattr(attr_value, "__dict__") or hasattr(attr_value, "__slots__"):
+            result = _find_mixtera_torch_dataset_in_attrs(attr_value, visited)
+            if result is not None:
+                return result
+
+    return None
+
+
 def _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset: Any) -> Any:
     """
     Recursively retrieves a `MixteraHFDataset` from a potentially nested `datasets.IterableDataset`.
@@ -76,7 +128,7 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
         - If a `MixteraHFDataset` is found, it returns it; otherwise, the function returns `None`.
     """
     logger.debug(f"Type of received object is {type(dataloader_or_dataset)}")
-    if isinstance(dataloader_or_dataset, torch.utils.data.DataLoader):  # type: ignore
+    if isinstance(dataloader_or_dataset, torch.utils.data.DataLoader) or isinstance(dataloader_or_dataset, torch.utils.data.dataloader.DataLoader):  # type: ignore
         dataset = dataloader_or_dataset.dataset
     elif isinstance(dataloader_or_dataset, torch.utils.data.Dataset):  # type: ignore
         dataset = dataloader_or_dataset
@@ -134,7 +186,13 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
             dataset = dataset._ex_iterable
 
         if not isinstance(dataset, _MixteraHFIterable):
-            logger.debug(f"Unexpected type: {type(dataset)}. No Mixtera Checkpoint.")
+            logger.debug(f"Unexpected type: {type(dataset)}. Brute-force searching fields for dataset.")
+            found_dataset = _find_mixtera_torch_dataset_in_attrs(dataset)
+            if found_dataset is not None:
+                logger.debug("Found MixteraTorchDataset via brute-force attribute search.")
+                return found_dataset
+
+            logger.debug("Could not find MixteraTorchDataset in dataset's attributes.")
             return None
 
     return dataset if isinstance(dataset, MixteraTorchDataset) else dataset
