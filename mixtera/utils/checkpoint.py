@@ -7,7 +7,7 @@ from mixtera.utils.dataset_utils import _recover_mixtera_dataset
 
 
 def handle_mixtera_checkpoint(
-    dataloader_or_dataset: Any, checkpoint_path: Path, dp_group_id: int, node_id: int, wait_for_disk: bool
+    dataloader_or_dataset: Any, checkpoint_path: Path | str, dp_group_id: int, node_id: int, wait_for_disk: bool
 ) -> None:
     """
     Handles the checkpointing process for a Mixtera dataset during training.
@@ -40,6 +40,7 @@ def handle_mixtera_checkpoint(
         - The checkpoint ID is written to a file at `checkpoint_path / "mixtera.id"` for synchronization.
         - Only the node with `node_id == 0` and `dp_group_id == 0` performs the file write and final logging.
     """
+    checkpoint_path = checkpoint_path if isinstance(checkpoint_path, Path) else Path(checkpoint_path)
     assert checkpoint_path.is_dir()
 
     if (torch_dataset := _recover_mixtera_dataset(dataloader_or_dataset)) is None:
