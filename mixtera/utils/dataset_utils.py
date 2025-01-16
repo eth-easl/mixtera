@@ -128,7 +128,9 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
         - If a `MixteraHFDataset` is found, it returns it; otherwise, the function returns `None`.
     """
     logger.debug(f"Type of received object is {type(dataloader_or_dataset)}")
-    if isinstance(dataloader_or_dataset, torch.utils.data.DataLoader) or isinstance(dataloader_or_dataset, torch.utils.data.dataloader.DataLoader):  # type: ignore
+    if isinstance(dataloader_or_dataset, torch.utils.data.DataLoader) or isinstance(
+        dataloader_or_dataset, torch.utils.data.dataloader.DataLoader
+    ):  # type: ignore
         dataset = dataloader_or_dataset.dataset
     elif isinstance(dataloader_or_dataset, torch.utils.data.Dataset):  # type: ignore
         dataset = dataloader_or_dataset
@@ -146,9 +148,13 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
                         logger.debug("Recovered DataLoader from generator frame!")
                         dataset = dataloader.dataset
                     else:
-                        logger.debug("The 'dataloader' in generator locals is not a DataLoader.")
+                        logger.debug(
+                            "The 'dataloader' in generator locals is not a DataLoader."
+                        )
                 else:
-                    logger.debug("Could not find 'dataloader' in generator frame locals.")
+                    logger.debug(
+                        "Could not find 'dataloader' in generator frame locals."
+                    )
             else:
                 logger.debug("The generator does not have a 'gi_frame' attribute.")
         except AttributeError as e:
@@ -158,7 +164,9 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
         try:
             import datasets  # pylint: disable=import-outside-toplevel
         except ImportError:
-            logger.debug("Cannot import datasets - and is not a `MixteraTorchDataset`. No Mixtera Checkpoint.")
+            logger.debug(
+                "Cannot import datasets - and is not a `MixteraTorchDataset`. No Mixtera Checkpoint."
+            )
             return None
 
         if not isinstance(dataset, datasets.IterableDataset):
@@ -170,7 +178,9 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
         # Now, it could still be any IterableDataset.
         # Since we can apply arbitrary transformations, we need to recover the mixtera dataset
         og_type = type(dataset)
-        if (dataset := _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset)) is None:
+        if (
+            dataset := _get_mixtera_hf_dataset_or_client_from_iterabledataset(dataset)
+        ) is None:
             logger.debug(
                 "Dataset is `datasets.IterableDataset`, but could not find `MixteraHFDataset`"
                 + f" (type = {og_type}). No Mixtera Checkpoint."
@@ -186,10 +196,14 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
             dataset = dataset._ex_iterable
 
         if not isinstance(dataset, _MixteraHFIterable):
-            logger.debug(f"Unexpected type: {type(dataset)}. Brute-force searching fields for dataset.")
+            logger.debug(
+                f"Unexpected type: {type(dataset)}. Brute-force searching fields for dataset."
+            )
             found_dataset = _find_mixtera_torch_dataset_in_attrs(dataset)
             if found_dataset is not None:
-                logger.debug("Found MixteraTorchDataset via brute-force attribute search.")
+                logger.debug(
+                    "Found MixteraTorchDataset via brute-force attribute search."
+                )
                 return found_dataset
 
             logger.debug("Could not find MixteraTorchDataset in dataset's attributes.")
