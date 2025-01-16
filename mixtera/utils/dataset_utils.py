@@ -7,7 +7,7 @@ from mixtera.torch import MixteraTorchDataset
 
 def _find_mixtera_torch_dataset_in_attrs(
     obj: Any, visited: set | None = None
-):  # pylint: disable=too-many-return-statements
+) -> MixteraTorchDataset | None:  # pylint: disable=too-many-return-statements
     """
     Recursively searches the attributes of an object to find an instance of MixteraTorchDataset.
 
