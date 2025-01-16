@@ -280,7 +280,6 @@ class QueryResult:
         This latter parameter is useful when chunking in a multiprocessed environment and at most once visitation
         guarantees are required.
         """
-        unyielded_chunks = 0
         current_chunk_index = 0
         mixture_id = -1
         chunker_index_keys = list(self._chunker_index.keys())
@@ -394,11 +393,7 @@ class QueryResult:
                     chunk_success = True
                     no_success_counter = 0
                     if current_chunk_index == target_chunk_index:
-                        logger.debug(
-                            f"Yielding chunk {current_chunk_index}"
-                            + f" (unyielded = {unyielded_chunks},"
-                            + f" num_returns_gen = {self._num_returns_gen})"
-                        )
+                        logger.debug(f"Yielding chunk {current_chunk_index}.")
                         self._persist_chunk_idx(current_chunk_index)
                         base_mixture, target_chunk_index = yield ResultChunk(
                             defaultdict_to_dict(chunk),
@@ -414,12 +409,10 @@ class QueryResult:
                         logger.debug(
                             f"current_chunk_index = {current_chunk_index} != target_chunk_index = {target_chunk_index}"
                         )
-                        unyielded_chunks += 1
                 # Not enough data to complete the chunk, end generation
                 else:
                     logger.debug("Not enough data, ending chunk generation")
                     no_success_counter += 1
-                    unyielded_chunks += 1
                     yield None
             else:
                 if previous_mixture is not None or current_chunk_index == 0:
@@ -443,19 +436,12 @@ class QueryResult:
                     except StopIteration:
                         # The current key is exhausted; will need to produce chunks from the next available key
                         empty_key_idx.add(chunker_index_keys_idx)
-
                 chunk_success = True
                 if chunk is None:
-                    unyielded_chunks += 1
                     return  # No need to yield None, if ArbitraryMixture is exhausted, we will never be able to continue
 
                 # Chunk has been successfully generated
                 if current_chunk_index == target_chunk_index:
-                    logger.debug(
-                        f"Yielding chunk {current_chunk_index}"
-                        + f" (unyielded = {unyielded_chunks},"
-                        + f" num_returns_gen = {self._num_returns_gen})"
-                    )
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
                     self._persist_chunk_idx(current_chunk_index)
                     base_mixture, target_chunk_index = yield ResultChunk(
@@ -468,11 +454,6 @@ class QueryResult:
                         mixture_id,
                         mixture=None,
                     )
-                else:
-                    logger.debug(
-                        f"current_chunk_index = {current_chunk_index} != target_chunk_index = {target_chunk_index}"
-                    )
-                    unyielded_chunks += 1
 
             if chunk_success:
                 current_chunk_index += 1
