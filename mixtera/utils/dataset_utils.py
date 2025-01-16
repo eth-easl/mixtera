@@ -171,8 +171,16 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
 
         if not isinstance(dataset, datasets.IterableDataset):
             logger.debug(
-                "Dataset is neither `MixteraTorchDataset` nor `datasets.IterableDataset`. No Mixtera Checkpoint."
+                f"Unexpected type: {type(dataset)}." + "Dataset is neither `MixteraTorchDataset` nor `datasets.IterableDataset`. Brute-force searching fields for dataset."
             )
+            found_dataset = _find_mixtera_torch_dataset_in_attrs(dataset)
+            if found_dataset is not None:
+                logger.debug(
+                    "Found MixteraTorchDataset via brute-force attribute search."
+                )
+                return found_dataset
+
+            logger.debug("Could not find MixteraTorchDataset in dataset's attributes. No Mixtera Checkpoint.")
             return None
 
         # Now, it could still be any IterableDataset.
@@ -196,17 +204,7 @@ def _recover_mixtera_dataset(dataloader_or_dataset: Any) -> MixteraTorchDataset 
             dataset = dataset._ex_iterable
 
         if not isinstance(dataset, _MixteraHFIterable):
-            logger.debug(
-                f"Unexpected type: {type(dataset)}. Brute-force searching fields for dataset."
-            )
-            found_dataset = _find_mixtera_torch_dataset_in_attrs(dataset)
-            if found_dataset is not None:
-                logger.debug(
-                    "Found MixteraTorchDataset via brute-force attribute search."
-                )
-                return found_dataset
-
-            logger.debug("Could not find MixteraTorchDataset in dataset's attributes.")
+            logger.debug(f"Unexpected type: {type(dataset)}. No Mixtera Checkpoint.")
             return None
 
     return dataset if isinstance(dataset, MixteraTorchDataset) else dataset
