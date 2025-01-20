@@ -17,8 +17,8 @@ class InferringMixture(Mixture):
     to have a balanced sample per chunk.
     """
 
-    def __init__(self, chunk_size: int) -> None:
-        super().__init__(chunk_size)
+    def __init__(self, chunk_size: int, strict: bool = True) -> None:
+        super().__init__(chunk_size, strict=strict)
         self._mixture: dict[MixtureKey, int] = {}
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
@@ -26,7 +26,7 @@ class InferringMixture(Mixture):
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": "{self._mixture}", "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": "{self._mixture}", "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     def process_index(self, chunker_index: "ChunkerIndex") -> None:
         logger.info("InferringMixture starts inferring mixture.")
