@@ -403,24 +403,24 @@ class QueryResult:
                                     num_missing_samples = remaining_sizes.pop(mixture_key)
 
                                     if not remaining_sizes:
-                                        logger.debug("All mixture components are exhausted.")
-                                        return
+                                        logger.debug("Not enough data, ending chunk generation")
+                                        no_success_counter += 1
+                                        yield None
+                                    else:
+                                        # redistribute missing samples among other mixture keys
+                                        total_original_size_remaining = sum(
+                                            original_sizes[key] for key in sorted(remaining_sizes.keys())
+                                        )
 
-                                    # redistribute missing samples among other mixture keys
-                                    total_original_size_remaining = sum(
-                                        original_sizes[key] for key in sorted(remaining_sizes.keys())
-                                    )
+                                        ratios = [
+                                            original_sizes[key] / total_original_size_remaining
+                                            for key in sorted(remaining_sizes.keys())
+                                        ]
 
-                                    ratios = [
-                                        original_sizes[key] / total_original_size_remaining
-                                        for key in sorted(remaining_sizes.keys())
-                                    ]
+                                        samples_to_distribute = distribute_by_ratio(num_missing_samples, ratios)
 
-                                    samples_to_distribute = distribute_by_ratio(num_missing_samples, ratios)
-
-                                    for i, key in enumerate(sorted(remaining_sizes.keys())):
-                                        remaining_sizes[key] += samples_to_distribute[i]
-
+                                        for i, key in enumerate(sorted(remaining_sizes.keys())):
+                                            remaining_sizes[key] += samples_to_distribute[i]
                                     break
 
                 # Check if we have enough data for all mixture keys
