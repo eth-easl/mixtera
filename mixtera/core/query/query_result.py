@@ -401,6 +401,7 @@ class QueryResult:
                                 else:
                                     # best-effort generation
                                     num_missing_samples = remaining_sizes.pop(mixture_key)
+                                    mixture.pop(mixture_key)
 
                                     if not remaining_sizes:
                                         logger.debug("Not enough data, ending chunk generation")
@@ -421,6 +422,8 @@ class QueryResult:
 
                                         for i, key in enumerate(sorted(remaining_sizes.keys())):
                                             remaining_sizes[key] += samples_to_distribute[i]
+                                            mixture[key] = original_sizes[key] + samples_to_distribute[i]
+
                                     break
 
                 # Check if we have enough data for all mixture keys
