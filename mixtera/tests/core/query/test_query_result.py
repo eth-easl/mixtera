@@ -1237,7 +1237,9 @@ class TestQueryResult(unittest.TestCase):
                             language_counts[language] += count
 
             # Check that chunk size matches mixture.chunk_size or is less (for the last chunk)
-            self.assertTrue(chunk_size == mixture.chunk_size, f"Chunk {i}: Expected {mixture.chunk_size} samples, got {chunk_size}")
+            self.assertTrue(
+                chunk_size == mixture.chunk_size, f"Chunk {i}: Expected {mixture.chunk_size} samples, got {chunk_size}"
+            )
 
             # Check that the result matches expected counts
             for lang in ["JavaScript", "Python", "HTML"]:
