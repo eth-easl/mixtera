@@ -422,7 +422,7 @@ class QueryResult:
 
                                         for i, key in enumerate(sorted(remaining_sizes.keys())):
                                             remaining_sizes[key] += samples_to_distribute[i]
-                                            mixture[key] = original_sizes[key] + samples_to_distribute[i]
+                                            mixture[key] += samples_to_distribute[i]
 
                                     break
 
