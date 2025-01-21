@@ -340,7 +340,7 @@ class QueryResult:
 
                     # Sort to guarantee same handling for semantically same mixtures
                     for mixture_key in sorted(remaining_sizes.keys()):
-                        logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+                        # logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
 
                         progress_made = True
                         while remaining_sizes[mixture_key] > 0 and progress_made:
