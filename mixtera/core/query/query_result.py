@@ -388,7 +388,7 @@ class QueryResult:
                                         global_progress_made = True
 
                                         if remaining_sizes[mixture_key] == 0:
-                                            logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
+                                            # logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
                                             break  # Do not consider another iterator if we're done
 
                                     except StopIteration:
@@ -396,6 +396,7 @@ class QueryResult:
 
                             # No matching components found or all are exhausted
                             if not progress_made:
+                                logger.debug(f"No progress on key {mixture_key}.")
                                 if is_strict:  # Unable to complete chunk
                                     logger.debug("Did not make progress, unable to complete chunk.")
                                 else:
@@ -405,8 +406,6 @@ class QueryResult:
 
                                     if not remaining_sizes:
                                         logger.debug("Not enough data, ending chunk generation")
-                                        no_success_counter += 1
-                                        yield None
                                     else:
                                         # redistribute missing samples among other mixture keys
                                         total_original_size_remaining = sum(
@@ -427,7 +426,7 @@ class QueryResult:
                                     break
 
                 # Check if we have enough data for all mixture keys
-                if all(size == 0 for size in remaining_sizes.values()):
+                if remaining_sizes and all(size == 0 for size in remaining_sizes.values()):
                     chunk_success = True
                     no_success_counter = 0
                     if current_chunk_index == target_chunk_index:
@@ -442,7 +441,7 @@ class QueryResult:
                             self._key_id_map,
                             mixture_id,
                             mixture=mixture,
-                            strict_mixture=base_mixture.strict,
+                            strict_mixture=is_strict,
                         )
                     else:
                         logger.debug(
