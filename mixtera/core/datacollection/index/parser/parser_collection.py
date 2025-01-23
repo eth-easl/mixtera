@@ -201,6 +201,7 @@ class MetadataParserFactory:
             "FINEWEB": FineWebMetadataParser,
             "MSCOCO": MsCocoParser,
             "PILE": PileaMetadataParser,
+            "GENERIC": GenericMetadataParser,
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
