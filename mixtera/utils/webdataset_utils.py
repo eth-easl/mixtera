@@ -7,7 +7,7 @@ from wids.wids import group_by_key, splitname
 from wids.wids_mmtar import MMIndexedTar
 
 
-def decode(sample: dict[str, Any], decode_image: bool = True) -> dict[str, Any]:
+def decode_sample(sample: dict[str, Any]) -> dict[str, Any]:
     """
     A utility function to decode the samples from the tar file for many common extensions.
     """
@@ -32,7 +32,7 @@ def decode(sample: dict[str, Any], decode_image: bool = True) -> dict[str, Any]:
         elif extension in ["cls", "cls2"]:
             value = stream.read()
             sample[key] = int(value.decode("utf-8"))
-        elif extension in ["jpg", "png", "ppm", "pgm", "pbm", "pnm"] and decode_image:
+        elif extension in ["jpg", "png", "ppm", "pgm", "pbm", "pnm"]:
             import torchvision.transforms.functional as F  # pylint: disable=import-outside-toplevel
             from PIL import Image  # pylint: disable=import-outside-toplevel
 
@@ -40,22 +40,19 @@ def decode(sample: dict[str, Any], decode_image: bool = True) -> dict[str, Any]:
             sample[key] = F.to_tensor(image)
         elif extension == "json":
             import json  # pylint: disable=import-outside-toplevel
-
             value = stream.read()
             sample[key] = json.loads(value)
         elif extension == "npy":
             import numpy as np  # pylint: disable=import-outside-toplevel
-
             sample[key] = np.load(stream)
         elif extension in ["pickle", "pkl"]:
             import pickle  # pylint: disable=import-outside-toplevel
-
             sample[key] = pickle.load(stream)
     return sample
 
 
 class IndexedTarSamples:
-    def __init__(self, path: str, decode_images: bool = True):
+    def __init__(self, path: str, decode: bool = False):
         """
         A class for efficient reading of tar files for web datasets.
 
@@ -64,9 +61,9 @@ class IndexedTarSamples:
         and with decoding integrated.
         """
         self.path = path
-        self.decoder = partial(decode, decode_image=decode_images)
-        self.stream = open(self.path, "rb")  # pylint: disable=consider-using-with
-        self.reader = MMIndexedTar(self.stream)
+        self.decoder = decode_sample 
+        self.decode = decode
+        self.reader = MMIndexedTar(path)
 
         all_files = self.reader.names()
         self.samples = group_by_key(all_files)
@@ -80,8 +77,6 @@ class IndexedTarSamples:
     def close(self) -> None:
         if self.reader is not None:
             self.reader.close()
-        if self.stream is not None and not self.stream.closed:
-            self.stream.close()
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -98,8 +93,8 @@ class IndexedTarSamples:
                 assert key == k, "Inconsistent keys in the same sample"
                 sample[ext] = data
             sample["__key__"] = key
-            return self.decoder(sample)
-        raise ValueError("Co")
+            return self.decoder(sample) if self.decode else sample
+        raise ValueError("Error reading sample")
 
     def __iter__(self) -> Iterator[dict[str, Any]]:
         for idx in range(len(self)):

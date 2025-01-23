@@ -168,6 +168,27 @@ class PileaMetadataParser(MetadataParser):
         self.add_metadata(sample_id=line_number, pile_set_name=pile_set_name)
 
 
+class GenericMetadataParser(MetadataParser):
+    """
+    Metadata parser with only the source dataset name as a property.
+    """
+
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="dataset",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+            )
+        ]
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        dataset_name = kwargs.get("dataset_name")
+        self.add_metadata(sample_id=line_number, dataset=dataset_name)
+
+
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
 

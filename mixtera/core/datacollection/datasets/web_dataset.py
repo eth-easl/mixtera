@@ -23,7 +23,7 @@ class WebDataset(Dataset):
 
     @staticmethod
     def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
-        samples = IndexedTarSamples(str(loc), decode_images=False)
+        samples = IndexedTarSamples(str(loc))
 
         for idx, sample in enumerate(samples):
             metadata_parser.parse(line_number=idx, payload=sample)
@@ -61,3 +61,17 @@ class WebDataset(Dataset):
                 yield from (parsing_func(samples[line]) for line in range(r_start, r_end))
 
                 last_line_read = r_end
+
+
+class CC12MDataset(WebDataset):
+    dataset_name = "CC12M"
+
+    @staticmethod
+    def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
+        samples = IndexedTarSamples(str(loc))
+
+        for idx, sample in enumerate(samples):
+            metadata_parser.parse(line_number=idx, payload=sample, dataset_name=CC12MDataset.dataset_name)
+        
+        samples.close()
+    
