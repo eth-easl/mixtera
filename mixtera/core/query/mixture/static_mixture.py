@@ -29,7 +29,7 @@ class StaticMixture(Mixture):
         super().__init__(chunk_size, strict)
 
         total_weight = sum(mixture.values())
-        if not isclose(total_weight, 1.0, rel_tol=1e-7):
+        if not isclose(total_weight, 1.0, rel_tol=1e-3):
             raise ValueError(f"Your mixture sums up to {total_weight} != 1.0")
 
         # Renormalize to reduce deviance from 1.0 further

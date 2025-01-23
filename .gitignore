@@ -34,6 +34,7 @@ var/
 *.egg
 .eggs/
 *.egg-info
+build_*/
 
 # postgresql
 postgres-data/
