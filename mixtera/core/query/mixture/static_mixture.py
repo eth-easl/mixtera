@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 class StaticMixture(Mixture):
     """Mixture class that simply stores a predefined mixture."""
 
-    def __init__(self, chunk_size: int, mixture: dict[MixtureKey, float]) -> None:
+    def __init__(self, chunk_size: int, mixture: dict[MixtureKey, float], strict: bool = True) -> None:
         """
         Initializer for StaticMixture.
 
@@ -26,7 +26,7 @@ class StaticMixture(Mixture):
                 }
                     Needs to sum to 1.
         """
-        super().__init__(chunk_size)
+        super().__init__(chunk_size, strict)
 
         total_weight = sum(mixture.values())
         if not isclose(total_weight, 1.0, rel_tol=1e-7):
@@ -71,7 +71,7 @@ class StaticMixture(Mixture):
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     def mixture_in_rows(self) -> dict[MixtureKey, int]:
         return self._mixture

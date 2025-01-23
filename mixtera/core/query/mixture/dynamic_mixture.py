@@ -14,7 +14,9 @@ if TYPE_CHECKING:
 class DynamicMixture(Mixture):
     """Mixture class that uses a dynamic mixing algorithm."""
 
-    def __init__(self, chunk_size: int, initial_mixture: Mixture, mixing_alg: DynamicMixingAlgorithm) -> None:
+    def __init__(
+        self, chunk_size: int, initial_mixture: Mixture, mixing_alg: DynamicMixingAlgorithm, strict: bool = True
+    ) -> None:
         """
         Initializer for DynamicMixture.
 
@@ -24,7 +26,7 @@ class DynamicMixture(Mixture):
                 Most likely, you want a custom static mixture or a inferring mixture here.
             mixing_alg: An instance of a DynamicMixingAlgorithm that defines how to calculate the dynamic mixture.
         """
-        super().__init__(chunk_size)
+        super().__init__(chunk_size, strict=strict)
         if initial_mixture.chunk_size != chunk_size:
             logger.warning(
                 f"DynamicMixture chunk size is {chunk_size}, "
@@ -46,6 +48,7 @@ class DynamicMixture(Mixture):
                 "chunk_size": self.chunk_size,
                 "algo": str(self._mixing_alg),
                 "current_mixture": str(self._current_mixture),
+                "strict": {self.strict},
             }
         )
 
