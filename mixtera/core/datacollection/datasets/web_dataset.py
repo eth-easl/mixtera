@@ -25,6 +25,7 @@ class WebDataset(Dataset):
     def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
         samples = IndexedTarSamples(str(loc))
 
+        logger.info(f"Starting to iterate over samples (WebDataset) in folder: {loc}")
         for idx, sample in enumerate(samples):
             metadata_parser.parse(line_number=idx, payload=sample)
 
@@ -64,12 +65,14 @@ class WebDataset(Dataset):
 
 
 class CC12MDataset(WebDataset):
+    type: DatasetType = DatasetType.CC12M_DATASET
     dataset_name = "CC12M"
 
     @staticmethod
     def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
         samples = IndexedTarSamples(str(loc))
 
+        print(f"Starting to iterate over samples (CC12MDataset) in folder: {loc}")
         for idx, sample in enumerate(samples):
             metadata_parser.parse(line_number=idx, payload=sample, dataset_name=CC12MDataset.dataset_name)
         

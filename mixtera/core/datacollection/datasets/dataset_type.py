@@ -7,3 +7,4 @@ class DatasetType(IntEnum):
     CROISSANT_DATASET = auto()
     WEB_DATASET = auto()
     PARQUET_DATASET = auto()
+    CC12M_DATASET = auto()
