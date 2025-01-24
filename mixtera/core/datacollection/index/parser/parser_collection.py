@@ -186,7 +186,6 @@ class GenericMetadataParser(MetadataParser):
 
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         dataset_name = kwargs.get("dataset_name")
-        print(f"dataset_name: {dataset_name}")
         self.add_metadata(sample_id=line_number, dataset=dataset_name)
 
 
