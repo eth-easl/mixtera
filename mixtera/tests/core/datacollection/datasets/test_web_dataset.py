@@ -41,13 +41,13 @@ class TestWebDataset(unittest.TestCase):
         }
 
         expected = [
-            {"__key__": "000001", "cls": b'1'},
-            {"__key__": "000002", "cls": b'0'},
-            {"__key__": "000003", "cls": b'1'},
-            {"__key__": "000004", "cls": b'0'},
-            {"__key__": "000005", "cls": b'1'},
-            {"__key__": "000007", "cls": b'1'},
-            {"__key__": "000008", "cls": b'0'},
+            {"__key__": "000001", "cls": b"1"},
+            {"__key__": "000002", "cls": b"0"},
+            {"__key__": "000003", "cls": b"1"},
+            {"__key__": "000004", "cls": b"0"},
+            {"__key__": "000005", "cls": b"1"},
+            {"__key__": "000007", "cls": b"1"},
+            {"__key__": "000008", "cls": b"0"},
         ]
 
         result = list(WebDataset.read_ranges_from_files(ranges_per_file, lambda x: x, None))

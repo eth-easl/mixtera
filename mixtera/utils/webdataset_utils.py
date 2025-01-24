@@ -1,6 +1,5 @@
 import gzip
 import io
-from functools import partial
 from typing import Any, Iterator
 
 from wids.wids import group_by_key, splitname
@@ -40,23 +39,29 @@ def decode_sample(sample: dict[str, Any]) -> dict[str, Any]:
             sample[key] = F.to_tensor(image)
         elif extension == "json":
             import json  # pylint: disable=import-outside-toplevel
+
             value = stream.read()
             sample[key] = json.loads(value)
         elif extension == "npy":
             import numpy as np  # pylint: disable=import-outside-toplevel
+
             sample[key] = np.load(stream)
         elif extension in ["pickle", "pkl"]:
             import pickle  # pylint: disable=import-outside-toplevel
+
             sample[key] = pickle.load(stream)
     return sample
 
+
 class MMIndexedTarRawBytes(MMIndexedTar):
     """
-        A subclass of `MMIndexedTar` that returns the raw bytes instead of an IOBytes object.
+    A subclass of `MMIndexedTar` that returns the raw bytes instead of an IOBytes object.
     """
+
     def get_file(self, i):
         fname, data = self.get_at_index(i)
-        return fname, data 
+        return fname, data
+
 
 class IndexedTarSamples:
     def __init__(self, path: str, decode: bool = False):
@@ -68,7 +73,7 @@ class IndexedTarSamples:
         and with decoding integrated.
         """
         self.path = path
-        self.decoder = decode_sample 
+        self.decoder = decode_sample
         self.decode = decode
         self.reader = MMIndexedTarRawBytes(path)
 

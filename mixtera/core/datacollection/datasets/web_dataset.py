@@ -75,6 +75,5 @@ class CC12MDataset(WebDataset):
         print(f"Starting to iterate over samples (CC12MDataset) in folder: {loc}")
         for idx, sample in enumerate(samples):
             metadata_parser.parse(line_number=idx, payload=sample, dataset_name=CC12MDataset.dataset_name)
-        
+
         samples.close()
-    
