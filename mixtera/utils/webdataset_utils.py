@@ -1,6 +1,6 @@
 import gzip
 import io
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator
 
 from wids.wids import group_by_key, splitname
 from wids.wids_mmtar import MMIndexedTar
