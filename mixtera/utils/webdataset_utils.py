@@ -50,6 +50,10 @@ def decode_sample(sample: dict[str, Any]) -> dict[str, Any]:
             sample[key] = pickle.load(stream)
     return sample
 
+class MMIndexedTarRawBytes(MMIndexedTar):
+    def get_file(self, i):
+        fname, data = self.get_at_index(i)
+        return fname, data 
 
 class IndexedTarSamples:
     def __init__(self, path: str, decode: bool = False):
@@ -63,7 +67,7 @@ class IndexedTarSamples:
         self.path = path
         self.decoder = decode_sample 
         self.decode = decode
-        self.reader = MMIndexedTar(path)
+        self.reader = MMIndexedTarRawBytes(path)
 
         all_files = self.reader.names()
         self.samples = group_by_key(all_files)
@@ -91,7 +95,7 @@ class IndexedTarSamples:
                 k, ext = splitname(fname)
                 key = key or k
                 assert key == k, "Inconsistent keys in the same sample"
-                sample[ext] = data
+                sample[ext[1:]] = data
             sample["__key__"] = key
             return self.decoder(sample) if self.decode else sample
         raise ValueError("Error reading sample")
