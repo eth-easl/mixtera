@@ -58,9 +58,9 @@ class MMIndexedTarRawBytes(MMIndexedTar):
     A subclass of `MMIndexedTar` that returns the raw bytes instead of an IOBytes object.
     """
 
-    def get_file(self, i):
-        fname, data = self.get_at_index(i)
-        return fname, data
+    def get_file(self, i: int) -> tuple[str, bytes]:
+        filename, data = self.get_at_index(i)
+        return filename, data
 
 
 class IndexedTarSamples:
