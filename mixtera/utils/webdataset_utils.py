@@ -1,6 +1,6 @@
 import gzip
 import io
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional
 
 from wids.wids import group_by_key, splitname
 from wids.wids_mmtar import MMIndexedTar
@@ -104,7 +104,7 @@ class IndexedTarSamples:
                 key = key or k
                 assert key == k, "Inconsistent keys in the same sample"
                 sample[ext[1:]] = data
-            sample["__key__"] = key
+            sample["__key__"] = key # type: ignore
             return self.decoder(sample) if self.decode else sample
         raise ValueError("Error reading sample")
 
