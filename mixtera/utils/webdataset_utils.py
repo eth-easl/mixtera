@@ -51,6 +51,9 @@ def decode_sample(sample: dict[str, Any]) -> dict[str, Any]:
     return sample
 
 class MMIndexedTarRawBytes(MMIndexedTar):
+    """
+        A subclass of `MMIndexedTar` that returns the raw bytes instead of an IOBytes object.
+    """
     def get_file(self, i):
         fname, data = self.get_at_index(i)
         return fname, data 
