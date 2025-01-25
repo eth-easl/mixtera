@@ -408,7 +408,11 @@ class QueryResult:
                                     if num_missing_samples == original_sizes[mixture_key]:
                                         mixture.pop(mixture_key)
                                     else:
-                                        logger.debug(f"This is the first chunk without progress on {mixture_key}." + f"{num_missing_samples}/{original_sizes[mixture_key]} samples are missing.")
+                                        logger.debug(
+                                            f"This is the first chunk without progress on {mixture_key}."
+                                            + f"{num_missing_samples}/{original_sizes[mixture_key]} smpls are missing."
+                                        )
+                                        mixture[mixture_key] -= original_sizes[mixture_key] - num_missing_samples
 
                                     if not remaining_sizes:
                                         logger.debug("Not enough data, ending chunk generation")
@@ -429,6 +433,11 @@ class QueryResult:
                                             remaining_sizes[key] += samples_to_distribute[i]
                                             mixture[key] += samples_to_distribute[i]
 
+                                        assert sum(mixture.values()) == chunk_size, (
+                                            f"mixture vals = {mixture.values()}"
+                                            + f"\n sum = {sum(mixture.values())}"
+                                            + f"\n cs = {chunk_size}"
+                                        )
                                     break
 
                 # Check if we have enough data for all mixture keys
