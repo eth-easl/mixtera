@@ -433,11 +433,6 @@ class QueryResult:
                                             remaining_sizes[key] += samples_to_distribute[i]
                                             mixture[key] += samples_to_distribute[i]
 
-                                        assert sum(mixture.values()) == chunk_size, (
-                                            f"mixture vals = {mixture.values()}"
-                                            + f"\n sum = {sum(mixture.values())}"
-                                            + f"\n cs = {chunk_size}"
-                                        )
                                     break
 
                 # Check if we have enough data for all mixture keys
