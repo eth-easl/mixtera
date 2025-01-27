@@ -36,6 +36,10 @@ class Dataset(ABC):
                 from mixtera.core.datacollection.datasets import CC12MDataset  # pylint: disable=import-outside-toplevel
 
                 return CC12MDataset
+            if dataset_type == DatasetType.LLAVA_DATASET:
+                from mixtera.core.datacollection.datasets import LLaVADataset
+
+                return LLaVADataset
             if dataset_type == DatasetType.PARQUET_DATASET:
                 from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
                     ParquetDataset,

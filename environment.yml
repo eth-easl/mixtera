@@ -31,3 +31,4 @@ dependencies:
     - webdataset
     - pillow
     - pybind11
+    - ijson

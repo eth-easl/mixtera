@@ -8,3 +8,4 @@ class DatasetType(IntEnum):
     WEB_DATASET = auto()
     PARQUET_DATASET = auto()
     CC12M_DATASET = auto()
+    LLAVA_DATASET = auto()
