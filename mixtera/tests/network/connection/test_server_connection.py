@@ -465,7 +465,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
                 call(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer),
             ]
         )
-        mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader, timeout=900)
+        mock_read_utf8_string.assert_awaited_once_with(NUM_BYTES_FOR_SIZES, mock_reader, timeout=3600)
 
     @patch("mixtera.network.connection.server_connection.read_int")
     @patch("mixtera.network.connection.server_connection.write_int")
@@ -510,7 +510,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
             ],
             any_order=False,
         )
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=120)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=3900)
 
     @patch("mixtera.network.connection.server_connection.read_int")
     @patch("mixtera.network.connection.server_connection.write_int")
@@ -547,7 +547,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
             ],
             any_order=False,
         )
-        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=900)
+        mock_read_int.assert_awaited_once_with(NUM_BYTES_FOR_IDENTIFIERS, mock_reader, timeout=7200)
 
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")

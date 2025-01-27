@@ -326,26 +326,11 @@ class QueryResult:
                     mixture_id += 1
                     previous_mixture = mixture
 
-                    if (
-                        len(self._mixture_log) > 0
-                        and isinstance(self._mixture_log[-1], DynamicMixture)
-                        and hasattr(self._mixture_log[-1], "_mixing_alg")
-                    ):
-                        is_eq = isinstance(self._mixture_log[-1], DynamicMixture)
-                        has_attr = hasattr(self._mixture_log[-1], "_mixing_alg")
-                        logger.debug(
-                            f"len = {len(self._mixture_log)}\ntype = {self._mixture_log[-1]}\nis_eq = {is_eq}\nhas_attr = {has_attr}"
-                        )
-                        logger.info("Cleaning up last mixing algorithm from mixture log.")
-                        self._mixture_log[-1]._mixing_alg = None
-                    elif len(self._mixture_log) > 0:
-                        is_eq = isinstance(self._mixture_log[-1], DynamicMixture)
-                        has_attr = hasattr(self._mixture_log[-1], "_mixing_alg")
-                        logger.debug(
-                            f"len = {len(self._mixture_log)}\ntype = {self._mixture_log[-1]}\nis_eq = {is_eq}\nhas_attr = {has_attr}"
-                        )
-                    else:
-                        logger.debug("len = 0 not more info yet.")
+                    if len(self._mixture_log) > 0:
+                        last_mixture = self._mixture_log[-1][1]
+                        if isinstance(last_mixture, DynamicMixture) and hasattr(last_mixture, "_mixing_alg"):
+                            logger.info("Cleaning up last mixing algorithm from mixture log.")
+                            last_mixture._mixing_alg = None
 
                     self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
                     self._persist_mixture_log()

@@ -127,7 +127,7 @@ class ServerConnection:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     logger.error(f"Error closing connection: {e}")
 
         if not yielded:
