@@ -402,7 +402,17 @@ class QueryResult:
                                 else:
                                     # best-effort generation
                                     num_missing_samples = remaining_sizes.pop(mixture_key)
-                                    mixture.pop(mixture_key)
+
+                                    # If we have not put any samples for this key into the chunk,
+                                    #  remove it from mixture
+                                    if num_missing_samples == original_sizes[mixture_key]:
+                                        mixture.pop(mixture_key)
+                                    else:
+                                        logger.debug(
+                                            f"This is the first chunk without progress on {mixture_key}."
+                                            + f"{num_missing_samples}/{original_sizes[mixture_key]} smpls are missing."
+                                        )
+                                        mixture[mixture_key] -= original_sizes[mixture_key] - num_missing_samples
 
                                     if not remaining_sizes:
                                         logger.debug("Not enough data, ending chunk generation")
