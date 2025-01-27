@@ -17,6 +17,7 @@ from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetE
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.chunker import create_chunker_index as cpp_create
 from mixtera.core.query.mixture import Mixture, MixtureKey
+from mixtera.core.query.mixture.dynamic_mixture import DynamicMixture
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import (
     defaultdict_to_dict,
@@ -324,6 +325,28 @@ class QueryResult:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     mixture_id += 1
                     previous_mixture = mixture
+
+                    if (
+                        len(self._mixture_log) > 0
+                        and isinstance(self._mixture_log[-1], DynamicMixture)
+                        and hasattr(self._mixture_log[-1], "_mixing_alg")
+                    ):
+                        is_eq = isinstance(self._mixture_log[-1], DynamicMixture)
+                        has_attr = hasattr(self._mixture_log[-1], "_mixing_alg")
+                        logger.debug(
+                            f"len = {len(self._mixture_log)}\ntype = {self._mixture_log[-1]}\nis_eq = {is_eq}\nhas_attr = {has_attr}"
+                        )
+                        logger.info("Cleaning up last mixing algorithm from mixture log.")
+                        self._mixture_log[-1]._mixing_alg = None
+                    elif len(self._mixture_log) > 0:
+                        is_eq = isinstance(self._mixture_log[-1], DynamicMixture)
+                        has_attr = hasattr(self._mixture_log[-1], "_mixing_alg")
+                        logger.debug(
+                            f"len = {len(self._mixture_log)}\ntype = {self._mixture_log[-1]}\nis_eq = {is_eq}\nhas_attr = {has_attr}"
+                        )
+                    else:
+                        logger.debug("len = 0 not more info yet.")
+
                     self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
                     self._persist_mixture_log()
                     self._update_key_id_map()

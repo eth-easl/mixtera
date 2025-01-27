@@ -99,5 +99,5 @@ class DynamicMixture(Mixture):
             )
             weight_map = {self._id_key_map[idx]: val for idx, val in enumerate(mixture_np) if val > 0}
             logger.debug(f"weight_map = {weight_map}")
-            self._current_mixture = StaticMixture(self.chunk_size, weight_map)
+            self._current_mixture = StaticMixture(self.chunk_size, weight_map, strict=self.strict)
             logger.debug(f"New mixture is {self._current_mixture}")

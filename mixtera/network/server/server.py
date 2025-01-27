@@ -1,4 +1,5 @@
 import asyncio
+import socket
 from pathlib import Path
 
 from loguru import logger
@@ -372,8 +373,9 @@ class MixteraServer:
         This method starts the server and continuously serves until a cancellation
         request is received or an exception occurs. It also performs clean-up before stopping.
         """
-        server = await asyncio.start_server(self._dispatch_client, self._host, self._port)
+        server = await asyncio.start_server(self._dispatch_client, self._host, self._port, limit=2**26, backlog=2048)
         addr = server.sockets[0].getsockname()
+        server.sockets[0].setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         logger.info(f"Serving MixteraServer on {addr}")
 
         async with server:
