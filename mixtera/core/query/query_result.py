@@ -17,6 +17,7 @@ from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetE
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.chunker import create_chunker_index as cpp_create
 from mixtera.core.query.mixture import Mixture, MixtureKey
+from mixtera.core.query.mixture.dynamic_mixture import DynamicMixture
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import (
     defaultdict_to_dict,
@@ -315,7 +316,7 @@ class QueryResult:
                 logger.error("Hard-stopping chunk generation after 10 unsucessful tries.")
                 return
 
-            mixture = base_mixture.mixture_in_rows()
+            mixture = deepcopy(base_mixture.mixture_in_rows())
             is_strict = base_mixture.strict
 
             chunk_success = False
@@ -324,6 +325,13 @@ class QueryResult:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     mixture_id += 1
                     previous_mixture = mixture
+
+                    if len(self._mixture_log) > 0:
+                        last_mixture = self._mixture_log[-1][1]
+                        if isinstance(last_mixture, DynamicMixture) and hasattr(last_mixture, "_mixing_alg"):
+                            logger.info("Cleaning up last mixing algorithm from mixture log.")
+                            last_mixture._mixing_alg = None
+
                     self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
                     self._persist_mixture_log()
                     self._update_key_id_map()
@@ -402,36 +410,56 @@ class QueryResult:
                                 else:
                                     # best-effort generation
                                     num_missing_samples = remaining_sizes.pop(mixture_key)
+                                    # Remaining sizes contains all keys that have not been depleted so far,
+                                    # even ones with value 0.
+
+                                    assert num_missing_samples <= mixture[mixture_key], (
+                                        f"missing samples = {num_missing_samples}"
+                                        + f"\noriginal sizes = {original_sizes} \n mixture = {mixture}"
+                                    )
+                                    pre_best_effort_sum = sum(mixture.values())
 
                                     # If we have not put any samples for this key into the chunk,
-                                    #  remove it from mixture
-                                    if num_missing_samples == original_sizes[mixture_key]:
+                                    # remove it from mixture
+                                    if num_missing_samples == mixture[mixture_key]:
                                         mixture.pop(mixture_key)
                                     else:
                                         logger.debug(
-                                            f"This is the first chunk without progress on {mixture_key}."
-                                            + f"{num_missing_samples}/{original_sizes[mixture_key]} smpls are missing."
+                                            f"This is the first chunk without finishing {mixture_key}. "
+                                            + f"{num_missing_samples}/{mixture[mixture_key]} samples are missing."
                                         )
-                                        mixture[mixture_key] -= original_sizes[mixture_key] - num_missing_samples
+                                        mixture[mixture_key] -= num_missing_samples
 
                                     if not remaining_sizes:
                                         logger.debug("Not enough data, ending chunk generation")
                                     else:
-                                        # redistribute missing samples among other mixture keys
-                                        total_original_size_remaining = sum(
-                                            original_sizes[key] for key in sorted(remaining_sizes.keys())
-                                        )
+                                        # Redistribute missing samples among other mixture keys that are not finished
+                                        # Note that remaining_sizes includes keys with current value 0,
+                                        # just not already empty ones (avoiding loops)
+                                        target_keys = sorted(remaining_sizes.keys())
+                                        logger.debug(f"target keys = {target_keys}")
 
-                                        ratios = [
-                                            original_sizes[key] / total_original_size_remaining
-                                            for key in sorted(remaining_sizes.keys())
-                                        ]
+                                        total_mixture_size_remaining = sum(mixture[key] for key in target_keys)
+
+                                        ratios = [mixture[key] / total_mixture_size_remaining for key in target_keys]
 
                                         samples_to_distribute = distribute_by_ratio(num_missing_samples, ratios)
 
-                                        for i, key in enumerate(sorted(remaining_sizes.keys())):
+                                        assert sum(samples_to_distribute) == num_missing_samples, (
+                                            f"std = {samples_to_distribute}" + f"\nmissing = {num_missing_samples}"
+                                        )
+
+                                        for i, key in enumerate(target_keys):
+                                            logger.debug(f"Redistributing {samples_to_distribute[i]} samples to {key}.")
                                             remaining_sizes[key] += samples_to_distribute[i]
                                             mixture[key] += samples_to_distribute[i]
+
+                                        post_best_effort_sum = sum(mixture.values())
+
+                                        assert pre_best_effort_sum == post_best_effort_sum, (
+                                            "mixture sum changed: "
+                                            + f"pre = {pre_best_effort_sum} post = {post_best_effort_sum}"
+                                        )
 
                                     break
 
