@@ -29,7 +29,7 @@ class LLaVADataset(Dataset):
 
     @staticmethod
     def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
-        with open(loc) as file:
+        with open(loc, encoding="utf-8") as file:
             dataset = json.load(file)
             for idx, sample in enumerate(dataset):
                 informed = False
@@ -56,9 +56,9 @@ class LLaVADataset(Dataset):
         file: str,
         range_list: list[tuple[int, int]],
         parsing_func: Callable[[str], str],
-        server_connection: Optional[ServerConnection],
+        server_connection: Optional[ServerConnection],  # pylint: disable=unused-argument
     ) -> Iterable[str]:
-        with open(file) as json_file:
+        with open(file, encoding="utf-8") as json_file:
             samples = ijson.items(json_file, "item")
 
             last_line_read = 0
@@ -75,7 +75,7 @@ class LLaVADataset(Dataset):
                 # Skip lines to reach the start of the new range if necessary
                 if r_start > last_line_read:
                     for _ in range(r_start - last_line_read):
-                        next(samples)
+                        next(samples)  # pylint: disable=stop-iteration-return
                     last_line_read = r_start
 
                 # Yield the lines in the current range
@@ -85,7 +85,7 @@ class LLaVADataset(Dataset):
     @staticmethod
     def _is_valid_llava_json(path: str) -> bool:
         try:
-            with open(path) as file:
+            with open(path, encoding="utf-8") as file:
                 samples = ijson.items(file, "samples")
                 for sample in samples:
                     if "id" not in sample or "image" not in sample or "conversations" not in sample:
