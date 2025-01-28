@@ -37,7 +37,7 @@ def _cleanup_all_shared_memory() -> None:
             logger.warning(f"Error cleaning up shared memory {shm_name} in atexit handler: {e}")
 
 
-atexit.register(_cleanup_all_shared_memory)
+#atexit.register(_cleanup_all_shared_memory)
 
 
 class MixteraTorchDataset(IterableDataset):
@@ -261,7 +261,11 @@ class MixteraTorchDataset(IterableDataset):
 
             for sample_chnk_idx, key_id, sample in self._client.stream_results(self._res_str_args):
                 status_array[self.worker_id] = sample_chnk_idx
-                yield self._yield_func(key_id, sample)
+                if sample is not None:
+                    yield self._yield_func(key_id, sample)
+                else:
+                    logger.debug(f"[Worker {self.worker_id}] Received None sample.")
+                    break
 
             with self.completion_lock:
                 completion_array[self.worker_id] = 1
@@ -275,4 +279,9 @@ class MixteraTorchDataset(IterableDataset):
                     )
                     self._cleanup_shared_memory(False)
         finally:
-            self._cleanup_shared_memory(True)
+            with self.completion_lock:
+                all_done = np.all(completion_array == 1)
+                if all_done:
+                    self._cleanup_shared_memory(True)
+                else:
+                    self._cleanup_shared_memory(False)

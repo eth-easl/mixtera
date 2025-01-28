@@ -32,7 +32,15 @@ class LLaVADataset(Dataset):
         with open(loc) as file:
             dataset = json.load(file)
             for idx, sample in enumerate(dataset):
-                metadata_parser.parse(line_number=idx, payload=sample, dataset_name=LLaVADataset.dataset_name)
+                informed = False
+                if "image" in sample:
+                    path = sample["image"].split("/")
+                    if not path[0].isdigit():
+                        metadata_parser.parse(line_number=idx, payload=sample, dataset_name=path[0])
+                        informed = True
+
+                if not informed:
+                    metadata_parser.parse(line_number=idx, payload=sample, dataset_name=LLaVADataset.dataset_name)
 
     @staticmethod
     def read_ranges_from_files(
