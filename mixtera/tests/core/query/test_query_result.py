@@ -1345,8 +1345,6 @@ class TestQueryResult(unittest.TestCase):
                     f"got {chunk_language_counts[lang]}",
                 )
 
-        raise RuntimeError()
-
         # Check that total samples returned matches the dataset
         total_samples_collected = sum(language_counts.values())
         self.assertEqual(total_samples_collected, total_samples)
