@@ -324,7 +324,7 @@ class QueryResult:
                 if previous_mixture != mixture:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     mixture_id += 1
-                    previous_mixture = mixture
+                    previous_mixture = deepcopy(mixture)
 
                     if len(self._mixture_log) > 0:
                         last_mixture = self._mixture_log[-1][1]
@@ -437,7 +437,7 @@ class QueryResult:
                                         # Note that remaining_sizes includes keys with current value 0,
                                         # just not already empty ones (avoiding loops)
                                         target_keys = sorted(remaining_sizes.keys())
-                                        logger.debug(f"target keys = {target_keys}")
+                                        # logger.debug(f"target keys = {target_keys}")
 
                                         total_mixture_size_remaining = sum(mixture[key] for key in target_keys)
 
@@ -450,7 +450,7 @@ class QueryResult:
                                         )
 
                                         for i, key in enumerate(target_keys):
-                                            logger.debug(f"Redistributing {samples_to_distribute[i]} samples to {key}.")
+                                            # logger.debug(f"Redistributing {samples_to_distribute[i]} samples to {key}.")
                                             remaining_sizes[key] += samples_to_distribute[i]
                                             mixture[key] += samples_to_distribute[i]
 
