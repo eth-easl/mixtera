@@ -450,7 +450,7 @@ class QueryResult:
                                         )
 
                                         for i, key in enumerate(target_keys):
-                                            # logger.debug(f"Redistributing {samples_to_distribute[i]} samples to {key}.")
+                                            # logger.debug(f"Distributing {samples_to_distribute[i]} samples to {key}.")
                                             remaining_sizes[key] += samples_to_distribute[i]
                                             mixture[key] += samples_to_distribute[i]
 
