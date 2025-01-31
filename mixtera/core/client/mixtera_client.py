@@ -265,7 +265,7 @@ class MixteraClient(ABC):
             with self.current_mixture_id_val.get_lock():
                 new_id = max(result_chunk.mixture_id, self.current_mixture_id_val.get_obj().value)
                 self.current_mixture_id_val.get_obj().value = new_id
-                logger.debug(f"Set current mixture ID to {new_id}")
+                # logger.debug(f"Set current mixture ID to {new_id}")
 
             result_chunk.configure_result_streaming(
                 client=self,

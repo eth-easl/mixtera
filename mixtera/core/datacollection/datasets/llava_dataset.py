@@ -13,7 +13,7 @@ from mixtera.network.connection import ServerConnection
 
 class LLaVADataset(Dataset):
     type: DatasetType = DatasetType.LLAVA_DATASET
-    dataset_name: str = "LLaVA"
+    dataset_name: str = "LLAVA_PRETRAIN"
 
     @staticmethod
     def iterate_files(loc: str) -> Iterable[str]:
@@ -32,15 +32,14 @@ class LLaVADataset(Dataset):
         with open(loc, encoding="utf-8") as file:
             dataset = json.load(file)
             for idx, sample in enumerate(dataset):
-                informed = False
                 if "image" in sample:
                     path = sample["image"].split("/")
                     if not path[0].isdigit():
                         metadata_parser.parse(line_number=idx, payload=sample, dataset_name=path[0])
-                        informed = True
-
-                if not informed:
-                    metadata_parser.parse(line_number=idx, payload=sample, dataset_name=LLaVADataset.dataset_name)
+                    else:
+                        metadata_parser.parse(line_number=idx, payload=sample, dataset_name=LLaVADataset.dataset_name)
+                else:
+                    metadata_parser.parse(line_number=idx, payload=sample, dataset_name='text')
 
     @staticmethod
     def read_ranges_from_files(

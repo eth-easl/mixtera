@@ -413,7 +413,7 @@ class QueryResult:
                 else:
                     logger.debug("Not enough data, ending chunk generation")
                     no_success_counter += 1
-                    yield None
+                    # yield None
             else:
                 if previous_mixture is not None or current_chunk_index == 0:
                     logger.debug("Obtained new None mixture.")
