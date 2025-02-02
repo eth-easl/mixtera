@@ -309,6 +309,8 @@ class QueryResult:
         # However, after a certain limit, we raise a StopIteration to avoid deadlocks.
         no_success_counter = 0
 
+        total_counts = defaultdict(int)
+
         while True:
             if no_success_counter > 10:
                 logger.error("Hard-stopping chunk generation after 10 unsucessful tries.")
@@ -444,7 +446,8 @@ class QueryResult:
                 if current_chunk_index == target_chunk_index:
                     chunk = {chunker_index_keys[chunker_index_keys_idx]: chunk}
                     self._persist_chunk_idx(current_chunk_index)
-                    base_mixture, target_chunk_index = yield ResultChunk(
+                    logger.debug(f"Yielding chunk {current_chunk_index}.")
+                    result_chunk = ResultChunk(
                         chunk,
                         self.dataset_type,
                         self.file_path,
@@ -454,6 +457,21 @@ class QueryResult:
                         mixture_id,
                         mixture=None,
                     )
+                    chunk_counts = defaultdict(int)
+                    for mixture_key, datasets in chunk.items():
+                        dataset = mixture_key.properties["dataset"][0]
+                        for files in datasets.values():
+                            for ranges in files.values():
+                                for start, end in ranges:
+                                    count = end - start
+                                    chunk_counts[dataset] += count
+                    
+                    for dataset, count in chunk_counts.items():
+                        total_counts[dataset] += count
+
+                    logger.debug(f"Chunk {current_chunk_index} counts: {total_counts}")
+                    
+                    base_mixture, target_chunk_index = yield result_chunk
 
             if chunk_success:
                 current_chunk_index += 1

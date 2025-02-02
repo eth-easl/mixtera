@@ -1,3 +1,4 @@
+from collections import defaultdict
 import itertools
 import json
 from pathlib import Path
@@ -31,15 +32,23 @@ class LLaVADataset(Dataset):
     def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
         with open(loc, encoding="utf-8") as file:
             dataset = json.load(file)
+            print(f"Registering metadata for LLAVA dataset: {loc}")
+            classes = defaultdict(int)
+
             for idx, sample in enumerate(dataset):
                 if "image" in sample:
                     path = sample["image"].split("/")
                     if not path[0].isdigit():
                         metadata_parser.parse(line_number=idx, payload=sample, dataset_name=path[0])
+                        classes[path[0]] += 1
                     else:
                         metadata_parser.parse(line_number=idx, payload=sample, dataset_name=LLaVADataset.dataset_name)
+                        classes[LLaVADataset.dataset_name] += 1
                 else:
                     metadata_parser.parse(line_number=idx, payload=sample, dataset_name='text')
+                    classes['text'] += 1
+            
+            print(f"Classes found in LLAVA dataset: {classes}") 
 
     @staticmethod
     def read_ranges_from_files(
