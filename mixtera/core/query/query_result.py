@@ -17,10 +17,12 @@ from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetE
 from mixtera.core.datacollection.index.index_collection import create_chunker_index
 from mixtera.core.query.chunker import create_chunker_index as cpp_create
 from mixtera.core.query.mixture import Mixture, MixtureKey
+from mixtera.core.query.mixture.dynamic_mixture import DynamicMixture
 from mixtera.core.query.result_chunk import ResultChunk
 from mixtera.utils.utils import (
     defaultdict_to_dict,
     deserialize_chunker_index,
+    distribute_by_ratio,
     merge_sorted_lists,
     seed_everything_from_list,
     serialize_chunker_index,
@@ -77,7 +79,7 @@ class QueryResult:
         self._lock = mp.Lock()
         self._index = mp.Value("i", 0)
 
-        #  The generator will be created lazily when calling __next__
+        # The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
         self._num_returns_gen = 0
         logger.debug("QueryResult instantiated.")
@@ -316,13 +318,22 @@ class QueryResult:
                 logger.error("Hard-stopping chunk generation after 10 unsucessful tries.")
                 return
 
-            mixture = base_mixture.mixture_in_rows()
+            mixture = deepcopy(base_mixture.mixture_in_rows())
+            is_strict = base_mixture.strict
+
             chunk_success = False
             if mixture:
                 if previous_mixture != mixture:
                     logger.debug(f"Obtained new mixture: {mixture}")
                     mixture_id += 1
-                    previous_mixture = mixture
+                    previous_mixture = deepcopy(mixture)
+
+                    if len(self._mixture_log) > 0:
+                        last_mixture = self._mixture_log[-1][1]
+                        if isinstance(last_mixture, DynamicMixture) and hasattr(last_mixture, "_mixing_alg"):
+                            logger.info("Cleaning up last mixing algorithm from mixture log.")
+                            last_mixture._mixing_alg = None
+
                     self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
                     self._persist_mixture_log()
                     self._update_key_id_map()
@@ -331,15 +342,18 @@ class QueryResult:
                 remaining_sizes: dict[MixtureKey, int] = {  # pylint: disable=unnecessary-comprehension
                     key: size for key, size in mixture.items()
                 }
+                original_sizes = remaining_sizes.copy()
 
-                # Sort to guarantee same handling for semantically same mixtures
-                for mixture_key in sorted(remaining_sizes.keys()):
-                    # logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+                global_progress_made = True
+                while global_progress_made and any(remaining_sizes.values()):
+                    global_progress_made = False
 
-                    progress_made = True
-                    while remaining_sizes[mixture_key] > 0 and progress_made:
-                        progress_made = False
+                    # Sort to guarantee same handling for semantically same mixtures
+                    for mixture_key in sorted(remaining_sizes.keys()):
+                        # logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
+
                         for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
+                            # logger.debug(f"Checking component key {component_key}")
                             if mixture_key == component_key:
                                 try:
                                     component_chunk: ChunkerIndexDatasetEntries = iterator.send(
@@ -368,14 +382,17 @@ class QueryResult:
                                             chunk[mixture_key][dataset_id][file_id] = (
                                                 ranges
                                                 if file_id not in chunk[mixture_key][dataset_id]
-                                                else merge_sorted_lists(chunk[mixture_key][dataset_id][file_id], ranges)
+                                                else merge_sorted_lists(
+                                                    chunk[mixture_key][dataset_id][file_id],
+                                                    ranges,
+                                                )
                                             )
-                                            # If we extended the ranges of that file, we need to sort them since, e.g.,
-                                            # the JSONL file wrapper expects them in sorted order
+                                            # If we extended the ranges of that file, we need to sort them since,
+                                            # e.g., the JSONL file wrapper expects them in sorted order
                                             # Since we now ranges are sorted and the existing ranges
                                             # are sorted as well, we use a merge operation.
 
-                                    progress_made = True
+                                    global_progress_made = global_progress_made or chunk_size > 0
 
                                     if remaining_sizes[mixture_key] == 0:
                                         # logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
@@ -384,14 +401,69 @@ class QueryResult:
                                 except StopIteration:
                                     continue
 
-                        # No matching components found or all are exhausted, unable to complete the chunk
-                        if not progress_made:
-                            logger.debug("Did not make progress, unable to complete chunk.")
+                        # No matching components found or all are exhausted
+                        if remaining_sizes[mixture_key] > 0:
+                            logger.debug(f"No progress on key {mixture_key}.")
+                            if is_strict:  # Unable to complete chunk
+                                logger.debug("Did not make progress, unable to complete chunk.")
+                            else:
+                                # best-effort generation
+                                num_missing_samples = remaining_sizes.pop(mixture_key)
+                                # Remaining sizes contains all keys that have not been depleted so far,
+                                # even ones with value 0.
+
+                                assert num_missing_samples <= mixture[mixture_key], (
+                                    f"missing samples = {num_missing_samples}"
+                                    + f"\noriginal sizes = {original_sizes} \n mixture = {mixture}"
+                                )
+                                pre_best_effort_sum = sum(mixture.values())
+
+                                # If we have not put any samples for this key into the chunk,
+                                # remove it from mixture
+                                if num_missing_samples == mixture[mixture_key]:
+                                    mixture.pop(mixture_key)
+                                else:
+                                    logger.debug(
+                                        f"This is the first chunk without finishing {mixture_key}. "
+                                        + f"{num_missing_samples}/{mixture[mixture_key]} samples are missing."
+                                    )
+                                    mixture[mixture_key] -= num_missing_samples
+
+                                if not remaining_sizes:
+                                    logger.debug("Not enough data, ending chunk generation")
+                                else:
+                                    # Redistribute missing samples among other mixture keys that are not finished
+                                    # Note that remaining_sizes includes keys with current value 0,
+                                    # just not already empty ones (avoiding loops)
+                                    target_keys = sorted(remaining_sizes.keys())
+                                    # logger.debug(f"target keys = {target_keys}")
+
+                                    total_mixture_size_remaining = sum(mixture[key] for key in target_keys)
+
+                                    ratios = [mixture[key] / total_mixture_size_remaining for key in target_keys]
+
+                                    samples_to_distribute = distribute_by_ratio(num_missing_samples, ratios)
+
+                                    assert sum(samples_to_distribute) == num_missing_samples, (
+                                        f"std = {samples_to_distribute}" + f"\nmissing = {num_missing_samples}"
+                                    )
+
+                                    for i, key in enumerate(target_keys):
+                                        # logger.debug(f"Distributing {samples_to_distribute[i]} samples to {key}.")
+                                        remaining_sizes[key] += samples_to_distribute[i]
+                                        mixture[key] += samples_to_distribute[i]
+
+                                    post_best_effort_sum = sum(mixture.values())
+
+                                    assert pre_best_effort_sum == post_best_effort_sum, (
+                                        "mixture sum changed: "
+                                        + f"pre = {pre_best_effort_sum} post = {post_best_effort_sum}"
+                                    )
+
+                                break
 
                 # Check if we have enough data for all mixture keys
-                # TODO(#111): Make it possible to support best effort here.
-                # Right now, if we cannot fulfill the mixture for that chunk, we stop.
-                if all(size == 0 for size in remaining_sizes.values()):
+                if remaining_sizes and all(size == 0 for size in remaining_sizes.values()):
                     chunk_success = True
                     no_success_counter = 0
                     if current_chunk_index == target_chunk_index:
@@ -406,6 +478,7 @@ class QueryResult:
                             self._key_id_map,
                             mixture_id,
                             mixture=mixture,
+                            strict_mixture=is_strict,
                         )
                     else:
                         logger.debug(

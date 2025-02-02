@@ -20,7 +20,7 @@ class ArbitraryMixture(Mixture):
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": "arbitrary_mixture", "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     def process_index(self, chunker_index: "ChunkerIndex") -> None:
         del chunker_index
