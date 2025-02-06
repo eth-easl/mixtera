@@ -350,122 +350,119 @@ class QueryResult:
                     for mixture_key in sorted(remaining_sizes.keys()):
                         # logger.debug(f"Handling key {mixture_key}, remaining sizes: {remaining_sizes}")
 
-                        progress_made = True
-                        while remaining_sizes[mixture_key] > 0 and progress_made:
-                            progress_made = False
-                            for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
-                                if mixture_key == component_key:
-                                    try:
-                                        component_chunk: ChunkerIndexDatasetEntries = iterator.send(
-                                            remaining_sizes[mixture_key]
-                                        )
-
-                                        # Update remaining size
-                                        chunk_size = sum(
-                                            sum(end - start for start, end in ranges)
-                                            for files in component_chunk.values()
-                                            for ranges in files.values()
-                                        )
-
-                                        assert (
-                                            chunk_size <= remaining_sizes[mixture_key]
-                                        ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
-                                        remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
-
-                                        # logger.debug(
-                                        #    f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
-                                        # )
-
-                                        # Merge the component chunk into the main chunk
-                                        for dataset_id, files in component_chunk.items():
-                                            for file_id, ranges in files.items():
-                                                chunk[mixture_key][dataset_id][file_id] = (
-                                                    ranges
-                                                    if file_id not in chunk[mixture_key][dataset_id]
-                                                    else merge_sorted_lists(
-                                                        chunk[mixture_key][dataset_id][file_id],
-                                                        ranges,
-                                                    )
-                                                )
-                                                # If we extended the ranges of that file, we need to sort them since,
-                                                # e.g., the JSONL file wrapper expects them in sorted order
-                                                # Since we now ranges are sorted and the existing ranges
-                                                # are sorted as well, we use a merge operation.
-
-                                        progress_made = True
-                                        global_progress_made = True
-
-                                        if remaining_sizes[mixture_key] == 0:
-                                            # logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
-                                            break  # Do not consider another iterator if we're done
-
-                                    except StopIteration:
-                                        continue
-
-                            # No matching components found or all are exhausted
-                            if not progress_made:
-                                logger.debug(f"No progress on key {mixture_key}.")
-                                if is_strict:  # Unable to complete chunk
-                                    logger.debug("Did not make progress, unable to complete chunk.")
-                                else:
-                                    # best-effort generation
-                                    num_missing_samples = remaining_sizes.pop(mixture_key)
-                                    # Remaining sizes contains all keys that have not been depleted so far,
-                                    # even ones with value 0.
-
-                                    assert num_missing_samples <= mixture[mixture_key], (
-                                        f"missing samples = {num_missing_samples}"
-                                        + f"\noriginal sizes = {original_sizes} \n mixture = {mixture}"
+                        for component_key, iterator in sorted(component_iterators.items(), key=lambda x: x[0]):
+                            # logger.debug(f"Checking component key {component_key}")
+                            if mixture_key == component_key:
+                                try:
+                                    component_chunk: ChunkerIndexDatasetEntries = iterator.send(
+                                        remaining_sizes[mixture_key]
                                     )
-                                    pre_best_effort_sum = sum(mixture.values())
 
-                                    # If we have not put any samples for this key into the chunk,
-                                    # remove it from mixture
-                                    if num_missing_samples == mixture[mixture_key]:
-                                        mixture.pop(mixture_key)
-                                    else:
-                                        logger.debug(
-                                            f"This is the first chunk without finishing {mixture_key}. "
-                                            + f"{num_missing_samples}/{mixture[mixture_key]} samples are missing."
-                                        )
-                                        mixture[mixture_key] -= num_missing_samples
+                                    # Update remaining size
+                                    chunk_size = sum(
+                                        sum(end - start for start, end in ranges)
+                                        for files in component_chunk.values()
+                                        for ranges in files.values()
+                                    )
 
-                                    if not remaining_sizes:
-                                        logger.debug("Not enough data, ending chunk generation")
-                                    else:
-                                        # Redistribute missing samples among other mixture keys that are not finished
-                                        # Note that remaining_sizes includes keys with current value 0,
-                                        # just not already empty ones (avoiding loops)
-                                        target_keys = sorted(remaining_sizes.keys())
-                                        # logger.debug(f"target keys = {target_keys}")
+                                    assert (
+                                        chunk_size <= remaining_sizes[mixture_key]
+                                    ), f"We took too much data ({chunk_size}) for {mixture_key}: {remaining_sizes}"
+                                    remaining_sizes[mixture_key] = remaining_sizes[mixture_key] - chunk_size
 
-                                        total_mixture_size_remaining = sum(mixture[key] for key in target_keys)
+                                    # logger.debug(
+                                    #    f"Received chunk size: {chunk_size} for {mixture_key} from {component_key}"
+                                    # )
 
-                                        ratios = [mixture[key] / total_mixture_size_remaining for key in target_keys]
+                                    # Merge the component chunk into the main chunk
+                                    for dataset_id, files in component_chunk.items():
+                                        for file_id, ranges in files.items():
+                                            chunk[mixture_key][dataset_id][file_id] = (
+                                                ranges
+                                                if file_id not in chunk[mixture_key][dataset_id]
+                                                else merge_sorted_lists(
+                                                    chunk[mixture_key][dataset_id][file_id],
+                                                    ranges,
+                                                )
+                                            )
+                                            # If we extended the ranges of that file, we need to sort them since,
+                                            # e.g., the JSONL file wrapper expects them in sorted order
+                                            # Since we now ranges are sorted and the existing ranges
+                                            # are sorted as well, we use a merge operation.
 
-                                        samples_to_distribute = distribute_by_ratio(num_missing_samples, ratios)
+                                    global_progress_made = global_progress_made or chunk_size > 0
 
-                                        assert sum(samples_to_distribute) == num_missing_samples, (
-                                            f"std = {samples_to_distribute}" + f"\nmissing = {num_missing_samples}"
-                                        )
+                                    if remaining_sizes[mixture_key] == 0:
+                                        # logger.debug(f"Finished data for {mixture_key}: {remaining_sizes}")
+                                        break  # Do not consider another iterator if we're done
 
-                                        for i, key in enumerate(target_keys):
-                                            # logger.debug(f"Distributing {samples_to_distribute[i]} samples to {key}.")
-                                            remaining_sizes[key] += samples_to_distribute[i]
-                                            mixture[key] += samples_to_distribute[i]
+                                except StopIteration:
+                                    continue
 
-                                        post_best_effort_sum = sum(mixture.values())
+                        # No matching components found or all are exhausted
+                        if remaining_sizes[mixture_key] > 0:
+                            logger.debug(f"No progress on key {mixture_key}.")
+                            if is_strict:  # Unable to complete chunk
+                                logger.debug("Did not make progress, unable to complete chunk.")
+                            else:
+                                # best-effort generation
+                                num_missing_samples = remaining_sizes.pop(mixture_key)
+                                # Remaining sizes contains all keys that have not been depleted so far,
+                                # even ones with value 0.
 
-                                        assert pre_best_effort_sum == post_best_effort_sum, (
-                                            "mixture sum changed: "
-                                            + f"pre = {pre_best_effort_sum} post = {post_best_effort_sum}"
-                                        )
+                                assert num_missing_samples <= mixture[mixture_key], (
+                                    f"missing samples = {num_missing_samples}"
+                                    + f"\noriginal sizes = {original_sizes} \n mixture = {mixture}"
+                                )
+                                pre_best_effort_sum = sum(mixture.values())
 
-                                        # Otherwise, if the first key runs out,
-                                        # we will stop generating due to the break below.
-                                        global_progress_made = True
+                                # If we have not put any samples for this key into the chunk,
+                                # remove it from mixture
+                                if num_missing_samples == mixture[mixture_key]:
+                                    mixture.pop(mixture_key)
+                                else:
+                                    logger.debug(
+                                        f"This is the first chunk without finishing {mixture_key}. "
+                                        + f"{num_missing_samples}/{mixture[mixture_key]} samples are missing."
+                                    )
+                                    mixture[mixture_key] -= num_missing_samples
 
-                                    break
+                                if not remaining_sizes:
+                                    logger.debug("Not enough data, ending chunk generation")
+                                else:
+                                    # Redistribute missing samples among other mixture keys that are not finished
+                                    # Note that remaining_sizes includes keys with current value 0,
+                                    # just not already empty ones (avoiding loops)
+                                    target_keys = sorted(remaining_sizes.keys())
+                                    # logger.debug(f"target keys = {target_keys}")
+
+                                    total_mixture_size_remaining = sum(mixture[key] for key in target_keys)
+
+                                    ratios = [mixture[key] / total_mixture_size_remaining for key in target_keys]
+
+                                    samples_to_distribute = distribute_by_ratio(num_missing_samples, ratios)
+
+                                    assert sum(samples_to_distribute) == num_missing_samples, (
+                                        f"std = {samples_to_distribute}" + f"\nmissing = {num_missing_samples}"
+                                    )
+
+                                    for i, key in enumerate(target_keys):
+                                        # logger.debug(f"Distributing {samples_to_distribute[i]} samples to {key}.")
+                                        remaining_sizes[key] += samples_to_distribute[i]
+                                        mixture[key] += samples_to_distribute[i]
+
+                                    post_best_effort_sum = sum(mixture.values())
+
+                                    assert pre_best_effort_sum == post_best_effort_sum, (
+                                        "mixture sum changed: "
+                                        + f"pre = {pre_best_effort_sum} post = {post_best_effort_sum}"
+                                    )
+
+                                    # Otherwise, if the first key runs out,
+                                    # we will stop generating due to the break below.
+                                    global_progress_made = True
+
+                                break
 
                 # Check if we have enough data for all mixture keys
                 if remaining_sizes and all(size == 0 for size in remaining_sizes.values()):
