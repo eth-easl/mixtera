@@ -114,6 +114,9 @@ class ServerConnection:
                     reader, writer = await asyncio.wait_for(
                         asyncio.open_connection(self._host, self._port), timeout=15.0
                     )
+                    if reader is None or writer is None:
+                        raise RuntimeError("reader or writer are None.")
+
                     writer.get_extra_info("socket").setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
                     yield reader, writer
                     yielded = True
