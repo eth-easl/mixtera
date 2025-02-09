@@ -31,7 +31,6 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             - lp_rounds: number of sweeps through the k dataset
             - lp_duration: duration of the learn params
             - lp_portion: perturbation portion in the learn params phase
-            - update_steps: how many steps to update weights
             - aioli_normalize_a: whether or not to normalize the graph matrix before softmaxxing
             - aioli_diagonal: whether or not only considering self interactions
             - one_hot_factor: perturbation amount for the mixture coefficients
