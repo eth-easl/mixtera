@@ -30,6 +30,7 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             - eta: softmax temperature hyperparameter
             - lp_rounds: number of sweeps through the k dataset
             - lp_duration: duration of the learn params
+            - lp_portion: perturbation portion in the learn params phase
             - update_steps: how many steps to update weights
             - aioli_normalize_a: whether or not to normalize the graph matrix before softmaxxing
             - aioli_diagonal: whether or not only considering self interactions
@@ -50,7 +51,6 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.ema_graph = None
         self.ema = ema
 
-        # self.last_generated_mixture = None  # The latest generated mixture weights. Can be perturbed or normal.
         self.total_steps = 0
 
     def learn_params_subroutine(self) -> None:
@@ -89,18 +89,16 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
             losses: A numpy array of losses per domain.
             counts: A numpy array of counts per domain.
         """
-        # per_step_losses = np.divide(losses, counts, out=np.zeros_like(losses, dtype=losses.dtype), where=counts != 0)
-        # self.per_step_losses.append(per_step_losses)
-
         self.total_steps += 1
         num_incoming_domains = len(losses)
         num_internal_domains = len(self.losses)
         num_domains = max(num_incoming_domains, num_internal_domains)
 
         if num_internal_domains < num_domains:
-            # Updating the relationship graph
+            # Updating the relationship graph to accommadate the new domains
             self.graph = np.zeros((num_domains, num_domains))
         else:
+            # Adding the loss to the graph
             if self.total_steps > self.prior_steps:
                 if self.is_in_perturbation() and self.perturbed_domain < num_domains:
                     self.graph[:, self.perturbed_domain] += self.losses - losses
@@ -115,15 +113,23 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.losses[:num_incoming_domains] = losses
         self.counts[:num_incoming_domains] = counts
 
+    """
+        Method to return the currently perturbed index
+    """
+
     @property
     def perturbed_domain(self) -> int:
         dynamic_steps = self.total_steps - self.prior_steps
         proportion = int(self.lp_duration * self.lp_portion)
         domain_count = len(self.losses)
-        sweeps = proportion / (max(domain_count, 1) * self.lp_sweep)
+        steps_per_perturbation = proportion / (max(domain_count, 1) * self.lp_sweep)
         location_within_phase = dynamic_steps % self.lp_duration
-        perturbed_domain = int(location_within_phase // sweeps)
+        perturbed_domain = int(location_within_phase // steps_per_perturbation)
         return perturbed_domain % domain_count
+
+    """
+       Checking if the model is being trained on perturbed domains.
+    """
 
     def is_in_perturbation(self) -> bool:
         dynamic_steps = self.total_steps - self.prior_steps
@@ -132,32 +138,30 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         return initial_domain < proportion
 
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
-        if self.total_steps < self.prior_steps or not updated_at_client:
+        # If we are in the prior steps, we return the initial mixture.
+        if self.total_steps < self.prior_steps:
             return None
 
         dynamic_steps = self.total_steps - max(self.prior_steps, 0)
         current_round = (dynamic_steps + self.lp_duration - 1) // self.lp_duration
-
-        if current_round > self.lp_rounds:
-            logger.debug(f"Current round passed, {updated_at_client}, {self.lp_rounds}, {current_round}")
-            return None
-
-        domain_count = len(self.counts)
         proportion = int(self.lp_duration * self.lp_portion)
-
-        if proportion < domain_count:
-            logger.error("There is not enough proportion to pertub all the domains")
-            return None
-
+        domain_count = len(self.losses)
         location_within_phase = dynamic_steps % self.lp_duration
 
+        if current_round > self.lp_rounds:
+            logger.info("All the learn params rounds have been executed.")
+            return None
+
+        if proportion < domain_count:
+            logger.error("There is not enough steps to pertub all the domains")
+            return None
+
+        # If we are out of the perturbation phase, we train with the newly learned weights
         if location_within_phase > proportion:
-            # logger.debug(f"Pertubed domain passed")
             return None
 
         # If we are out of the learn params phase, we compute the relationship graph.
         if location_within_phase == proportion:
-            # logger.debug(f"Return last generated mixture")
             self.learn_params_subroutine()
             weights_init = np.ones(domain_count)
 
