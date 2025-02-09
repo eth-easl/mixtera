@@ -112,12 +112,11 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         self.losses[:num_incoming_domains] = losses
         self.counts[:num_incoming_domains] = counts
 
-    """
-        Method to return the currently perturbed index
-    """
-
     @property
     def perturbed_domain(self) -> int:
+        """
+        Method to return the currently perturbed index
+        """
         dynamic_steps = self.total_steps - self.prior_steps
         proportion = int(self.lp_duration * self.lp_portion)
         domain_count = len(self.losses)
@@ -126,11 +125,10 @@ class AioliDynamicMixing(DynamicMixingAlgorithm):
         perturbed_domain = int(location_within_phase // steps_per_perturbation)
         return perturbed_domain % domain_count
 
-    """
-       Checking if the model is being trained on perturbed domains.
-    """
-
     def is_in_perturbation(self) -> bool:
+        """
+        Checking if the model is being trained on perturbed domains.
+        """
         dynamic_steps = self.total_steps - self.prior_steps
         initial_domain = dynamic_steps % self.lp_duration
         proportion = int(self.lp_duration * self.lp_portion)
