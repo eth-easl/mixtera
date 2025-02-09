@@ -87,7 +87,7 @@ class TestDynamicMixture(unittest.TestCase):
             self.dynamic_mixture._process_losses(losses, counts, 0)
             self.mixing_alg.process_losses.assert_called_once_with(losses, counts, 0)
             mock_static_mixture.assert_called_once_with(
-                self.chunk_size, {MixtureKey({"key1": ["val1"]}): 0.4, MixtureKey({"key2": ["val2"]}): 0.6}
+                self.chunk_size, {MixtureKey({"key1": ["val1"]}): 0.4, MixtureKey({"key2": ["val2"]}): 0.6}, strict=True
             )
             self.assertEqual(self.dynamic_mixture._current_mixture, instance)
 
@@ -156,6 +156,7 @@ class TestDynamicMixture(unittest.TestCase):
                     MixtureKey({"key2": ["val2"]}): 0.4,
                     MixtureKey({"key3": ["val3"]}): 0.3,
                 },
+                strict=True,
             )
             # Update internal _current_mixture
             self.assertEqual(self.dynamic_mixture._current_mixture, instance_step1)
@@ -193,6 +194,7 @@ class TestDynamicMixture(unittest.TestCase):
                     MixtureKey({"key2": ["val2"]}): 0.5,
                     MixtureKey({"key3": ["val3"]}): 0.3,
                 },
+                strict=True,
             )
             # Update internal _current_mixture
             self.assertEqual(self.dynamic_mixture._current_mixture, instance_step3)

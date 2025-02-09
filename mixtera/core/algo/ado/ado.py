@@ -663,7 +663,7 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
 
 
 def fit_scaling_law_for_domain(
-    args: tuple[int, Any, str, str, Any, str, str, bool, int, bool, int, int | None, str | None, int]
+    args: tuple[int, Any, str, str, Any, str, str, bool, int, bool, int, int | None, str | None, int],
 ) -> tuple[int, Any, None | dict[str, Any]]:
     (
         k,

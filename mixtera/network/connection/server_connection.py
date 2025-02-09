@@ -1,4 +1,5 @@
 import asyncio
+import socket
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Iterable, Optional, Type
 
@@ -100,6 +101,7 @@ class ServerConnection:
             or (None, None) if the connection ultimately fails after the maximum number of retries.
         """
         yielded = False
+        reader = writer = None
         try:
             attempts = -1
             async for attempt in AsyncRetrying(
@@ -112,17 +114,24 @@ class ServerConnection:
                     reader, writer = await asyncio.wait_for(
                         asyncio.open_connection(self._host, self._port), timeout=15.0
                     )
-                    try:
-                        yield reader, writer
-                        yielded = True
-                    finally:
-                        writer.close()
-                        await writer.wait_closed()
+                    if reader is None or writer is None:
+                        raise RuntimeError("reader or writer are None.")
+
+                    writer.get_extra_info("socket").setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    yield reader, writer
+                    yielded = True
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error(f"[attempts = {attempts}] Error while connecting to server: {e}")
             yield None, None
             yielded = True
+        finally:
+            if writer is not None:
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error(f"Error closing connection: {e}")
 
         if not yielded:
             yield None, None
@@ -621,7 +630,7 @@ class ServerConnection:
                 await write_int(status, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
             # Read checkpoint ID from the server
-            chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_SIZES, reader, timeout=60 * 15)
+            chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_SIZES, reader, timeout=60 * 60)
             return chkpnt_id
 
     def checkpoint_completed(self, job_id: str, chkpnt_id: str, on_disk: bool) -> bool:
@@ -643,7 +652,7 @@ class ServerConnection:
             await write_int(int(on_disk), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
             # Read success flag from the server
-            success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=120)
+            success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 60 + 5 * 60)
             return bool(success)
 
     def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
@@ -662,7 +671,7 @@ class ServerConnection:
             await write_utf8_string(chkpnt_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
             # Read success flag from the server (if needed)
-            success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 15)
+            success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 120)
             if not bool(success):
                 logger.error(f"Failed to restore checkpoint {chkpnt_id} for job {job_id}")
             else:
