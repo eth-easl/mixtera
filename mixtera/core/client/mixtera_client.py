@@ -34,6 +34,7 @@ class ResultStreamingArgs:
     dp_group_id: int = 0
     node_id: int = 0
     worker_id: int = 0
+    infinite_cycle: bool = False
     tunnel_via_server: bool = False
     chunk_reading_degree_of_parallelism: int = 1
     chunk_reading_prefetch_first_sample: bool = True

@@ -1,3 +1,4 @@
+from itertools import cycle
 import json
 import multiprocessing as mp
 import os
@@ -46,6 +47,7 @@ class QueryResult:
         mixture: Mixture,
         query_log_dir: Path | None = None,
         stop_on_none: bool = True,
+        infinite_cycle: bool = True,
     ) -> None:
         """
         Args:
@@ -78,6 +80,14 @@ class QueryResult:
         # Cross-process iterator state
         self._lock = mp.Lock()
         self._index = mp.Value("i", 0)
+
+        # NEW: initialize caching for infinite cycling.
+        # This will store every successfully generated chunk.
+        self._cached_chunks: list[ResultChunk] = []
+        # Once the normal generator is exhausted, if infinite cycling is enabled,
+        # we create a cycle generator over the cached chunks.
+        self._cycle_generator: cycle | None = None
+        self._infinite_cycle = infinite_cycle
 
         # The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
@@ -469,7 +479,7 @@ class QueryResult:
                     if current_chunk_index == target_chunk_index:
                         logger.debug(f"Yielding chunk {current_chunk_index}.")
                         self._persist_chunk_idx(current_chunk_index)
-                        base_mixture, target_chunk_index = yield ResultChunk(
+                        result_chunk = ResultChunk(
                             defaultdict_to_dict(chunk),
                             self.dataset_type,
                             self.file_path,
@@ -480,6 +490,22 @@ class QueryResult:
                             mixture=mixture,
                             strict_mixture=is_strict,
                         )
+
+                        chunk_counts = defaultdict(int)
+                        for mixture_key, datasets in chunk.items():
+                            dataset = mixture_key.properties["dataset"][0]
+                            for files in datasets.values():
+                                for ranges in files.values():
+                                    for start, end in ranges:
+                                        count = end - start
+                                        chunk_counts[dataset] += count
+                        
+                        for dataset, count in chunk_counts.items():
+                            total_counts[dataset] += count
+                        
+                        print(f"Chunk {current_chunk_index} counts: {total_counts}")
+                        base_mixture, target_chunk_index = yield result_chunk
+
                     else:
                         logger.debug(
                             f"current_chunk_index = {current_chunk_index} != target_chunk_index = {target_chunk_index}"
@@ -569,34 +595,49 @@ class QueryResult:
         return self
 
     def __next__(self) -> ResultChunk:
-        """Iterate over the results of the query."""
         with self._index.get_lock():
             chunk_target_index = self._index.get_obj().value
             self._index.get_obj().value += 1
 
         with self._lock:
-            #  The generator is created lazily since the QueryResult object might be pickled
-            # (and the generator was deleted from the state)
+            # Create the generator if it hasn't been created yet.
             if self._generator is None:
                 self._generator = self._chunk_generator()
-                next(self._generator)
+                next(self._generator)  # prime the generator
+                self._num_returns_gen = 0
 
-                assert (
-                    self._num_returns_gen == 0
-                ), f"Generator was not reset properly. Got {self._num_returns_gen} returns."
+            try:
+                # Try to get the next chunk.
+                result = self._generator.send((self._mixture, chunk_target_index))
+            except StopIteration:
+                # The generator is exhausted.
+                result = None
 
-            self._num_returns_gen += 1
-            result = self._generator.send((self._mixture, chunk_target_index))
-            if result is None:
-                # In case we reach end of chunks (for now),
-                # next time (e.g. due to updated mixture) we try again to fetch the same ID.
+            # If a valid result is returned, cache it (if cycling is enabled) and return it.
+            if result is not None:
+                if self._infinite_cycle:
+                    self._cached_chunks.append(result)
+                return result
+            else:
+                # No new chunk was produced.
+                # Roll back the index for this chunk.
                 with self._index.get_lock():
                     self._index.get_obj().value -= 1
 
-                if self.stop_on_none:
-                    raise StopIteration
-
-            return result
+                if not self._infinite_cycle:
+                    if self.stop_on_none:
+                        raise StopIteration
+                    else:
+                        return None
+                else:
+                    # If we haven't cached any chunks, we cannot cycle.
+                    if not self._cached_chunks:
+                        raise StopIteration("No chunks available to cycle through.")
+                    # Replace the generator with an infinite cycle over the cached chunks.
+                    if self._cycle_generator is None:
+                        self._cycle_generator = cycle(self._cached_chunks)
+                    return next(self._cycle_generator)
+  
 
     # SERIALIZATION ##
 

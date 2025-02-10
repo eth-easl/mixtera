@@ -9,3 +9,5 @@ class DatasetType(IntEnum):
     PARQUET_DATASET = auto()
     CC12M_DATASET = auto()
     LLAVA_DATASET = auto()
+    MSCOCO_DATASET = auto()
+    LAION400M_DATASET = auto()
