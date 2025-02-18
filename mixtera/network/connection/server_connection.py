@@ -334,29 +334,31 @@ class ServerConnection:
             A boolean indicating whether the dataset was successfully registered with the server.
         """
         async with self._connect_to_server() as (reader, writer):
-
             if reader is None or writer is None:
                 return False
-
-            # Announce we want to register a dataset
             await write_int(int(ServerTask.REGISTER_DATASET), NUM_BYTES_FOR_IDENTIFIERS, writer)
-
-            # Announce dataset identifier
             await write_utf8_string(identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
-
-            # Announce dataset location
             await write_utf8_string(loc, NUM_BYTES_FOR_IDENTIFIERS, writer)
-
-            # Announce dataset class
             await write_int(dtype.value, NUM_BYTES_FOR_IDENTIFIERS, writer)
-
-            # Announce parsing function
             await write_pickeled_object(parsing_func, NUM_BYTES_FOR_SIZES, writer)
-
-            # Announce metadata parser identifier
             await write_utf8_string(metadata_parser_identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
+            job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
-            return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
+        while True:
+            async with self._connect_to_server() as (reader, writer):
+                # Step 2: Poll for registration status every second.
+                await write_int(int(ServerTask.DATASET_REGISTRATION_STATUS), NUM_BYTES_FOR_IDENTIFIERS, writer)
+                await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+                status = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+                if status == 0:
+                    logger.debug("Still waiting for dataset registration to finish at server.")
+                    await asyncio.sleep(1)
+                    continue
+
+                if status == 1:
+                    return True  # Registration succeeded.
+
+                return False  # Registration failed.
 
     def register_metadata_parser(self, identifier: str, parser: Type["MetadataParser"]) -> bool:
         """

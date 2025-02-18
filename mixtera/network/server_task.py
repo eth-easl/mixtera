@@ -8,6 +8,7 @@ class ServerTask(IntEnum):
     GET_META_RESULT = auto()
     GET_NEXT_RESULT_CHUNK = auto()
     REGISTER_DATASET = auto()
+    DATASET_REGISTRATION_STATUS = auto()
     REGISTER_METADATA_PARSER = auto()
     CHECK_DATASET_EXISTS = auto()
     LIST_DATASETS = auto()

@@ -49,7 +49,6 @@ class LocalStub(MixteraClient):
     ) -> bool:
         if isinstance(loc, Path):
             loc = str(loc)
-
         return self._mdc.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
 
     def register_metadata_parser(
