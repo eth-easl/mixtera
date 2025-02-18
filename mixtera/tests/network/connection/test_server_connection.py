@@ -254,11 +254,8 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
 
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")
-    @patch("mixtera.network.connection.server_connection.write_pickeled_object")
     @patch("mixtera.network.connection.server_connection.read_int")
-    async def test_register_metadata_parser(
-        self, mock_read_int, mock_write_pickeled_object, mock_write_int, mock_write_string
-    ):
+    async def test_register_metadata_parser(self, mock_read_int, mock_write_int, mock_write_string):
         mock_reader = create_mock_reader()
         mock_writer = create_mock_writer()
 
@@ -280,7 +277,6 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
             [call(int(ServerTask.REGISTER_METADATA_PARSER), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)]
         )
         mock_write_string.assert_has_calls([call(identifier, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)])
-        mock_write_pickeled_object.assert_has_calls([call(parser, NUM_BYTES_FOR_SIZES, mock_writer)])
 
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")

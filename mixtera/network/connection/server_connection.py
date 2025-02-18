@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import socket
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Iterable, Optional, Type
@@ -387,7 +388,7 @@ class ServerConnection:
             await write_utf8_string(identifier, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
             # Announce metadata parser class
-            await write_pickeled_object(parser, NUM_BYTES_FOR_SIZES, writer)
+            await write_utf8_string(inspect.getsource(parser), NUM_BYTES_FOR_SIZES, writer)
 
             return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader))
 

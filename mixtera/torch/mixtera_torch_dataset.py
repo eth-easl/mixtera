@@ -90,7 +90,7 @@ class MixteraTorchDataset(IterableDataset):
                 if not self._client.execute_query(query, self._query_execution_args):
                     raise RuntimeError(
                         f"[{os.getpid()}/{threading.get_native_id()}]"
-                        + "[Node0/DP0]Query execution at server not successful."
+                        + "[Node0/DP0] Query execution at server not successful."
                     )
             else:
                 logger.info(f"[{os.getpid()}/{threading.get_native_id()}] " + "Initiating checkpoint restore!")
