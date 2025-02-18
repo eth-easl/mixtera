@@ -36,7 +36,7 @@ Mixtera is a centralized sample management layer, building upon DuckDB. It abstr
 
 ## ✨ Mixtera’s System Overview
 
-<img src="img/system.png" height=500 alt="Mixtera system design"/>
+<img src="img/system.png" height=300 alt="Mixtera system design"/>
 
 
 ## ✉️ About
