@@ -1,11 +1,16 @@
 import asyncio
+import importlib
 import socket
+import sys
+import typing
+import uuid
 from pathlib import Path
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.datasets.dataset import Dataset
+from mixtera.core.datacollection.index.parser.metadata_parser import MetadataParser, MetadataProperty
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
@@ -68,7 +73,10 @@ class MixteraServer:
         num_workers = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
         args = QueryExecutionArgs(
-            mixture=mixture, dp_groups=dp_groups, nodes_per_group=nodes_per_group, num_workers=num_workers
+            mixture=mixture,
+            dp_groups=dp_groups,
+            nodes_per_group=nodes_per_group,
+            num_workers=num_workers,
         )
 
         query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
@@ -173,7 +181,58 @@ class MixteraServer:
             writer (asyncio.StreamWriter): The stream writer to write data to the client.
         """
         identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        parser = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        source_code = await read_utf8_string(NUM_BYTES_FOR_SIZES, reader)
+        namespace = {
+            "MetadataParser": MetadataParser,
+            "MetadataProperty": MetadataProperty,
+            "Any": typing.Any,
+            "Optional": typing.Optional,
+            "List": typing.List,
+            "Dict": typing.Dict,
+        }
+
+        exec(source_code, namespace)  # pylint: disable=exec-used
+        parser_candidates = [
+            obj
+            for obj in namespace.values()
+            if isinstance(obj, type) and issubclass(obj, MetadataParser) and obj is not MetadataParser
+        ]
+
+        if len(parser_candidates) == 0:
+            raise RuntimeError("No metadata parser subclass found in the provided source code.")
+        if len(parser_candidates) > 1:
+            raise RuntimeError("Multiple metadata parser subclasses found. Please ensure only one is defined.")
+
+        parser = parser_candidates[0]
+        module_name = "mixtera_udf_" + uuid.uuid4().hex
+
+        header = (
+            "from mixtera.core.datacollection.index.parser import MetadataParser\n"
+            "from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty\n"
+            "from typing import Any, Optional, List, Dict\n"
+        )
+
+        final_source_code = header + "\n" + source_code
+
+        # Write the source code to a Python file in the server directory
+        # This is necessary because otherwise when the server uses multiprocessing
+        # with the newly registered parser, it does not have access to the code anymore.
+
+        udf_dir = self._directory / "udfs"
+        udf_dir.mkdir(exist_ok=True)
+        file_path = udf_dir / f"{module_name}.py"
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(final_source_code)
+
+        if udf_dir not in sys.path:
+            sys.path.insert(0, str(udf_dir))
+            logger.error(f"updated sys pat to {sys.path}")
+
+        # Import the module, so that it is available to spawned processes
+        imported_module = importlib.import_module(module_name)
+        parser.__module__ = module_name
+        setattr(imported_module, parser.__name__, parser)
+
         success = self._local_stub.register_metadata_parser(identifier, parser)
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
