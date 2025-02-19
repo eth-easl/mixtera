@@ -50,6 +50,7 @@ def test_filter_javascript(
     )
     query = Query.for_job(result_streaming_args.job_id).select(("language", "==", "JavaScript"))
     assert client.execute_query(query, query_exec_args)
+    assert client.wait_for_execution(result_streaming_args.job_id)
     result_samples = []
 
     for sample in client.stream_results(result_streaming_args):
@@ -73,6 +74,7 @@ def test_filter_html(
     )
     query = Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML"))
     assert client.execute_query(query, query_exec_args)
+    assert client.wait_for_execution(result_streaming_args.job_id)
     result_samples = []
 
     for sample in client.stream_results(result_streaming_args):
@@ -100,6 +102,7 @@ def test_filter_both(
         .select(("language", "==", "JavaScript"))
     )
     assert client.execute_query(query, query_exec_args)
+    assert client.wait_for_execution(result_streaming_args.job_id)
     result_samples = []
 
     for sample in client.stream_results(result_streaming_args):
@@ -148,6 +151,7 @@ def test_filter_unknown_license(
     )
     query = Query.for_job(result_streaming_args.job_id).select(("license", "==", "All rights reserved."))
     assert client.execute_query(query, query_exec_args)
+    assert client.wait_for_execution(result_streaming_args.job_id)
     assert len(list(client.stream_results(result_streaming_args))) == 0, "Got results back for expected empty results."
 
 
@@ -164,6 +168,7 @@ def test_filter_license_and_html(
         Query.for_job(result_streaming_args.job_id).select(("language", "==", "HTML")).select(("license", "==", "CC"))
     )
     assert client.execute_query(query, query_exec_args)
+    assert client.wait_for_execution(result_streaming_args.job_id)
     result_samples = []
 
     for sample in client.stream_results(result_streaming_args):
@@ -190,7 +195,7 @@ def test_reproducibility(
             f"6_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
             + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
             + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
-            + f"_reproducibility_{i}"
+            + f"_{result_streaming_args.tunnel_via_server}_reproducibility_{i}"
         )
         query = (
             Query.for_job(result_streaming_args.job_id)
@@ -198,7 +203,8 @@ def test_reproducibility(
             .select(("language", "==", "JavaScript"))
         )
         query_exec_args.mixture = mixture
-        client.execute_query(query, query_exec_args)
+        assert client.execute_query(query, query_exec_args)
+        assert client.wait_for_execution(result_streaming_args.job_id)
         result_samples = []
 
         for sample in client.stream_results(result_streaming_args):
@@ -229,6 +235,7 @@ def test_mixture_schedule(client: ServerStub):
     query_execution_args = QueryExecutionArgs(mixture=mixture_schedule)
     result_streaming_args = ResultStreamingArgs(job_id)
     assert client.execute_query(query, query_execution_args)
+    assert client.wait_for_execution(job_id)
     logger.info(f"Executed query for job {job_id} for mixture schedule.")
 
     result_samples = []
@@ -282,6 +289,7 @@ def test_dynamic_mixture(client: MixteraClient):
     result_streaming_args = ResultStreamingArgs(job_id)
 
     assert client.execute_query(query, query_execution_args)
+    assert client.wait_for_execution(job_id)
     logger.info(f"Executed query for job {job_id} for dynamic mixture.")
 
     result_iter = client.stream_results(result_streaming_args)

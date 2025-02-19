@@ -105,6 +105,7 @@ def run_query(client: MixteraClient, chunk_size: int, tunnel: bool):
     mixture = ArbitraryMixture(chunk_size=chunk_size)
     qea = QueryExecutionArgs(mixture=mixture)
     client.execute_query(query, qea)
+    client.wait_for_execution(job_id)
 
     rsa = ResultStreamingArgs(job_id=job_id)
     result_samples = list(client.stream_results(rsa))
@@ -147,13 +148,14 @@ def main(server_host: str, server_port: int):
         client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
 
         # Registering the dataset with the client.
-        client.register_dataset(
+        if not client.register_dataset(
             "server_integrationtest_dataset",
             server_dir / "testd.jsonl",
             JSONLDataset,
             parsing_func,
             "TEST_PARSER",
-        )
+        ):
+            raise RuntimeError("Error while registering dataset.")
 
         # Run queries on server
         chunk_size = 42

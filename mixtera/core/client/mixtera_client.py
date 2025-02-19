@@ -250,6 +250,20 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
+    @abstractmethod
+    def wait_for_execution(self, job_id: str) -> bool:
+        """
+        Waits until the query has finished executing.
+
+        Args:
+            job_id (str): The job id of the query
+
+        Returns:
+            bool indicating success
+        """
+
+        raise NotImplementedError()
+
     def stream_results(self, args: ResultStreamingArgs) -> Generator[tuple[int, int, Sample], None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
@@ -265,7 +279,7 @@ class MixteraClient(ABC):
             with self.current_mixture_id_val.get_lock():
                 new_id = max(result_chunk.mixture_id, self.current_mixture_id_val.get_obj().value)
                 self.current_mixture_id_val.get_obj().value = new_id
-                logger.debug(f"Set current mixture ID to {new_id}")
+                # logger.debug(f"Set current mixture ID to {new_id}")
 
             result_chunk.configure_result_streaming(
                 client=self,
@@ -275,7 +289,7 @@ class MixteraClient(ABC):
 
         with self.current_mixture_id_val.get_lock():
             self.current_mixture_id_val.get_obj().value = -1
-            logger.debug("Reset current mixture ID to -1.")
+            # logger.debug("Reset current mixture ID to -1.")
 
     @abstractmethod
     def _stream_result_chunks(
