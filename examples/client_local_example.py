@@ -98,13 +98,14 @@ def setup_local_client(directory: Path):
     client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
 
     # Registering the dataset with the client.
-    client.register_dataset(
+    if not client.register_dataset(
         "local_integrationtest_dataset",
         directory / "testd.jsonl",
         JSONLDataset,
         parsing_func,
         "TEST_PARSER",
-    )
+    ):
+        raise RuntimeError("Error while registering dataset!")
 
     return client
 
