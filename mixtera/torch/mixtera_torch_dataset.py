@@ -93,7 +93,6 @@ class MixteraTorchDataset(IterableDataset):
                         + "[Node0/DP0] Initiation of query execution at server not successful."
                     )
             else:
-                logger.info(f"[{os.getpid()}/{threading.get_native_id()}] " + "Initiating checkpoint restore!")
                 with open(self._checkpoint_path / "mixtera.id", "r", encoding="utf-8") as fp:
                     checkpoint_id = fp.read().strip()
 
@@ -103,8 +102,9 @@ class MixteraTorchDataset(IterableDataset):
                 )
                 self._client.restore_checkpoint(query.job_id, checkpoint_id)
 
+        # On all nodes, wait until query has been executed.
         if not self._client.wait_for_execution(query.job_id):
-            raise RuntimeError(f"[{os.getpid()}/{threading.get_native_id()}] " + "Query execution not successful.")
+            raise RuntimeError(f"[{os.getpid()}/{threading.get_native_id()}] Query execution not successful.")
 
     def __getstate__(self) -> dict[Any, Any]:
         state = self.__dict__.copy()

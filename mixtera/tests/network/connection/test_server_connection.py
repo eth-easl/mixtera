@@ -225,7 +225,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
     @patch("mixtera.network.connection.server_connection.write_pickeled_object")
     @patch("mixtera.network.connection.server_connection.write_int")
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
-    @patch("asyncio.sleep")  # Add this to mock the sleep call
+    @patch("asyncio.sleep")
     async def test_register_dataset(
         self,
         mock_sleep,
@@ -286,7 +286,7 @@ class TestServerConnection(unittest.IsolatedAsyncioTestCase):
                 call(NUM_BYTES_FOR_IDENTIFIERS, mock_reader),
             ]
         )
-        mock_sleep.assert_called_once_with(1)  # Verify that sleep was called
+        mock_sleep.assert_called_once_with(1)
 
     @patch("mixtera.network.connection.server_connection.write_utf8_string")
     @patch("mixtera.network.connection.server_connection.write_int")
