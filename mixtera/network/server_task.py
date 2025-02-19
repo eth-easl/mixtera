@@ -3,6 +3,7 @@ from enum import IntEnum, auto
 
 class ServerTask(IntEnum):
     REGISTER_QUERY = 0
+    QUERY_EXEC_STATUS = auto()
     READ_FILE = auto()
     GET_QUERY_ID = auto()
     GET_META_RESULT = auto()

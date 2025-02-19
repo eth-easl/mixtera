@@ -120,6 +120,7 @@ def run_query(client: MixteraClient, chunk_size: int):
     mixture = ArbitraryMixture(chunk_size=chunk_size)
     qea = QueryExecutionArgs(mixture=mixture)
     client.execute_query(query, qea)
+    client.wait_for_execution(job_id)
 
     rsa = ResultStreamingArgs(job_id=job_id)
     result_samples = list(client.stream_results(rsa))

@@ -94,6 +94,10 @@ class LocalStub(MixteraClient):
             query, args.mixture, args.dp_groups, args.nodes_per_group, args.num_workers, cache_path
         )
 
+    def wait_for_execution(self, job_id: str) -> bool:
+        logger.info(f"Waiting for execution of {job_id}.")
+        return wait_for_key_in_dict(self._training_query_map, job_id, 30)
+
     def is_remote(self) -> bool:
         return False
 

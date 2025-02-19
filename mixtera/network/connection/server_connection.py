@@ -165,12 +165,13 @@ class ServerConnection:
 
             # Announce query
             await write_pickeled_object(query, NUM_BYTES_FOR_SIZES, writer)
+            job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
-            # TODO(#92): Execution at server can take some time. THerefore, we have a long timeout here.
-            # However, it would be best to switch to a polling based model.
-            success = bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 15))
-            logger.debug(f"Got success = {success} from server.")
-            return success
+            if job_id != query.job_id:
+                logger.error(f"Instead of {query.job_id}, server returned {job_id}...")
+                return False
+
+            return True
 
     def execute_query(self, query: "Query", args: "QueryExecutionArgs") -> bool:
         """
@@ -673,12 +674,12 @@ class ServerConnection:
             await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
             await write_utf8_string(chkpnt_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-            # Read success flag from the server (if needed)
-            success = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=60 * 120)
-            if not bool(success):
-                logger.error(f"Failed to restore checkpoint {chkpnt_id} for job {job_id}")
+            server_job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+
+            if job_id != server_job_id:
+                logger.error(f"Instead of {job_id}, server returned {server_job_id}...")
             else:
-                logger.info("Successfully restored from checkpoint at server.")
+                logger.info("Successfully initiated checkpoint restore at server.")
 
     def receive_feedback(self, job_id: str, feedback: ClientFeedback) -> bool:
         return run_async_until_complete(self._receive_feedback(job_id, feedback))
@@ -702,3 +703,17 @@ class ServerConnection:
             await write_numpy_array(feedback.counts, NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES, writer)
 
             return bool(await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=5 * 60))
+
+    def check_query_exec_status(self, job_id: str) -> int:
+        return run_async_until_complete(self._check_query_exec_status(job_id))
+
+    async def _check_query_exec_status(self, job_id: str) -> int:
+        async with self._connect_to_server() as (reader, writer):
+            if reader is None or writer is None:
+                return False
+
+            await write_int(int(ServerTask.QUERY_EXEC_STATUS), NUM_BYTES_FOR_IDENTIFIERS, writer)
+            await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+            status = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+
+            return status

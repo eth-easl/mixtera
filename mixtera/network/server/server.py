@@ -16,6 +16,7 @@ from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query.chunk_distributor import ChunkDistributor
+from mixtera.core.query.query import Query
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.network_utils import (
@@ -54,6 +55,7 @@ class MixteraServer:
         self._chunk_distributor_map_lock = asyncio.Lock()
         self._register_query_lock = asyncio.Lock()
         self._dataset_registration: dict[str, bool] = {}
+        self._query_registration: dict[str, bool] = {}
 
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -68,7 +70,7 @@ class MixteraServer:
         """
         logger.debug("Received register query request")
         mixture = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
-        logger.debug(f"mixture = {mixture}")
+        logger.debug(f"Received mixture = {mixture}")
 
         dp_groups = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         nodes_per_group = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
@@ -81,13 +83,22 @@ class MixteraServer:
             num_workers=num_workers,
         )
 
-        query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
-        logger.debug(f"Received query = {str(query)}. Executing it.")
-        async with self._register_query_lock:
-            success = self._local_stub.execute_query(query, args)
-        logger.debug(f"Registered query with success = {success} and executed it.")
+        query: Query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        logger.debug(f"Received query = {str(query)}. Launching execution task.")
+        asyncio.create_task(self._background_register_query(query, args))
+        await write_utf8_string(query.job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+    async def _background_register_query(self, query: Query, args: QueryExecutionArgs) -> None:
+        async with self._register_query_lock:
+            try:
+                success = await asyncio.to_thread(self._local_stub.execute_query, query, args)
+                self._query_registration[query.job_id] = success
+                logger.debug(
+                    f"Background query registration completed for job_id {query.job_id} with success = {success}"
+                )
+            except Exception:  # pylint: disable=broad-exception-caught
+                logger.error(f"Background query registration failed: {traceback.format_exc()}")
+                self._query_registration[query.job_id] = False
 
     async def _read_file(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -169,7 +180,6 @@ class MixteraServer:
         parsing_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         metadata_parser_identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         job_id = str(uuid.uuid4())
-        self._dataset_registration[job_id] = None
         asyncio.create_task(
             self._background_register_dataset(job_id, identifier, loc, dtype, parsing_func, metadata_parser_identifier)
         )
@@ -376,15 +386,37 @@ class MixteraServer:
     async def _restore_checkpoint(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        asyncio.create_task(self._background_restore_checkpoint(job_id, chkpnt_id))
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        self._local_stub.restore_checkpoint(job_id, chkpnt_id)
+    async def _background_restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        async with self._register_query_lock:
+            try:
+                await asyncio.to_thread(self._local_stub.restore_checkpoint, job_id, chkpnt_id)
+                async with self._chunk_distributor_map_lock:
+                    self._chunk_distributor_map[job_id] = self._local_stub._get_query_chunk_distributor(job_id)
+                self._query_registration[job_id] = True
+                logger.debug(
+                    f"Background checkpoint restoration completed for job_id {job_id} with checkpoint {chkpnt_id}"
+                )
+            except Exception:  # pylint: disable=broad-exception-caught
+                logger.error(f"Background checkpoint restoration failed: {traceback.format_exc()}")
+                self._query_registration[job_id] = False
 
-        async with self._chunk_distributor_map_lock:
-            # We have a new distributor object.
-            self._chunk_distributor_map[job_id] = self._local_stub._get_query_chunk_distributor(job_id)
-
-        success = True
-        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+    async def _check_query_registration(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """
+        Checks the status of query registration or checkpoint restoration.
+        Returns: 0 if in progress, 1 if succeeded, 2 if failed.
+        """
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = self._query_registration.get(job_id, None)
+        if success is True:
+            status = 1
+        elif success is False and job_id in self._query_registration:
+            status = 2
+        else:
+            status = 0
+        await write_int(status, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
     async def _process_feedback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
@@ -420,6 +452,8 @@ class MixteraServer:
             logger.info(f"Got task = {task}")
             if task == ServerTask.REGISTER_QUERY:
                 await self._register_query(reader, writer)
+            elif task == ServerTask.QUERY_EXEC_STATUS:
+                await self._check_query_registration(reader, writer)
             elif task == ServerTask.READ_FILE:
                 await self._read_file(reader, writer)
             elif task == ServerTask.GET_META_RESULT:
