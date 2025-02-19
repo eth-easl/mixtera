@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
@@ -69,7 +70,7 @@ class ServerStub(MixteraClient):
             logger.error("Could not register query at server!")
             return False
 
-        logger.info(f"Registered query for job {query.job_id} at server!")
+        logger.info(f"Started query registration for job {query.job_id} at server!")
 
         return True
 
@@ -132,3 +133,21 @@ class ServerStub(MixteraClient):
 
     def restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
         return self.server_connection.restore_checkpoint(job_id, chkpnt_id)
+
+    def wait_for_execution(self, job_id: str) -> bool:
+        logger.info("Waiting for query execution at server to finish.")
+        status = self.server_connection.check_query_exec_status(job_id)
+
+        timeout_minutes = 30
+        curr_time = 0
+        while status == 0 and curr_time <= timeout_minutes * 60:
+            time.sleep(1)
+            status = self.server_connection.check_query_exec_status(job_id)
+            curr_time += 1
+
+        if status != 1:
+            logger.error(f"Query execution failed with status {status}.")
+            return False
+
+        logger.info("Query execution finished.")
+        return True
