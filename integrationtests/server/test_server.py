@@ -195,7 +195,7 @@ def test_reproducibility(
             f"6_{query_exec_args.mixture.chunk_size}_{query_exec_args.dp_groups}"
             + f"_{query_exec_args.nodes_per_group}_{query_exec_args.num_workers}_{result_streaming_args.chunk_reading_degree_of_parallelism}"
             + f"_{result_streaming_args.chunk_reading_window_size}_{result_streaming_args.chunk_reading_mixture_type}"
-            + f"_reproducibility_{i}"
+            + f"_{result_streaming_args.tunnel_via_server}_reproducibility_{i}"
         )
         query = (
             Query.for_job(result_streaming_args.job_id)
