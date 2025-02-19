@@ -11,7 +11,7 @@ Mixtera is an open-source data-centric training data plane built for modern LLM/
 
 ## ⚡️ Quickstart
 
-Mixtera can run as a server (as presented in the paper) or, for single-GPU training, in-process. In both cases, you will need to install the necessary dependencies and install Mixtera in your environment, for example as follows:
+Mixtera can run as a server, or, for single-GPU training, in-process. In both cases, you will need to install the necessary dependencies and install Mixtera in your environment, for example as follows:
 
 ```bash
 # In case you don't have micromamba yet
@@ -38,13 +38,15 @@ Mixtera is a centralized sample management layer, building upon DuckDB. It abstr
 
 ## 🚀 Usage
 
-Using Mixtera typically consists of (1) registering your data and (2) running queries/trainings on top of it. We maintain several [examples](https://github.com/eth-easl/mixtera/blob/main/examples/) of how to use Mixtera and will build up more documentation over the next weeks. A good first read is the [local-only example](https://github.com/eth-easl/mixtera/blob/main/examples/client_local_example.py). That script walks you through the basics of registering data in Mixtera and running a query on that. Afterwards, the [server example](https://github.com/eth-easl/mixtera/blob/main/examples/client_server_example.py) shows you how to run a server with the `mixtera-server` command, and how to register data and query it via client-server interaction.
+Using Mixtera typically consists of (1) registering your data and (2) running queries/trainings on top of it. We maintain several [examples](https://github.com/eth-easl/mixtera/blob/main/examples/) of how to use Mixtera. A good first read is the [local-only example](https://github.com/eth-easl/mixtera/blob/main/examples/client_local_example.py). That script walks you through the basics of registering data in Mixtera and running a query on that. Afterwards, the [server example](https://github.com/eth-easl/mixtera/blob/main/examples/client_server_example.py) shows you how to run a server with the `mixtera-server` command, and how to register data and query it via client-server interaction.
 
-Coming soon: A guide on how to train a model in torchtitan with Mixtera, with and without ADO, on the SlimPajama dataset.
+We provide a [full guide](examples/torchtitan.md) on how to run a training with Mixtera and torchtitan, in particular on how to run the server, register the dataset, and then start training jobs, for both bare-metal and slurm (e.g., SwissAI/CSCS/Alps/Clariden) deployments.
 
 ## ✨ Mixtera’s System Overview
 
+<div align="center">
 <img src="img/system.png" height=300 alt="Mixtera system design"/>
+</div>
 
 Mixtera follows a server-client model. During training, the server runs on a node and each training node runs client instances. The query is executed at the server in two phases. First, Mixtera applies static filters from the query (e.g., English-only) to obtain all samples we could train on. This gives us a [QueryResult](https://github.com/eth-easl/mixtera/blob/main/mixtera/core/query/query_result.py). Second, during training, the server distributes [chunks](https://github.com/eth-easl/mixtera/blob/main/mixtera/core/query/result_chunk.py) of that query result to the client(s). A chunk is a collection of pointers to samples in files. These pointers tell the receiving client which samples in the file to load (e.g., sample 10 in file `wikipedia.jsonl.zst`).
 
