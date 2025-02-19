@@ -68,8 +68,9 @@ You should be able run `srun --container-writable --environment=mixtera -p norma
 
 ## 2. Downloading SlimPajama
 
-We provide a [helper script](download_slim_pajama.py) you can use to download the dataset or chunks of it to a local directory or DFS. If you just want to test Mixtera, downloading one chunk is sufficient. For example, you can run `python download_slim_pajama.py --target-dir /path/to/dataset --chunks 0`.
+We provide a [helper script](download_slim_pajama.py) you can use to download the dataset or chunks of it to a local directory or DFS. If you just want to test Mixtera, downloading one chunk is sufficient. For example, you can run `python download_slim_pajama.py --target-dir /path/to/dataset --chunks 0`. 
 
+Note that this script downloads each chunk in a separate directory. For Mixtera, we currently require all files to be stored within a single directory, so make sure to `mv * ..` all files one level upwards in case you use more than one chunk.
 
 ## 3. Starting the Mixtera Server
 
@@ -141,16 +142,35 @@ Of course, you have to replace the ip address and port of the server, as well as
 
 If you followed the [examples](client_server_example.py) before, this script probably seems familiar. This script informs the server about where the data lies, and uses the `SLIM_PAJAMA` metadata parser, which is shipped with Mixtera, to parse the metadata information. If you want to use a custom metadata parser, check out the [examples](client_server_example.py), they can easily be defined and registered.
 
+When running the script, you should see a bunch of `Still waiting for dataset registration to finish at server.` until the registration finishes. In the server logs, you should see a couple of messages like `Processed chunk N` until `All tasks finished.`. Congratulations! You have succesfully registered the samples in the server.
 
 ## Starting the training job
 
-It now is time to start a training job,
+We explain briefly how to run torchtitan trainings using Mixtera. We have extended [our fork](https://github.com/eth-easl/torchtitan-mixtera) to support various Mixtera options via the command line. We try to keep the fork synchronized with upstream torchtitan. Currently, pipeline parallelism / context parallelism are not supported since they use different code paths which don't support bfloat16 training. Before actually running the training, we need to define the job in torchtitan's configuration format. For example, you can find the [1.6B model configuration here](https://github.com/eth-easl/torchtitan-mixtera/blob/main/train_configs/ado_1b_default.toml). Important things to adjust include:
+
+- `job.dump_folder` describes where torchtitan will store its model outputs. Ensure this is writable by your training node
+- `training.data_parallel_shard_degree` and `training.data_parallel_replicate_degree` will need to be synchronized with the overall number of training nodes that you will train on. For example, if you plan to train across 4 nodes with 4 GPUs each, if you set `data_parallel_replicate_degree` to 2 and `data_parallel_shard_degree` to -1, you will have 2 replication nodes and 8 shards. We will set the overall number of nodes - in case of clariden - in our launcher script. If you use a different environment for multi-node training, you will need to launch it via your cluster manager accordingly.
+- `mixtera.vocab_size` needs to match the vocab size of the tokenizer
+- `mixtera.chunk_size` describes the number of samples per chunk (see our paper on Mixtera for more information)
+- `mixtera.pile` is only relevant if you train on The Pile. Since we use SlimPajama, we need to hardcode our mixture
+- Of course, feel free to adjust all parameters to your liking. Note that in torchtitan, you [modify the model architecture in code, not via the config file](https://github.com/eth-easl/torchtitan-mixtera/blob/main/torchtitan/models/llama/__init__.py). 
+
+As stated in the bullet above, in the current version of the code base, we only have hardcoded mixtures for The Pile for our experiments we ran in the paper submission. You will want to [modify the mixture](https://github.com/eth-easl/torchtitan-mixtera/blob/3481b3a95564c2992260b5fa8903eecd94de372b/train.py#L231) we pass to the `QueryExecutionArgs`. You can either define a custom static mixture, or just use an `InferringMixture`. To this end, modify the `train.py` file accordingly to your desired mixture.
+
+What is _very important_ to understand are the mixture processing modes. We describe them the Mixtera paper. Our current implementation enforces the token mixture mode, where Mixtera yields tokenized sequences to the training framework. This is because the torchtitan code was written in a way that the dataset should provide tokenized samples, not samples on the string level. We could extend this in the future. For the implementation of the processing modes, we refer to the [ResultChunk class implementation](https://github.com/eth-easl/mixtera/blob/main/mixtera/core/query/result_chunk.py).
 
 ### Starting locally
 
+In the `mixtera` section of the config file, you should add the fields `ip` (default `127.0.0.1`) and `port`(default `8080`) and set them accordingly. You can then kick off a training using `CONFIG_FILE=<path to your toml> ./run_llama_train.sh`.
+
 ### Starting on Alps/clariden
+
+We provide a [helper script](https://github.com/eth-easl/mixtera-clariden/blob/main/run_clients.py) for this in our mixtera-clariden repository. Similar to the dataset registration, you first need to edit the `client.yaml` file accordingly. `torchtitan_src` should point to your clone of the torchtitan-mixtera repository, and `mixtera_server_config` should point to the file that configured the server. We use this information to know the IP/node of the server. The `config_file` points to the torchtitan configuration file. Importantly, set `slurm.nodes` such that the number of nodes (with 4 GPUs per node) is in line with your torchtitan configuration. You can then `python run_clients.py client.yaml` to start the training jobs.
 
 ### Dynamic mixture using ADO
 
+This section is TBD, but at least in torchtitan, it's basically a matter of providing the initial mixture and selecting ADO as the dynamic mixture. It's all implemented with the per-domain loss.
 
 ## Using a different training framework
+
+This section is TBD, but if you take a look at train.py / compare our fork to torchtitan, you should already get a good impression of the changes necessary to support Mixtera.

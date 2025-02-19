@@ -33,7 +33,7 @@ def download_chunk_files(chunk_id, base_url, target_dir):
             futures = {}
             for _ in range(batch_size):
                 file_url = f"{base_url}/chunk{chunk_id}/example_train_{file_index}.jsonl.zst?download=true"
-                target_path = os.path.join(target_dir, f"example_train_{file_index}.jsonl.zst")
+                target_path = os.path.join(target_dir, f"ch{chunk_id}_example_train_{file_index}.jsonl.zst")
                 futures[executor.submit(download_file, file_url, target_path)] = file_index
                 file_index += 1
 
