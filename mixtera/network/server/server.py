@@ -387,7 +387,7 @@ class MixteraServer:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
-        self._query_registration.pop(job_id, None) # Otherwise, we immediately return True.
+        self._query_registration.pop(job_id, None)  # Otherwise, we immediately return True.
 
         asyncio.create_task(self._background_restore_checkpoint(job_id, chkpnt_id))
         await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
