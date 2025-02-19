@@ -98,13 +98,14 @@ def setup_local_client(directory: Path):
     client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
 
     # Registering the dataset with the client.
-    client.register_dataset(
+    if not client.register_dataset(
         "local_integrationtest_dataset",
         directory / "testd.jsonl",
         JSONLDataset,
         parsing_func,
         "TEST_PARSER",
-    )
+    ):
+        raise RuntimeError("Error while registering dataset!")
 
     return client
 
@@ -120,6 +121,7 @@ def run_query(client: MixteraClient, chunk_size: int):
     mixture = ArbitraryMixture(chunk_size=chunk_size)
     qea = QueryExecutionArgs(mixture=mixture)
     client.execute_query(query, qea)
+    client.wait_for_execution(job_id)
 
     rsa = ResultStreamingArgs(job_id=job_id)
     result_samples = list(client.stream_results(rsa))
