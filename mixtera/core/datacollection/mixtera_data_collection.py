@@ -20,7 +20,7 @@ from mixtera.utils.utils import DummyPool, numpy_to_native
 
 
 def process_file_for_metadata(
-    task: tuple[int, int, str, MetadataParserFactory, str, type[Dataset]]
+    task: tuple[int, int, str, MetadataParserFactory, str, type[Dataset]],
 ) -> tuple[int, list[dict]]:
     # This function is outside of the class in order to be pickable
     dataset_id, file_id, file_path_str, metadata_factory, metadata_parser_type, dtype_class = task

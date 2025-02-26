@@ -8,6 +8,7 @@ from .utils import (  # noqa: F401
     DummyPool,
     defaultdict_to_dict,
     deserialize_chunker_index,
+    distribute_by_ratio,
     flatten,
     hash_dict,
     is_on_github_actions,
@@ -22,6 +23,7 @@ from .utils import (  # noqa: F401
 
 __all__ = [
     "defaultdict_to_dict",
+    "distribute_by_ratio",
     "flatten",
     "numpy_to_native_type",
     "run_async_until_complete",

@@ -36,10 +36,10 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.directory_obj.cleanup()
 
-    @patch("mixtera.network.server.server.write_int")
+    @patch("mixtera.network.server.server.write_utf8_string")
     @patch("mixtera.network.server.server.read_pickeled_object")
     @patch("mixtera.network.server.server.read_int")
-    async def test_register_query(self, mock_read_int, mock_read_pickeled_object, mock_write_int):
+    async def test_register_query(self, mock_read_int, mock_read_pickeled_object, mock_write_utf8_string):
         query_mock = MagicMock()
         query_mock.job_id = "cool_training_id"
         mock_read_pickeled_object.side_effect = [MagicMock(), query_mock]  # mixture, query
@@ -55,7 +55,7 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
         mock_read_int.assert_awaited_with(NUM_BYTES_FOR_IDENTIFIERS, ANY)
         self.assertEqual(mock_read_int.await_count, 3)
 
-        mock_write_int.assert_awaited_once_with(True, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+        mock_write_utf8_string.assert_awaited_once_with(query_mock.job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
 
     @patch("mixtera.network.server.server.write_utf8_string")
     @patch("mixtera.network.server.server.read_utf8_string")
@@ -203,39 +203,27 @@ class TestMixteraServer(unittest.IsolatedAsyncioTestCase):
         self.server._local_stub.checkpoint_completed.assert_called_once_with(job_id, chkpnt_id, bool(on_disk_flag))
         mock_write_int.assert_awaited_once_with(int(is_completed), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
 
-    @patch("mixtera.network.server.server.write_int")
+    @patch("mixtera.network.server.server.write_utf8_string")
     @patch("mixtera.network.server.server.read_utf8_string")
-    async def test_restore_checkpoint(self, mock_read_utf8_string, mock_write_int):
-        """Test the _restore_checkpoint method of MixteraServer."""
-        # Setup mocks
+    async def test_restore_checkpoint(self, mock_read_utf8_string, mock_write_utf8_string):
         job_id = "test_job_id"
         chkpnt_id = "test_checkpoint_id"
-        success = True
-
         mock_read_utf8_string.side_effect = [job_id, chkpnt_id]
-
-        # Mock the restore_checkpoint method
-        self.server._local_stub.restore_checkpoint = MagicMock()
-
-        # Mock the _get_query_chunk_distributor method
-        self.server._local_stub._get_query_chunk_distributor = MagicMock(return_value=MagicMock())
 
         mock_reader = MagicMock()
         mock_writer = create_mock_writer()
 
-        # Mock the lock
-        self.server._chunk_distributor_map_lock = AsyncMock()
-        async with self.server._chunk_distributor_map_lock:
-            pass  # Just to ensure the lock can be awaited
+        # Mock the _background_restore_checkpoint method
+        self.server._background_restore_checkpoint = AsyncMock()
 
-        # Call the method
+        # Call the method under test
         await self.server._restore_checkpoint(mock_reader, mock_writer)
 
-        # Assertions
-        self.server._local_stub.restore_checkpoint.assert_called_once_with(job_id, chkpnt_id)
-        self.server._local_stub._get_query_chunk_distributor.assert_called_once_with(job_id)
-        self.assertIn(job_id, self.server._chunk_distributor_map)
-        mock_write_int.assert_awaited_once_with(int(success), NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+        # Assert that write_utf8_string was called with job_id
+        mock_write_utf8_string.assert_awaited_once_with(job_id, NUM_BYTES_FOR_IDENTIFIERS, mock_writer)
+
+        # Assert that _background_restore_checkpoint was called with the correct arguments
+        self.server._background_restore_checkpoint.assert_called_once_with(job_id, chkpnt_id)
 
     @patch("mixtera.network.server.server.read_utf8_string")
     @patch("mixtera.network.server.server.read_int")

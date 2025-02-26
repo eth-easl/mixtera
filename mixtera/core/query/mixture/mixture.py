@@ -12,19 +12,21 @@ if TYPE_CHECKING:
 class Mixture(ABC):
     """Base Mixture class."""
 
-    def __init__(self, chunk_size: int) -> None:
+    def __init__(self, chunk_size: int, strict: bool = True) -> None:
         """
         Base initialize for a Mixture object.
 
         Args:
             chunk_size: the size of a chunk in number of instances
+            strict: best_effort mode if False, strict mode if True
         """
         self.chunk_size = chunk_size
         self.current_step = 0
+        self.strict = strict
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": "base_mixture", "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": "base_mixture", "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     @abstractmethod
     def mixture_in_rows(self) -> dict[MixtureKey, int]:

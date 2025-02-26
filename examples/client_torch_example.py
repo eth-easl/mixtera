@@ -49,17 +49,31 @@ class TestMetadataParser(MetadataParser):
     def get_properties(cls) -> list[MetadataProperty]:
         return [
             MetadataProperty(
-                name="language", dtype="ENUM", multiple=False, nullable=False, enum_options={"JavaScript", "HTML"}
+                name="language",
+                dtype="ENUM",
+                multiple=False,
+                nullable=False,
+                enum_options={"JavaScript", "HTML"},
             ),
             MetadataProperty(
-                name="license", dtype="STRING", multiple=False, nullable=False, enum_options={"CC", "MIT"}
+                name="license",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+                enum_options={"CC", "MIT"},
             ),  # Could be ENUM but we are using string to test
             MetadataProperty(
-                name="doublelanguage", dtype="ENUM", multiple=True, nullable=False, enum_options={"JavaScript", "HTML"}
+                name="doublelanguage",
+                dtype="ENUM",
+                multiple=True,
+                nullable=False,
+                enum_options={"JavaScript", "HTML"},
             ),
         ]
 
-    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+    def parse(
+        self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]
+    ) -> None:
         metadata = payload["meta"]
         self.add_metadata(
             sample_id=line_number,
@@ -71,31 +85,43 @@ class TestMetadataParser(MetadataParser):
 
 def parsing_func(sample):
     import json
+
     return json.loads(sample)["text"]
+
 
 def setup_local_client(directory: Path):
     # Writing JSONL data to the directory, which simulates the dataset.
     write_jsonl(directory / "testd.jsonl")
-    
+
     # Instantiating a client from a local directory to interact with the datasets locally.
     client = MixteraClient.from_directory(directory)
-    
+
     # Register the metadata parser.
     client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
-    
+
     # Registering the dataset with the client.
     client.register_dataset(
-        "local_integrationtest_dataset", directory / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
+        "local_integrationtest_dataset",
+        directory / "testd.jsonl",
+        JSONLDataset,
+        parsing_func,
+        "TEST_PARSER",
     )
-    
+
     return client
 
-def setup_torch_dataset(client: MixteraClient, job_id: str, query: Query, num_workers: int, mixture: Mixture, tunnel: bool):
+
+def setup_torch_dataset(
+    client: MixteraClient,
+    job_id: str,
+    query: Query,
+    num_workers: int,
+    mixture: Mixture,
+    tunnel: bool,
+):
     # Creating a torch dataset.
     qea = QueryExecutionArgs(mixture=mixture, num_workers=num_workers)
-    client.execute_query(query, qea)
     rsa = ResultStreamingArgs(job_id=job_id, tunnel_via_server=tunnel)
-
     torch_ds = MixteraTorchDataset(client, query, qea, rsa)
     return torch_ds
 
@@ -110,15 +136,21 @@ def main():
         query = Query.for_job(job_id).select(("language", "==", "JavaScript"))
 
         num_workers = 2
-        
-        torch_ds = setup_torch_dataset(client, job_id, query,num_workers, mixture=mixture, tunnel=False)
-        dataloader = torch.utils.data.DataLoader(torch_ds, batch_size=10, num_workers=num_workers)
-        
+
+        torch_ds = setup_torch_dataset(
+            client, job_id, query, num_workers, mixture=mixture, tunnel=False
+        )
+        dataloader = torch.utils.data.DataLoader(
+            torch_ds, batch_size=10, num_workers=num_workers
+        )
+
         for batch in dataloader:
             for sample in batch:
-                assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
+                assert (
+                    int(sample) % 2 == 0
+                ), f"Sample {sample} should not appear for JavaScript"
             print(batch)  # Here, you could process the batch as needed.
-        
+
         print("Successfully ran torch dataset wrapper example!")
 
 

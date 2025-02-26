@@ -34,6 +34,7 @@ def run_test_arbitrarymixture_server(client: ServerStub, dp_groups, nodes_per_gr
         num_workers=num_workers,
     )
     client.execute_query(query, query_execution_args)
+    client.wait_for_execution(job_id)
     logger.info(
         f"Executed query for job {job_id} with dp_groups={dp_groups}, nodes_per_group={nodes_per_group}, num_workers={num_workers}"
     )
@@ -110,6 +111,7 @@ def run_test_arbitrarymixture_server(client: ServerStub, dp_groups, nodes_per_gr
 
     # Restore from checkpoint
     client.restore_checkpoint(job_id, checkpoint_id)
+    client.wait_for_execution(job_id)
     logger.info("Restored from checkpoint.")
 
     # Obtain chunks after restoring from checkpoint

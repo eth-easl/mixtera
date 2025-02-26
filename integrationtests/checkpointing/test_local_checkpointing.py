@@ -33,6 +33,7 @@ def run_test_arbitrarymixture(client: MixteraClient):
         num_workers=0,
     )
     client.execute_query(query, query_execution_args)
+    client.wait_for_execution(job_id)
     result_streaming_args = ResultStreamingArgs(job_id=job_id)
     logger.info("Executed query.")
     # Get one chunk for each worker
@@ -64,6 +65,7 @@ def run_test_arbitrarymixture(client: MixteraClient):
     logger.info(f"Got all chunks.")
 
     client.restore_checkpoint(job_id, checkpoint_id)
+    client.wait_for_execution(job_id)
 
     logger.info("Restored checkpoint.")
 

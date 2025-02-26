@@ -25,7 +25,7 @@ class HierarchicalStaticMixture(Mixture):
     """Mixture class that simply stores a predefined mixture.
     Different from StaticMixture it receives the mixture combinations in a hierarchical manner."""
 
-    def __init__(self, chunk_size: int, mixture: MixtureNode) -> None:
+    def __init__(self, chunk_size: int, mixture: MixtureNode, strict: bool = True) -> None:
         """
         Initializer for HierarchicalStaticMixture. The portions of the components should add up to 1.
 
@@ -35,12 +35,12 @@ class HierarchicalStaticMixture(Mixture):
             ex: HierarchicalMixture(property_name="topic", components=[Component(value="law", weight=0.5),
             Component(values=["medicine"], weight=0.5)])
         """
-        super().__init__(chunk_size)
+        super().__init__(chunk_size, strict=strict)
         self._mixture = self.parse_mixture_node(chunk_size, mixture)
 
     def __str__(self) -> str:
         """String representation of this mixture object."""
-        return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}}}'
+        return f'{{"mixture": {self._mixture}, "chunk_size": {self.chunk_size}, "strict": {self.strict}}}'
 
     def parse_mixture_node(self, chunk_size: int, user_mixture: MixtureNode) -> dict[MixtureKey, int]:
         formatted_user_mixture = self.convert_to_mixture_key_format(user_mixture)
