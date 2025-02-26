@@ -22,6 +22,7 @@ from mixtera.utils import (
     is_on_github_actions,
     seed_everything_from_list,
 )
+from tenacity import Retrying, stop_after_attempt, wait_random_exponential
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs
@@ -228,7 +229,15 @@ class ResultChunk:
                 raise RuntimeError("Did not supply tokenizer name.")
 
             logger.debug("Instantiating tokenizer - this might take a bit.")
-            self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
+            # We use tenacity here since we sometimes observe random exceptions due to connections
+            # to the huggingface hub.
+            for attempt in Retrying(
+                stop=stop_after_attempt(5),
+                wait=wait_random_exponential(multiplier=1, min=2, max=60),
+                reraise=True,
+            ):
+                with attempt:
+                    self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name, use_fast=True)
 
             logger.debug("Tokenizer instantiated.")
 

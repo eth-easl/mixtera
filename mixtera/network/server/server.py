@@ -1,15 +1,22 @@
 import asyncio
+import importlib
 import socket
+import sys
+import traceback
+import typing
+import uuid
 from pathlib import Path
 
 from loguru import logger
 from mixtera.core.client.local import LocalStub
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection.datasets.dataset import Dataset
+from mixtera.core.datacollection.index.parser.metadata_parser import MetadataParser, MetadataProperty
 from mixtera.core.datacollection.property_type import PropertyType
 from mixtera.core.filesystem.filesystem import FileSystem
 from mixtera.core.processing import ExecutionMode
 from mixtera.core.query.chunk_distributor import ChunkDistributor
+from mixtera.core.query.query import Query
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.network.network_utils import (
@@ -47,6 +54,8 @@ class MixteraServer:
         self._chunk_distributor_map: dict[str, ChunkDistributor] = {}
         self._chunk_distributor_map_lock = asyncio.Lock()
         self._register_query_lock = asyncio.Lock()
+        self._dataset_registration: dict[str, bool] = {}
+        self._query_registration: dict[str, bool] = {}
 
     async def _register_query(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -61,23 +70,35 @@ class MixteraServer:
         """
         logger.debug("Received register query request")
         mixture = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
-        logger.debug(f"mixture = {mixture}")
+        logger.debug(f"Received mixture = {mixture}")
 
         dp_groups = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         nodes_per_group = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
         num_workers = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
         args = QueryExecutionArgs(
-            mixture=mixture, dp_groups=dp_groups, nodes_per_group=nodes_per_group, num_workers=num_workers
+            mixture=mixture,
+            dp_groups=dp_groups,
+            nodes_per_group=nodes_per_group,
+            num_workers=num_workers,
         )
 
-        query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
-        logger.debug(f"Received query = {str(query)}. Executing it.")
-        async with self._register_query_lock:
-            success = self._local_stub.execute_query(query, args)
-        logger.debug(f"Registered query with success = {success} and executed it.")
+        query: Query = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        logger.debug(f"Received query = {str(query)}. Launching execution task.")
+        asyncio.create_task(self._background_register_query(query, args))
+        await write_utf8_string(query.job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+    async def _background_register_query(self, query: Query, args: QueryExecutionArgs) -> None:
+        async with self._register_query_lock:
+            try:
+                success = await asyncio.to_thread(self._local_stub.execute_query, query, args)
+                self._query_registration[query.job_id] = success
+                logger.debug(
+                    f"Background query registration completed for job_id {query.job_id} with success = {success}"
+                )
+            except Exception:  # pylint: disable=broad-exception-caught
+                logger.error(f"Background query registration failed: {traceback.format_exc()}")
+                self._query_registration[query.job_id] = False
 
     async def _read_file(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -158,8 +179,41 @@ class MixteraServer:
         dtype = Dataset.from_type_id(dataset_type_id)
         parsing_func = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
         metadata_parser_identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        success = self._local_stub.register_dataset(identifier, loc, dtype, parsing_func, metadata_parser_identifier)
-        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+        job_id = str(uuid.uuid4())
+        asyncio.create_task(
+            self._background_register_dataset(job_id, identifier, loc, dtype, parsing_func, metadata_parser_identifier)
+        )
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
+
+    async def _background_register_dataset(
+        self,
+        job_id: str,
+        identifier: str,
+        loc: str,
+        dtype: "Dataset",
+        parsing_func: typing.Callable[[str], str],
+        metadata_parser_identifier: str,
+    ) -> None:
+        try:
+            success = await asyncio.to_thread(
+                self._local_stub.register_dataset, identifier, loc, dtype, parsing_func, metadata_parser_identifier
+            )
+            self._dataset_registration[job_id] = success
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.error(f"Background dataset registration failed: {traceback.format_exc()}")
+            self._dataset_registration[job_id] = False
+
+    async def _check_dataset_registration(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = self._dataset_registration.get(job_id, None)
+        # Return 0 if not complete, 1 if registration succeeded, or 2 if complete but failed.
+        if success is True:
+            status = 1
+        elif success is False and job_id in self._dataset_registration:
+            status = 2
+        else:
+            status = 0
+        await write_int(status, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
     async def _register_metadata_parser(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -173,7 +227,57 @@ class MixteraServer:
             writer (asyncio.StreamWriter): The stream writer to write data to the client.
         """
         identifier = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
-        parser = await read_pickeled_object(NUM_BYTES_FOR_SIZES, reader)
+        source_code = await read_utf8_string(NUM_BYTES_FOR_SIZES, reader)
+        namespace = {
+            "MetadataParser": MetadataParser,
+            "MetadataProperty": MetadataProperty,
+            "Any": typing.Any,
+            "Optional": typing.Optional,
+            "List": typing.List,
+            "Dict": typing.Dict,
+        }
+
+        exec(source_code, namespace)  # pylint: disable=exec-used
+        parser_candidates = [
+            obj
+            for obj in namespace.values()
+            if isinstance(obj, type) and issubclass(obj, MetadataParser) and obj is not MetadataParser
+        ]
+
+        if len(parser_candidates) == 0:
+            raise RuntimeError("No metadata parser subclass found in the provided source code.")
+        if len(parser_candidates) > 1:
+            raise RuntimeError("Multiple metadata parser subclasses found. Please ensure only one is defined.")
+
+        parser = parser_candidates[0]
+        module_name = "mixtera_udf_" + uuid.uuid4().hex
+
+        header = (
+            "from mixtera.core.datacollection.index.parser import MetadataParser\n"
+            "from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty\n"
+            "from typing import Any, Optional, List, Dict\n"
+        )
+
+        final_source_code = header + "\n" + source_code
+
+        # Write the source code to a Python file in the server directory
+        # This is necessary because otherwise when the server uses multiprocessing
+        # with the newly registered parser, it does not have access to the code anymore.
+
+        udf_dir = self._directory / "udfs"
+        udf_dir.mkdir(exist_ok=True)
+        file_path = udf_dir / f"{module_name}.py"
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(final_source_code)
+
+        if udf_dir not in sys.path:
+            sys.path.insert(0, str(udf_dir))
+
+        # Import the module, so that it is available to spawned processes
+        imported_module = importlib.import_module(module_name)
+        parser.__module__ = module_name
+        setattr(imported_module, parser.__name__, parser)
+
         success = self._local_stub.register_metadata_parser(identifier, parser)
         await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
 
@@ -283,14 +387,39 @@ class MixteraServer:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
         chkpnt_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
 
-        self._local_stub.restore_checkpoint(job_id, chkpnt_id)
+        self._query_registration.pop(job_id, None)  # Otherwise, we immediately return True.
 
-        async with self._chunk_distributor_map_lock:
-            # We have a new distributor object.
-            self._chunk_distributor_map[job_id] = self._local_stub._get_query_chunk_distributor(job_id)
+        asyncio.create_task(self._background_restore_checkpoint(job_id, chkpnt_id))
+        await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
-        success = True
-        await write_int(int(success), NUM_BYTES_FOR_IDENTIFIERS, writer)
+    async def _background_restore_checkpoint(self, job_id: str, chkpnt_id: str) -> None:
+        async with self._register_query_lock:
+            try:
+                await asyncio.to_thread(self._local_stub.restore_checkpoint, job_id, chkpnt_id)
+                async with self._chunk_distributor_map_lock:
+                    self._chunk_distributor_map[job_id] = self._local_stub._get_query_chunk_distributor(job_id)
+                self._query_registration[job_id] = True
+                logger.debug(
+                    f"Background checkpoint restoration completed for job_id {job_id} with checkpoint {chkpnt_id}"
+                )
+            except Exception:  # pylint: disable=broad-exception-caught
+                logger.error(f"Background checkpoint restoration failed: {traceback.format_exc()}")
+                self._query_registration[job_id] = False
+
+    async def _check_query_registration(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """
+        Checks the status of query registration or checkpoint restoration.
+        Returns: 0 if in progress, 1 if succeeded, 2 if failed.
+        """
+        job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
+        success = self._query_registration.get(job_id, None)
+        if success is True:
+            status = 1
+        elif success is False and job_id in self._query_registration:
+            status = 2
+        else:
+            status = 0
+        await write_int(status, NUM_BYTES_FOR_IDENTIFIERS, writer)
 
     async def _process_feedback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         job_id = await read_utf8_string(NUM_BYTES_FOR_IDENTIFIERS, reader)
@@ -319,11 +448,14 @@ class MixteraServer:
         """
         try:
             if (task_int := await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)) not in ServerTask.__members__.values():
-                raise RuntimeError(f"Unknown task id: {task_int}")
+                logger.error(f"Unknown task id: {task_int}")
+                return
 
             task = ServerTask(task_int)
             if task == ServerTask.REGISTER_QUERY:
                 await self._register_query(reader, writer)
+            elif task == ServerTask.QUERY_EXEC_STATUS:
+                await self._check_query_registration(reader, writer)
             elif task == ServerTask.READ_FILE:
                 await self._read_file(reader, writer)
             elif task == ServerTask.GET_META_RESULT:
@@ -332,6 +464,8 @@ class MixteraServer:
                 await self._return_next_result_chunk(reader, writer)
             elif task == ServerTask.REGISTER_DATASET:
                 await self._register_dataset(reader, writer)
+            elif task == ServerTask.DATASET_REGISTRATION_STATUS:
+                await self._check_dataset_registration(reader, writer)
             elif task == ServerTask.REGISTER_METADATA_PARSER:
                 await self._register_metadata_parser(reader, writer)
             elif task == ServerTask.CHECK_DATASET_EXISTS:

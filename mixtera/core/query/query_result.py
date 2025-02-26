@@ -470,6 +470,10 @@ class QueryResult:
                                         + f"pre = {pre_best_effort_sum} post = {post_best_effort_sum}"
                                     )
 
+                                    # Otherwise, if the first key runs out,
+                                    # we will stop generating due to the break below.
+                                    global_progress_made = True
+
                                 break
 
                 # Check if we have enough data for all mixture keys

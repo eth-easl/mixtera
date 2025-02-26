@@ -47,17 +47,31 @@ class TestMetadataParser(MetadataParser):
     def get_properties(cls) -> list[MetadataProperty]:
         return [
             MetadataProperty(
-                name="language", dtype="ENUM", multiple=False, nullable=False, enum_options={"JavaScript", "HTML"}
+                name="language",
+                dtype="ENUM",
+                multiple=False,
+                nullable=False,
+                enum_options={"JavaScript", "HTML"},
             ),
             MetadataProperty(
-                name="license", dtype="STRING", multiple=False, nullable=False, enum_options={"CC", "MIT"}
+                name="license",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+                enum_options={"CC", "MIT"},
             ),  # Could be ENUM but we are using string to test
             MetadataProperty(
-                name="doublelanguage", dtype="ENUM", multiple=True, nullable=False, enum_options={"JavaScript", "HTML"}
+                name="doublelanguage",
+                dtype="ENUM",
+                multiple=True,
+                nullable=False,
+                enum_options={"JavaScript", "HTML"},
             ),
         ]
 
-    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+    def parse(
+        self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]
+    ) -> None:
         metadata = payload["meta"]
         self.add_metadata(
             sample_id=line_number,
@@ -69,49 +83,69 @@ class TestMetadataParser(MetadataParser):
 
 def parsing_func(sample):
     import json
+
     return json.loads(sample)["text"]
+
 
 def setup_local_client(directory: Path):
     # Writing JSONL data to the directory, which simulates the dataset.
     write_jsonl(directory / "testd.jsonl")
-    
+
     # Instantiating a client from a local directory to interact with the datasets locally.
     client = MixteraClient.from_directory(directory)
-    
+
     # Register the metadata parser.
     client.register_metadata_parser("TEST_PARSER", TestMetadataParser)
-    
+
     # Registering the dataset with the client.
-    client.register_dataset(
-        "local_integrationtest_dataset", directory / "testd.jsonl", JSONLDataset, parsing_func, "TEST_PARSER"
-    )
-    
+    if not client.register_dataset(
+        "local_integrationtest_dataset",
+        directory / "testd.jsonl",
+        JSONLDataset,
+        parsing_func,
+        "TEST_PARSER",
+    ):
+        raise RuntimeError("Error while registering dataset!")
+
     return client
 
+
 def run_query(client: MixteraClient, chunk_size: int):
-    job_id = str(round(time.time() * 1000)) # Get some job ID based on current timestamp
-    query = Query.for_job(job_id).select(("language", "==", "JavaScript")) # In our example, we want to query all samples tagged JavaScript
+    job_id = str(
+        round(time.time() * 1000)
+    )  # Get some job ID based on current timestamp
+    query = Query.for_job(job_id).select(
+        ("language", "==", "JavaScript")
+    )  # In our example, we want to query all samples tagged JavaScript
 
     mixture = ArbitraryMixture(chunk_size=chunk_size)
     qea = QueryExecutionArgs(mixture=mixture)
     client.execute_query(query, qea)
+    client.wait_for_execution(job_id)
 
     rsa = ResultStreamingArgs(job_id=job_id)
     result_samples = list(client.stream_results(rsa))
-    
+
     # Checking the number of results and their validity.
-    assert len(result_samples) == 500, f"Got {len(result_samples)} samples instead of the expected 500!"
-    for _, sample in result_samples: # The first argument is the index in the current chunk, needed for state recovery
+    assert (
+        len(result_samples) == 500
+    ), f"Got {len(result_samples)} samples instead of the expected 500!"
+    for (
+        _,
+        _,
+        sample,
+    ) in result_samples:  # The first argument is the index in the current chunk, needed for state recovery. The second argument is the domain id.
         assert int(sample) % 2 == 0, f"Sample {sample} should not appear for JavaScript"
+
 
 def main():
     with tempfile.TemporaryDirectory() as temp_dir:
         # Setup the local client with a temporary directory.
         # This also populates the database with a dummy dataset, where 50% of data is tagged HTML and 50% is tagged JavaScript.
         client = setup_local_client(Path(temp_dir))
-        chunk_size = 42 # Size of the result chunks of the query
+        chunk_size = 42  # Size of the result chunks of the query
         run_query(client, chunk_size)
-        
+
 
 if __name__ == "__main__":
     main()
