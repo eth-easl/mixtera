@@ -36,6 +36,18 @@ class Dataset(ABC):
                 from mixtera.core.datacollection.datasets import CC12MDataset  # pylint: disable=import-outside-toplevel
 
                 return CC12MDataset
+            if dataset_type == DatasetType.MSCOCO_DATASET:
+                from mixtera.core.datacollection.datasets import MSCOCODataset
+
+                return MSCOCODataset
+            if dataset_type == DatasetType.LAION400M_DATASET:
+                from mixtera.core.datacollection.datasets import LAION400MDataset
+
+                return LAION400MDataset
+            if dataset_type == DatasetType.COYO700M_DATASET:
+                from mixtera.core.datacollection.datasets import COYO700MDataset
+
+                return COYO700MDataset
             if dataset_type == DatasetType.PARQUET_DATASET:
                 from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
                     ParquetDataset,

@@ -77,3 +77,45 @@ class CC12MDataset(WebDataset):
             metadata_parser.parse(line_number=idx, payload=sample, dataset_name=CC12MDataset.dataset_name)
 
         samples.close()
+
+class MSCOCODataset(WebDataset):
+    type: DatasetType = DatasetType.MSCOCO_DATASET
+    dataset_name = "MSCOCO"
+
+    @staticmethod
+    def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
+        samples = IndexedTarSamples(str(loc))
+
+        print(f"Starting to iterate over samples (MsCocoDataset) in folder: {loc}")
+        for idx, sample in enumerate(samples):
+            metadata_parser.parse(line_number=idx, payload=sample, dataset_name=MSCOCODataset.dataset_name)
+
+        samples.close()
+
+class LAION400MDataset(WebDataset):
+    type: DatasetType = DatasetType.LAION400M_DATASET
+    dataset_name = "LAION400M"
+
+    @staticmethod
+    def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
+        samples = IndexedTarSamples(str(loc))
+
+        print(f"Starting to iterate over samples (LAION400MDataset) in folder: {loc}")
+        for idx, sample in enumerate(samples):
+            metadata_parser.parse(line_number=idx, payload=sample, dataset_name=LAION400MDataset.dataset_name)
+
+        samples.close()
+
+class COYO700MDataset(WebDataset):
+    type: DatasetType = DatasetType.COYO700M_DATASET
+    dataset_name = "COYO700M"
+
+    @staticmethod
+    def inform_metadata_parser(loc: Path, metadata_parser: MetadataParser) -> None:
+        samples = IndexedTarSamples(str(loc))
+
+        print(f"Starting to iterate over samples (COYO700MDataset) in folder: {loc}")
+        for idx, sample in enumerate(samples):
+            metadata_parser.parse(line_number=idx, payload=sample, dataset_name=COYO700MDataset.dataset_name)
+
+        samples.close()
