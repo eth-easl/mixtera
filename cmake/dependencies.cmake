@@ -45,21 +45,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(indicators)
 target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant -Wno-sign-compare)
 
-################### abseil ####################
-
-message(STATUS "Making abseil available.")
-
-FetchContent_Declare(
-    absl
-    GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-    GIT_TAG        20240722.0
-  )
-FetchContent_MakeAvailable(absl)
-
-# Required for GCC
-target_compile_options(absl_flat_hash_map INTERFACE -Wno-pedantic)
-target_compile_options(absl_base INTERFACE -Wno-pedantic)
-
 
 ################### Arrow ####################
 
@@ -104,3 +89,19 @@ else()
 endif()
 
 target_compile_options(Arrow::arrow_shared INTERFACE -Wno-redundant-move)
+
+################### abseil ####################
+
+# Abseil needs to be loaded after arrow, otherwise we run into issues on the alps/clariden cluster.
+message(STATUS "Making abseil available.")
+
+FetchContent_Declare(
+    absl
+    GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+    GIT_TAG        20240722.0
+  )
+FetchContent_MakeAvailable(absl)
+
+# Required for GCC
+target_compile_options(absl_flat_hash_map INTERFACE -Wno-pedantic)
+target_compile_options(absl_base INTERFACE -Wno-pedantic)
