@@ -5,7 +5,7 @@
 [![GitHub Workflow Status](https://github.com/eth-easl/mixtera/actions/workflows/workflow.yaml/badge.svg)](https://github.com/eth-easl/mixtera/actions/workflows/workflow.yaml)
 [![License](https://img.shields.io/github/license/eth-easl/mixtera)](https://img.shields.io/github/license/eth-easl/mixtera)
 
-Mixtera is an open-source data-centric training data plane built for modern LLM/VLM training. It enables ML engineers to declaratively filter, mix, and distribute large-scale training datasets on the fly, while supporting dynamic adjustment based on model feedback. Learn more in our [paper](ihttps://arxiv.org/abs/2502.19790).
+Mixtera is an open-source data-centric training data plane built for modern LLM/VLM training. It enables ML engineers to declaratively filter, mix, and distribute large-scale training datasets on the fly, while supporting dynamic adjustment based on model feedback. Learn more in our [paper](https://arxiv.org/abs/2502.19790).
 
 </div>
 
