@@ -11,3 +11,4 @@ class DatasetType(IntEnum):
     MSCOCO_DATASET = auto()
     LAION400M_DATASET = auto()
     COYO700M_DATASET = auto()
+    DOMAINNET_DATASET = auto()

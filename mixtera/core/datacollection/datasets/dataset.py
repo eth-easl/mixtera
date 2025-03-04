@@ -48,6 +48,10 @@ class Dataset(ABC):
                 from mixtera.core.datacollection.datasets import COYO700MDataset
 
                 return COYO700MDataset
+            if dataset_type == DatasetType.DOMAINNET_DATASET:
+                from mixtera.core.datacollection.datasets import DomainNetDataset
+                
+                return DomainNetDataset
             if dataset_type == DatasetType.PARQUET_DATASET:
                 from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
                     ParquetDataset,

@@ -104,7 +104,7 @@ class IndexedTarSamples:
                 key = key or k
                 assert key == k, "Inconsistent keys in the same sample"
                 sample[ext[1:]] = data
-            sample["__key__"] = key # type: ignore
+            sample["__key__"] = key  # type: ignore
             return self.decoder(sample) if self.decode else sample
         raise ValueError("Error reading sample")
 
