@@ -1,6 +1,6 @@
-from collections import defaultdict
 import itertools
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
@@ -45,10 +45,10 @@ class LLaVADataset(Dataset):
                         metadata_parser.parse(line_number=idx, payload=sample, dataset_name=LLaVADataset.dataset_name)
                         classes[LLaVADataset.dataset_name] += 1
                 else:
-                    metadata_parser.parse(line_number=idx, payload=sample, dataset_name='text')
-                    classes['text'] += 1
-            
-            print(f"Classes found in LLAVA dataset: {classes}") 
+                    metadata_parser.parse(line_number=idx, payload=sample, dataset_name="text")
+                    classes["text"] += 1
+
+            print(f"Classes found in LLAVA dataset: {classes}")
 
     @staticmethod
     def read_ranges_from_files(

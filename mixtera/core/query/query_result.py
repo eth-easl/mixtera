@@ -1,4 +1,3 @@
-from itertools import cycle
 import json
 import multiprocessing as mp
 import os
@@ -6,6 +5,7 @@ import pickle
 import random
 from collections import defaultdict
 from copy import deepcopy
+from itertools import cycle
 from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
@@ -47,7 +47,7 @@ class QueryResult:
         mixture: Mixture,
         query_log_dir: Path | None = None,
         stop_on_none: bool = True,
-        infinite_cycle: bool = True,
+        _infinite_cycle: bool = False,
     ) -> None:
         """
         Args:
@@ -81,13 +81,13 @@ class QueryResult:
         self._lock = mp.Lock()
         self._index = mp.Value("i", 0)
 
-        # NEW: initialize caching for infinite cycling.
+        # initialize caching for infinite cycling.
         # This will store every successfully generated chunk.
         self._cached_chunks: list[ResultChunk] = []
         # Once the normal generator is exhausted, if infinite cycling is enabled,
         # we create a cycle generator over the cached chunks.
         self._cycle_generator: cycle | None = None
-        self._infinite_cycle = infinite_cycle
+        self._infinite_cycle = _infinite_cycle
 
         # The generator will be created lazily when calling __next__
         self._generator: Generator[ResultChunk, tuple[Mixture, int], None] | None = None
@@ -321,7 +321,7 @@ class QueryResult:
         # However, after a certain limit, we raise a StopIteration to avoid deadlocks.
         no_success_counter = 0
 
-        total_counts = defaultdict(int)
+        total_counts: dict[int] = defaultdict(int)
 
         while True:
             if no_success_counter > 10:
@@ -503,10 +503,10 @@ class QueryResult:
                                     for start, end in ranges:
                                         count = end - start
                                         chunk_counts[dataset] += count
-                        
+
                         for dataset, count in chunk_counts.items():
                             total_counts[dataset] += count
-                        
+
                         print(f"Chunk {current_chunk_index} counts: {total_counts}")
                         base_mixture, target_chunk_index = yield result_chunk
 
@@ -568,12 +568,12 @@ class QueryResult:
                                 for start, end in ranges:
                                     count = end - start
                                     chunk_counts[dataset] += count
-                    
+
                     for dataset, count in chunk_counts.items():
                         total_counts[dataset] += count
 
                     logger.debug(f"Chunk {current_chunk_index} counts: {total_counts}")
-                    
+
                     base_mixture, target_chunk_index = yield result_chunk
 
             if chunk_success:
@@ -622,26 +622,23 @@ class QueryResult:
                 if self._infinite_cycle:
                     self._cached_chunks.append(result)
                 return result
-            else:
-                # No new chunk was produced.
-                # Roll back the index for this chunk.
-                with self._index.get_lock():
-                    self._index.get_obj().value -= 1
 
-                if not self._infinite_cycle:
-                    if self.stop_on_none:
-                        raise StopIteration
-                    else:
-                        return None
-                else:
-                    # If we haven't cached any chunks, we cannot cycle.
-                    if not self._cached_chunks:
-                        raise StopIteration("No chunks available to cycle through.")
-                    # Replace the generator with an infinite cycle over the cached chunks.
-                    if self._cycle_generator is None:
-                        self._cycle_generator = cycle(self._cached_chunks)
-                    return next(self._cycle_generator)
-  
+            # No new chunk was produced.
+            # Roll back the index for this chunk.
+            with self._index.get_lock():
+                self._index.get_obj().value -= 1
+
+            if not self._infinite_cycle:
+                if self.stop_on_none:
+                    raise StopIteration
+                return None
+            # If we haven't cached any chunks, we cannot cycle.
+            if not self._cached_chunks:
+                raise StopIteration("No chunks available to cycle through.")
+            # Replace the generator with an infinite cycle over the cached chunks.
+            if self._cycle_generator is None:
+                self._cycle_generator = cycle(self._cached_chunks)
+            return next(self._cycle_generator)
 
     # SERIALIZATION ##
 
