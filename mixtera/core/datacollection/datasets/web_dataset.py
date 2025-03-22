@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable, Iterable, Optional, ClassVar
+from typing import Callable, ClassVar, Iterable, Optional
 
 from loguru import logger
 from mixtera.core.datacollection.datasets import Dataset, DatasetType
@@ -30,9 +30,7 @@ class WebDataset(Dataset):
 
         samples = IndexedTarSamples(str(loc))
 
-        logger.info(
-            f"Starting to iterate over samples ({cls.__name__}) in folder: {loc}"
-        )
+        logger.info(f"Starting to iterate over samples ({cls.__name__}) in folder: {loc}")
         for idx, sample in enumerate(samples):
             metadata_parser.parse(
                 line_number=idx,
@@ -50,38 +48,28 @@ class WebDataset(Dataset):
         server_connection: Optional[ServerConnection],
     ) -> Iterable[str | dict]:
         for file, range_list in ranges_per_file.items():
-            yield from WebDataset._read_ranges_from_file(
-                file, range_list, parsing_func, server_connection
-            )
+            yield from WebDataset._read_ranges_from_file(file, range_list, parsing_func, server_connection)
 
     @staticmethod
     def _read_ranges_from_file(  # pylint: disable=contextmanager-generator-missing-cleanup
         file: str,
         range_list: list[tuple[int, int]],
         parsing_func: Callable[[dict], str],
-        server_connection: Optional[
-            ServerConnection
-        ],  # pylint: disable=unused-argument
+        server_connection: Optional[ServerConnection],  # pylint: disable=unused-argument
     ) -> Iterable[str]:
         with IndexedTarSamples(file) as samples:
             last_line_read = 0
             last_r_start = -1
             for r_start, r_end in range_list:
                 if r_start < last_r_start:
-                    raise RuntimeError(
-                        f"Ranges not sorted by start ({last_r_start} vs {r_start})"
-                    )
+                    raise RuntimeError(f"Ranges not sorted by start ({last_r_start} vs {r_start})")
 
                 if last_line_read > r_start:
-                    raise RuntimeError(
-                        f"Overlapping ranges: start at {r_start} but previous ended at {last_line_read}"
-                    )
+                    raise RuntimeError(f"Overlapping ranges: start at {r_start} but previous ended at {last_line_read}")
 
                 last_r_start = r_start
 
-                yield from (
-                    parsing_func(samples[line]) for line in range(r_start, r_end)
-                )
+                yield from (parsing_func(samples[line]) for line in range(r_start, r_end))
 
                 last_line_read = r_end
 
@@ -116,9 +104,7 @@ class DomainNetDataset(WebDataset):
 
         samples = IndexedTarSamples(str(loc))
 
-        logger.info(
-            f"Starting to iterate over samples (DomainNet) in folder: {loc}"
-        )
+        logger.info(f"Starting to iterate over samples (DomainNet) in folder: {loc}")
         for idx, sample in enumerate(samples):
             class_name = sample["cls"]
             domain = sample["domain"]

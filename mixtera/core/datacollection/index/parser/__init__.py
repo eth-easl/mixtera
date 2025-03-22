@@ -3,12 +3,12 @@ This submodule contains implementations for Mixtera index and metadata parsers
 """
 
 from .metadata_parser import MetadataParser, MetadataProperty  # noqa: F401
-from .parser_collection import (
+from .parser_collection import (  # noqa: F401
+    DomainNetMetadataParser,
+    GenericMetadataParser,
     MetadataParserFactory,
     RedPajamaMetadataParser,
-    GenericMetadataParser,
-    DomainNetMetadataParser,
-)  # noqa: F401
+)
 
 __all__ = [
     "DomainNetMetadataParser",

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-import os
 import argparse
-import requests
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import requests
+
 
 def download_file(url, target_path):
     """Attempt to download a file from 'url' to 'target_path' up to 3 tries."""

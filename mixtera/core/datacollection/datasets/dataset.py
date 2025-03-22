@@ -11,7 +11,7 @@ class Dataset(ABC):
     type: DatasetType = DatasetType.GENERIC_DATASET
 
     @staticmethod
-    def from_type_id(type_id: int) -> "Type[Dataset]":
+    def from_type_id(type_id: int) -> "Type[Dataset]":  # pylint: disable=too-many-return-statements
         """
         This method instantiates a dataset from an integer type ID (e.g., stored in a DB).
 
@@ -37,20 +37,28 @@ class Dataset(ABC):
 
                 return CC12MDataset
             if dataset_type == DatasetType.MSCOCO_DATASET:
-                from mixtera.core.datacollection.datasets import MSCOCODataset
+                from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
+                    MSCOCODataset,
+                )
 
                 return MSCOCODataset
             if dataset_type == DatasetType.LAION400M_DATASET:
-                from mixtera.core.datacollection.datasets import LAION400MDataset
+                from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
+                    LAION400MDataset,
+                )
 
                 return LAION400MDataset
             if dataset_type == DatasetType.COYO700M_DATASET:
-                from mixtera.core.datacollection.datasets import COYO700MDataset
+                from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
+                    COYO700MDataset,
+                )
 
                 return COYO700MDataset
             if dataset_type == DatasetType.DOMAINNET_DATASET:
-                from mixtera.core.datacollection.datasets import DomainNetDataset
-                
+                from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel
+                    DomainNetDataset,
+                )
+
                 return DomainNetDataset
             if dataset_type == DatasetType.PARQUET_DATASET:
                 from mixtera.core.datacollection.datasets import (  # pylint: disable=import-outside-toplevel

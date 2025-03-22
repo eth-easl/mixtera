@@ -1,11 +1,7 @@
 from typing import Any, Iterable
-import webdataset as wds
 
-from mixtera.core.client.mixtera_client import (
-    MixteraClient,
-    QueryExecutionArgs,
-    ResultStreamingArgs,
-)
+import webdataset as wds
+from mixtera.core.client.mixtera_client import MixteraClient, QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.query.query import Query
 from mixtera.torch import MixteraTorchDataset
 
@@ -21,7 +17,7 @@ class MixteraDataPipeline(wds.DataPipeline):
         query: Query,
         query_execution_args: QueryExecutionArgs,
         result_streaming_args: ResultStreamingArgs,
-        pipeline: Iterable[Any], 
+        pipeline: Iterable[Any],
     ):
         super().__init__(*pipeline)
         self.client = client
