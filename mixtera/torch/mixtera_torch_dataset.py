@@ -7,6 +7,7 @@ import threading
 from multiprocessing import shared_memory
 from multiprocessing.synchronize import Lock as LockT
 from pathlib import Path
+import time
 from typing import Any, Generator
 
 import numpy as np
@@ -262,9 +263,28 @@ class MixteraTorchDataset(IterableDataset):
             completion_array[self.worker_id] = 0
             self._res_str_args.worker_id = self.worker_id
 
-            for sample_chnk_idx, key_id, sample in self._client.stream_results(self._res_str_args):
-                status_array[self.worker_id] = sample_chnk_idx
-                yield self._yield_func(key_id, sample)
+            LOG_DIR = os.environ.get("LOG_DIR")
+            if LOG_DIR is None:
+                raise RuntimeError("LOG_DIR environment variable not set.")
+
+            os.makedirs(LOG_DIR, exist_ok=True)
+            
+            args = self._res_str_args
+
+            log_file_path = os.path.join(
+                LOG_DIR, f"dp_group-{args.dp_group_id}_node_id-{args.node_id}_worker_id-{args.worker_id}_torch_dataset.log"
+            )
+
+            start_time = time.perf_counter()
+            
+            with open(log_file_path, "w") as log_file:
+                for sample_chnk_idx, key_id, sample in self._client.stream_results(self._res_str_args):
+                    status_array[self.worker_id] = sample_chnk_idx
+                    sample_time = time.perf_counter() - start_time
+                    log_file.write(f"{sample_time}\n")
+                    log_file.flush()  # ensures immediate writing
+                    yield self._yield_func(key_id, sample)
+                    start_time = time.perf_counter()
 
             with self.completion_lock:
                 completion_array[self.worker_id] = 1

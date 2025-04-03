@@ -1,7 +1,9 @@
 import multiprocessing as mp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import os
 from pathlib import Path
+import time
 from typing import TYPE_CHECKING, Any, Callable, Generator, Literal, Type
 
 from loguru import logger
@@ -264,32 +266,78 @@ class MixteraClient(ABC):
 
         raise NotImplementedError()
 
-    def stream_results(self, args: ResultStreamingArgs) -> Generator[tuple[int, int, Sample], None, None]:
+    def stream_results(
+        self, args: ResultStreamingArgs
+    ) -> Generator[tuple[int, int, Sample], None, None]:
         """
         Given a job ID, returns the QueryResult object from which the result chunks can be obtained.
+
         Args:
             args (ResultStreamingArgs): The object encoding the streaming arguments
+
         Returns:
             A Generator over string samples.
 
         Raises:
             RuntimeError if query has not been executed.
         """
-        for result_chunk in self._stream_result_chunks(args.job_id, args.dp_group_id, args.node_id, args.worker_id):
-            with self.current_mixture_id_val.get_lock():
-                new_id = max(result_chunk.mixture_id, self.current_mixture_id_val.get_obj().value)
-                self.current_mixture_id_val.get_obj().value = new_id
-                # logger.debug(f"Set current mixture ID to {new_id}")
 
-            result_chunk.configure_result_streaming(
-                client=self,
-                args=args,
-            )
-            yield from result_chunk
+        LOG_DIR = os.environ.get("LOG_DIR")
+        if LOG_DIR is None:
+            raise RuntimeError("LOG_DIR environment variable not set.")
+
+        os.makedirs(LOG_DIR, exist_ok=True)
+
+        log_file_path = os.path.join(
+            LOG_DIR, f"dp_group-{args.dp_group_id}_node_id-{args.node_id}_worker_id-{args.worker_id}.log"
+        )
+
+        chunk_idx = 0
+        start_time = time.perf_counter()
+
+        with open(log_file_path, "w") as log_file:
+
+            for result_chunk in self._stream_result_chunks(
+                args.job_id, args.dp_group_id, args.node_id, args.worker_id
+            ):
+                time_to_chunk = time.perf_counter() - start_time
+
+                with self.current_mixture_id_val.get_lock():
+                    new_id = max(
+                        result_chunk.mixture_id, self.current_mixture_id_val.get_obj().value
+                    )
+                    self.current_mixture_id_val.get_obj().value = new_id
+
+                result_chunk.configure_result_streaming(
+                    client=self,
+                    args=args,
+                )
+
+                time_to_config = time.perf_counter() - time_to_chunk - start_time
+
+                start_time_samples = time.perf_counter()
+                sample_times = []
+
+                for sample_chnk_idx, key_id, sample in result_chunk:
+                    sample_time = time.perf_counter() - start_time_samples
+                    sample_times.append(sample_time)
+                    yield sample_chnk_idx, key_id, sample
+                    start_time_samples = time.perf_counter()
+
+                # Write timing info to log file after each chunk
+                log_file.write(
+                    f"Chunk {chunk_idx}: Time to chunk: {time_to_chunk:.4f}s, "
+                    f"Time to config: {time_to_config:.4f}s, Sample times: {sample_times}\n"
+                )
+                log_file.flush()
+
+                chunk_idx += 1
+                start_time = time.perf_counter()
 
         with self.current_mixture_id_val.get_lock():
             self.current_mixture_id_val.get_obj().value = -1
-            # logger.debug("Reset current mixture ID to -1.")
+            logger.debug("Reset current mixture ID to -1.")
+
 
     @abstractmethod
     def _stream_result_chunks(

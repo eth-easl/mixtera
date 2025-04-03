@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import threading
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Generator
@@ -13,6 +14,8 @@ from mixtera.core.query.query_result import QueryResult
 from mixtera.core.query.result_chunk import ResultChunk
 
 SerializedResultChunk = bytes
+
+LOG_DIR = os.environ.get("LOG_DIR", None)
 
 
 class ChunkDistributor:
@@ -50,10 +53,14 @@ class ChunkDistributor:
         if dp_groups < 1:
             raise ValueError(f"dp_groups = {dp_groups} < 1")
 
-        logger.debug(f"[{os.getpid()}/{threading.get_native_id()}] Instantiating ChunkDistributor for job {job_id}")
+        logger.debug(
+            f"[{os.getpid()}/{threading.get_native_id()}] Instantiating ChunkDistributor for job {job_id}"
+        )
 
         self._dp_groups = dp_groups
-        self._num_workers = num_workers if num_workers > 0 else 1  # num_workers 0 => interpreted as 1 worker
+        self._num_workers = (
+            num_workers if num_workers > 0 else 1
+        )  # num_workers 0 => interpreted as 1 worker
         self._og_num_workers = num_workers
         self._nodes_per_group = nodes_per_group
 
@@ -61,7 +68,9 @@ class ChunkDistributor:
         self._query_result.stop_on_none = False
         self._constructor_pid = os.getpid()
 
-        self._chunk_cache: dict[int, dict[int, SerializedResultChunk | ResultChunk]] = {}
+        self._chunk_cache: dict[int, dict[int, SerializedResultChunk | ResultChunk]] = (
+            {}
+        )
         self._chunk_usage: dict[int, dict[int, int]] = {}
         self._next_chunk: dict[int, dict[int, dict[int, int]]] = {}
 
@@ -79,14 +88,23 @@ class ChunkDistributor:
 
         # Global checkpointing data structures
         self._checkpoint_lock = mp.Lock()  # Global lock for checkpointing
-        self._worker_statuses: dict[tuple[int, int], list[int]] = {}  # (dp_group_id, node_id) -> worker_status
+        self._worker_statuses: dict[tuple[int, int], list[int]] = (
+            {}
+        )  # (dp_group_id, node_id) -> worker_status
         self._nodes_reported: set = (
             set()
         )  # Set of (dp_group_id, node_id) that have reported their status for checkpointing
-        self._checkpoint_id_counter = mp.Value("i", 0)  # Counter to assign unique checkpoint IDs
-        self._checkpoint_info: dict[str, dict[str, Any]] = {}  # Info for each checkpoint process on its status
+        self._checkpoint_id_counter = mp.Value(
+            "i", 0
+        )  # Counter to assign unique checkpoint IDs
+        self._checkpoint_info: dict[str, dict[str, Any]] = (
+            {}
+        )  # Info for each checkpoint process on its status
         self._current_checkpoint_id: str | None = None
         self._cached_query = cached_query
+
+        self._chunk_times: dict[tuple[int, int, int], list[float]] = {}
+        self._sample_times: dict[tuple[int, int, int], list[float]] = {}
 
     def next_chunk_for(
         self, dp_group: int, node_id: int, worker_id: int, deserialize: bool
@@ -134,7 +152,8 @@ class ChunkDistributor:
 
         if guaranteed_server and deserialize:
             logger.warning(
-                "You are using Mixtera with caching, but do not serialize the chunks." + "This is unexpected behavior."
+                "You are using Mixtera with caching, but do not serialize the chunks."
+                + "This is unexpected behavior."
             )
 
         next_chunk_id = self._next_chunk[dp_group][node_id][worker_id]
@@ -160,7 +179,9 @@ class ChunkDistributor:
             # logger.debug(f"Fetching chunk {next_chunk_id} for dp_group {dp_group} /
             #  node {node_id} requested by worker {worker_id} from cache.")
             # Load from cache
-            chunk_to_return = self._chunk_cache[dp_group][next_chunk_id]  # always serialized in cache
+            chunk_to_return = self._chunk_cache[dp_group][
+                next_chunk_id
+            ]  # always serialized in cache
             if deserialize:
                 chunk_to_return = dill.loads(chunk_to_return)
 
@@ -210,12 +231,34 @@ class ChunkDistributor:
 
         while True:
             try:
-                yield self.next_chunk_for(dp_group_id, node_id, worker_id, True)
+                if self._benchmark:
+                    start_time = time.perf_counter()
+                chunk = self.next_chunk_for(dp_group_id, node_id, worker_id, True)
+                if self._benchmark:
+                    duration = time.perf_counter() - start_time
+                    key = (dp_group_id, node_id, worker_id)
+                    if key not in self._benchmark_logs:
+                        self._benchmark_logs[key] = []
+                    self._benchmark_logs[key].append(duration)
+                    # NEW: Update the global chunk counter and log if necessary.
+                    if self._log_every_n_chunks > 0:
+                        self._chunk_counter += 1
+                        if self._chunk_counter % self._log_every_n_chunks == 0:
+                            self.dump_benchmark_logs(Path(self._benchmark_log_file))
+                        logger.debug(
+                            f"Worker {worker_id} in DP group {dp_group_id} has received chunk {self._chunk_counter} in {duration:.4f} seconds."
+                        )
+                yield chunk
             except StopIteration:
                 return
 
     def checkpoint(
-        self, dp_group_id: int, node_id: int, worker_status: list[int], chkpnt_dir: Path, server: bool
+        self,
+        dp_group_id: int,
+        node_id: int,
+        worker_status: list[int],
+        chkpnt_dir: Path,
+        server: bool,
     ) -> None | str:
         """
         Initiate a checkpoint operation for the specified data parallel group and node.
@@ -240,7 +283,12 @@ class ChunkDistributor:
                           in the current configuration.
             NotImplementedError: If checkpointing is not supported for the current setup.
         """
-        if self._dp_groups == 1 and self._nodes_per_group == 1 and self._og_num_workers > 0 and not server:
+        if (
+            self._dp_groups == 1
+            and self._nodes_per_group == 1
+            and self._og_num_workers > 0
+            and not server
+        ):
             raise NotImplementedError(
                 "Checkpointing not supported for single-node, single GPU, multi dataloader worker non-server training"
             )
@@ -253,12 +301,16 @@ class ChunkDistributor:
 
         if os.getpid() != self._constructor_pid:
             # Should not happen, let's catch it anyways.
-            raise RuntimeError("We forked - this could happen when calling this inside a dataloader worker.")
+            raise RuntimeError(
+                "We forked - this could happen when calling this inside a dataloader worker."
+            )
 
         with self._checkpoint_lock:
             key = (dp_group_id, node_id)
             if key in self._nodes_reported:
-                raise RuntimeError(f"Node {node_id} in dp_group {dp_group_id} has already reported status.")
+                raise RuntimeError(
+                    f"Node {node_id} in dp_group {dp_group_id} has already reported status."
+                )
 
             # Assign a checkpoint_id if it hasn't been assigned yet
             if self._current_checkpoint_id is None:
@@ -317,7 +369,9 @@ class ChunkDistributor:
 
         for (dp_group_id, worker_id), next_chunks in chunk_per_worker.items():
             if not len(set(next_chunks)) == 1:
-                raise RuntimeError(f"Invalid checkpoint state: dp = {dp_group_id} next chunks = {next_chunks}")
+                raise RuntimeError(
+                    f"Invalid checkpoint state: dp = {dp_group_id} next chunks = {next_chunks}"
+                )
 
         # Now we know that all workers are at the same chunk.
         # Next we check if roughly all workers are at the same sample.
@@ -332,7 +386,10 @@ class ChunkDistributor:
 
         result = {}
         # Validate: Within the same dp group, each worker should roughly be at the same sample.
-        for (dp_group_id, worker_id), sample_indices in worker_statuses_per_worker.items():
+        for (
+            dp_group_id,
+            worker_id,
+        ), sample_indices in worker_statuses_per_worker.items():
             min_idx = min(sample_indices)
             max_idx = max(sample_indices)
             if max_idx - min_idx > 5:
@@ -345,7 +402,10 @@ class ChunkDistributor:
         return result
 
     def _start_checkpointing(
-        self, checkpoint_id: str, worker_sample_ids: dict[tuple[int, int], int], chkpnt_dir: Path
+        self,
+        checkpoint_id: str,
+        worker_sample_ids: dict[tuple[int, int], int],
+        chkpnt_dir: Path,
     ) -> None:
         """
         Start the checkpointing process in a separate process.
@@ -377,10 +437,14 @@ class ChunkDistributor:
         if self._checkpoint_id_counter.value == 1:
             logger.debug("This is the first checkpoint.")
             if self._cached_query is not None:
-                logger.debug("Copying cached QueryResult to setup initial checkpoint in subprocess.")
+                logger.debug(
+                    "Copying cached QueryResult to setup initial checkpoint in subprocess."
+                )
                 directory_to_copy = self._cached_query
             else:
-                logger.debug("Query has not been cached - pickling now. This may take some time.")
+                logger.debug(
+                    "Query has not been cached - pickling now. This may take some time."
+                )
                 self._query_result.to_cache(chkpnt_dir / "queryresult")
             logger.debug("Handled pickling of QueryResult.")
 
@@ -458,16 +522,21 @@ class ChunkDistributor:
                         chunk: ResultChunk | SerializedResultChunk
 
                         next_chunk = (
-                            state_to_save["next_chunk"][dp_group][node][worker_id] - state_to_save["_num_workers"]
+                            state_to_save["next_chunk"][dp_group][node][worker_id]
+                            - state_to_save["_num_workers"]
                         )
                         if next_chunk >= 0:
-                            state_to_save["next_chunk"][dp_group][node][worker_id] = next_chunk
+                            state_to_save["next_chunk"][dp_group][node][
+                                worker_id
+                            ] = next_chunk
                             state_to_save["chunk_usage"][dp_group][next_chunk] = 0
                             chunk = state_to_save["chunk_cache"][dp_group][next_chunk]
                             is_serialized = isinstance(chunk, SerializedResultChunk)
                             if is_serialized:
                                 chunk = dill.loads(chunk)
-                            chunk._samples_to_skip = worker_sample_ids[(dp_group, worker_id)]
+                            chunk._samples_to_skip = worker_sample_ids[
+                                (dp_group, worker_id)
+                            ]
                             chunk = dill.dumps(chunk) if is_serialized else chunk
                             state_to_save["chunk_cache"][dp_group][next_chunk] = chunk
                         else:
@@ -481,10 +550,14 @@ class ChunkDistributor:
             with open(checkpoint_path / "chunk_distributor_state.pkl", "wb") as f:
                 dill.dump(state_to_save, f, protocol=dill.HIGHEST_PROTOCOL)
 
-            logger.info(f"Checkpointing the mixture log and num returns with num returns = {num_returns_gen}")
+            logger.info(
+                f"Checkpointing the mixture log and num returns with num returns = {num_returns_gen}"
+            )
             with open(checkpoint_path / "query_result_state.pkl", "wb") as f:
                 dill.dump(
-                    {"num_returns_gen": num_returns_gen, "mixture_log": mixture_log}, f, protocol=dill.HIGHEST_PROTOCOL
+                    {"num_returns_gen": num_returns_gen, "mixture_log": mixture_log},
+                    f,
+                    protocol=dill.HIGHEST_PROTOCOL,
                 )
 
             logger.debug("Wrote checkpoint.")
@@ -531,12 +604,18 @@ class ChunkDistributor:
         # Process has finished
         process.join()
         if process.exitcode != 0:
-            raise RuntimeError(f"Checkpoint {checkpoint_id} failed with exit code {process.exitcode}.")
+            raise RuntimeError(
+                f"Checkpoint {checkpoint_id} failed with exit code {process.exitcode}."
+            )
         return True
 
     @classmethod
     def from_checkpoint(
-        cls, chkpnt_dir: Path, checkpoint_id: str, job_id: str, query_log_dir: Path | None
+        cls,
+        chkpnt_dir: Path,
+        checkpoint_id: str,
+        job_id: str,
+        query_log_dir: Path | None,
     ) -> "ChunkDistributor":
         """
         Create a ChunkDistributor instance from a saved checkpoint.
@@ -566,9 +645,13 @@ class ChunkDistributor:
         query_result_state_path = chkpnt_dir / "query_result_state.pkl"
 
         if not checkpoint_state_path.exists():
-            raise FileNotFoundError(f"Checkpoint state file not found at {checkpoint_state_path}")
+            raise FileNotFoundError(
+                f"Checkpoint state file not found at {checkpoint_state_path}"
+            )
         if not query_result_state_path.exists():
-            raise FileNotFoundError(f"QueryResult state file not found at {query_result_state_path}")
+            raise FileNotFoundError(
+                f"QueryResult state file not found at {query_result_state_path}"
+            )
         if not query_dir.exists():
             raise FileNotFoundError(f"QueryResult directory not found at {query_dir}")
 
@@ -622,3 +705,15 @@ class ChunkDistributor:
         logger.debug("Loaded Distributor from checkpoint.")
 
         return chunk_distributor
+
+    def dump_benchmark_logs(self, output_file: Path) -> None:
+        """
+        Dump the collected benchmarking logs to the specified file.
+        """
+        if not self._benchmark:
+            logger.info("Benchmark mode is not enabled.")
+            return
+        with open(output_file, "w") as f:
+            for key, durations in self._benchmark_logs.items():
+                f.write(f"Worker {key}: {durations}\n")
+        logger.info(f"Benchmark logs have been dumped to {output_file}")
