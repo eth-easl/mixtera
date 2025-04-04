@@ -126,24 +126,6 @@ class AdoDynamicMixing(DynamicMixingAlgorithm):
             self.log_scaling_laws: list[Any] = []
             self.log_counts = []
 
-    def __getstate__(self) -> dict[Any, Any]:
-        state = self.__dict__.copy()
-        if "log_entries" in state:
-            state.pop("log_entries", None)
-        if "log_scaling_laws" in state:
-            state.pop("log_scaling_laws", None)
-        if "log_counts" in state:
-            state.pop("log_counts", None)
-        return state
-
-    def __setstate__(self, state: dict[Any, Any]) -> None:
-        # Restore the object's state
-        self.__dict__.update(state)
-        # Reinitialize the logging attributes to their initial state
-        self.log_entries = []
-        self.log_scaling_laws = []
-        self.log_counts = [] if self.logging_path is not None else None
-
     def __str__(self) -> str:
         """
         Returns a dictionary-like string representation of the AdoDynamicMixing's current state.

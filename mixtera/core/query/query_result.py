@@ -88,6 +88,7 @@ class QueryResult:
         self._query_log_dir = query_log_dir
         if query_log_dir is not None:
             query_log_dir.mkdir(exist_ok=True)
+        self._is_replay = False
 
     def _update_key_id_map(self) -> None:
         updated = False
@@ -328,7 +329,13 @@ class QueryResult:
 
                     if len(self._mixture_log) > 0:
                         last_mixture = self._mixture_log[-1][1]
-                        if isinstance(last_mixture, DynamicMixture) and hasattr(last_mixture, "_mixing_alg"):
+                        if (
+                            isinstance(last_mixture, DynamicMixture)
+                            and hasattr(last_mixture, "_mixing_alg")
+                            and not self._is_replay
+                        ):
+                            # Dont do this during replay:
+                            # otherwise the last chunk (which we have not even replayed!) loses its mixing alg!
                             logger.info("Cleaning up last mixing algorithm from mixture log.")
                             last_mixture._mixing_alg = None
 
@@ -673,18 +680,23 @@ class QueryResult:
 
         logger.debug("Stored chunker index.")
 
+        self._mixture.write_logs()
+
+        logger.debug("Write mixture logs.")
+
     def replay(self, num_chunks_replay: int) -> None:
         if num_chunks_replay < 1:
             return
 
         logger.debug(f"Starting to replay {num_chunks_replay} chunks.")
         mixture_log = self._mixture_log
+        self._is_replay = True
 
         mixture_log_index = 0
         num_mixture_changes = len(mixture_log)
 
         # Since there's always an entry at chunk index 0, set the initial mixture
-        initial_mixture = mixture_log[0][1]
+        initial_mixture = deepcopy(mixture_log[0][1])
         assert initial_mixture is not None
 
         self.update_mixture(initial_mixture)
@@ -694,7 +706,7 @@ class QueryResult:
         # Initialize next mixture change, if any
         if mixture_log_index < num_mixture_changes:
             next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
-            next_mixture = mixture_log[mixture_log_index][1]
+            next_mixture = deepcopy(mixture_log[mixture_log_index][1])
         else:
             next_mixture_change_chunk_index = None
             next_mixture = None
@@ -708,7 +720,7 @@ class QueryResult:
                 mixture_log_index += 1
                 if mixture_log_index < num_mixture_changes:
                     next_mixture_change_chunk_index = mixture_log[mixture_log_index][0]
-                    next_mixture = mixture_log[mixture_log_index][1]
+                    next_mixture = deepcopy(mixture_log[mixture_log_index][1])
                 else:
                     next_mixture_change_chunk_index = None
 
@@ -720,6 +732,7 @@ class QueryResult:
         logger.debug("Finished chunk replay.")
         assert self._num_returns_gen == num_chunks_replay
         assert self._index.get_obj().value == num_chunks_replay
+        self._is_replay = False
 
     @classmethod
     def from_cache(cls, path: Path, replay: bool = True) -> "QueryResult":

@@ -101,3 +101,6 @@ class DynamicMixture(Mixture):
             logger.debug(f"weight_map = {weight_map}")
             self._current_mixture = StaticMixture(self.chunk_size, weight_map, strict=self.strict)
             logger.debug(f"New mixture is {self._current_mixture}")
+
+    def write_logs(self) -> None:
+        self._mixing_alg.write_logs()
