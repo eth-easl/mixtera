@@ -73,6 +73,9 @@ class DynamicMixingAlgorithm(ABC):
         self.losses = np.array([], dtype=self.losses.dtype)
         self.counts = np.array([], dtype=self.counts.dtype)
 
+    def write_logs(self) -> None:
+        pass
+
     @abstractmethod
     def calc_mixture(self, updated_at_client: bool) -> np.ndarray | None:
         """
