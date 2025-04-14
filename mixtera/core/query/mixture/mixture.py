@@ -90,3 +90,6 @@ class Mixture(ABC):
         del losses
         del counts
         del mixture_id
+
+    def write_logs(self) -> None:
+        pass

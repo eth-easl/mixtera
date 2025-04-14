@@ -714,6 +714,7 @@ class ServerConnection:
 
             await write_int(int(ServerTask.QUERY_EXEC_STATUS), NUM_BYTES_FOR_IDENTIFIERS, writer)
             await write_utf8_string(job_id, NUM_BYTES_FOR_IDENTIFIERS, writer)
-            status = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader)
+            # High timeout in case server is currently busy with processing query.
+            status = await read_int(NUM_BYTES_FOR_IDENTIFIERS, reader, timeout=5 * 60)
 
             return status
