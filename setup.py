@@ -4,14 +4,14 @@
 import io
 import os
 import pathlib
+import shutil
+import socket
 import subprocess
 import sysconfig
-import socket
-import shutil
 
 from setuptools import Extension, find_packages, setup
-from setuptools.command.build_ext import build_ext
 from setuptools.command.build import build
+from setuptools.command.build_ext import build_ext
 
 # Package meta-data.
 NAME = "mixtera"
