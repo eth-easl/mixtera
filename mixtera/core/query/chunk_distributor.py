@@ -384,9 +384,27 @@ class ChunkDistributor:
                 self._query_result.to_cache(chkpnt_dir / "queryresult")
             logger.debug("Handled pickling of QueryResult.")
 
+        if hasattr(self._query_result, "_mixture") and self._query_result._mixture is not None:
+            self._query_result._mixture.write_logs()
+
         logger.debug("Preparing the QueryResult properties.")
 
         mixture_log = deepcopy(self._query_result._mixture_log)
+
+        if (
+            len(mixture_log) > 0
+            and hasattr(mixture_log[-1][1], "_mixing_alg")
+            and self._query_result._mixture is not None
+            and hasattr(self._query_result._mixture, "_mixing_alg")
+        ):
+            # if we have a mixing alg, that might have been updated.
+            # we need to checkpoint that state as well, so we have to update the log
+            logger.debug("Updating the mixing alg. Previous alg:")
+            logger.debug(str(mixture_log[-1][1]._mixing_alg))
+            mixture_log[-1][1]._mixing_alg = deepcopy(self._query_result._mixture._mixing_alg)
+            logger.debug("Updated alg:")
+            logger.debug(str(mixture_log[-1][1]._mixing_alg))
+
         returns_gen = self._query_result._num_returns_gen
 
         logger.debug("Spinning up the persisting process.")

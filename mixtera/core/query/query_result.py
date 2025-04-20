@@ -339,7 +339,9 @@ class QueryResult:
                             logger.info("Cleaning up last mixing algorithm from mixture log.")
                             last_mixture._mixing_alg = None
 
-                    self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
+                    if not self._is_replay:
+                        self._mixture_log.append((current_chunk_index, deepcopy(base_mixture)))
+
                     self._persist_mixture_log()
                     self._update_key_id_map()
 
@@ -503,7 +505,8 @@ class QueryResult:
                     logger.debug("Obtained new None mixture.")
                     mixture_id += 1
                     previous_mixture = None
-                    self._mixture_log.append((current_chunk_index, base_mixture))
+                    if not self._is_replay:
+                        self._mixture_log.append((current_chunk_index, base_mixture))
                     self._persist_mixture_log()
 
                 chunk = None
