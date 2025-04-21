@@ -87,7 +87,13 @@ class FineWebMetadataParser(MetadataParser):
     def get_properties(cls) -> list[MetadataProperty]:
         return [
             MetadataProperty(name="dump", dtype="STRING", multiple=False, nullable=False),
-            MetadataProperty(name="language", dtype="ENUM", enum_options=["en"], multiple=False, nullable=False),
+            MetadataProperty(
+                name="language",
+                dtype="ENUM",
+                enum_options=["en"],
+                multiple=False,
+                nullable=False,
+            ),
         ]
 
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
@@ -168,6 +174,63 @@ class PileaMetadataParser(MetadataParser):
         self.add_metadata(sample_id=line_number, pile_set_name=pile_set_name)
 
 
+class GenericMetadataParser(MetadataParser):
+    """
+    Metadata parser with only the source dataset name as a property.
+    """
+
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="dataset",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+            )
+        ]
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        dataset_name = kwargs.get("dataset_name")
+        self.add_metadata(sample_id=line_number, dataset=dataset_name)
+
+
+class DomainNetMetadataParser(MetadataParser):
+    """
+    Metadata parser class for the DomainNet dataset.
+    """
+
+    @classmethod
+    def get_properties(cls) -> list[MetadataProperty]:
+        return [
+            MetadataProperty(
+                name="domain",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+            ),
+            MetadataProperty(
+                name="class_name",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+            ),
+            MetadataProperty(
+                name="dataset",
+                dtype="STRING",
+                multiple=False,
+                nullable=False,
+            ),
+        ]
+
+    def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
+        dataset = kwargs.get("dataset_name")
+        domain = kwargs.get("domain")
+        class_name = kwargs.get("class_name")
+
+        self.add_metadata(sample_id=line_number, domain=domain, class_name=class_name, dataset=dataset)
+
+
 class MetadataParserFactory:
     """Handles the creation of metadata parsers."""
 
@@ -180,6 +243,8 @@ class MetadataParserFactory:
             "FINEWEB": FineWebMetadataParser,
             "MSCOCO": MsCocoParser,
             "PILE": PileaMetadataParser,
+            "GENERIC": GenericMetadataParser,
+            "DOMAINNET": DomainNetMetadataParser,
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
