@@ -13,9 +13,7 @@ runs:
       - name: Setup pixi
         uses: prefix-dev/setup-pixi@v0.8.10
         with:
-          cache-key: cache-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
           pixi-version: latest
-          cache: true
 
       - name: Create minimal Python 3.10 environment and install uv
         run: |
