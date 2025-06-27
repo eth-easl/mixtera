@@ -1,0 +1,113 @@
+[build-system]
+requires = [
+    "setuptools>=68",
+    "wheel",
+    "cmake",
+    "pybind11",
+    "lz4",
+    "pyarrow"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mixtera"]
+
+
+[project]
+name = "mixtera"
+version = "1.0.0"
+description = "A platform for LLM training data mixture."
+readme = "README.md"
+requires-python = ">=3.10"
+license-files = ["LICENSE"]
+authors = [
+    {name = "ETH EASL Group", email = "maximilian.boether@inf.ethz.ch"}
+]
+keywords = ["LLM", "training", "data mixture"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: Implementation :: PyPy"
+]
+
+dependencies = [
+    "tqdm",
+    "loguru",
+    "psutil",
+    "numpy==1.26.4",           # Numpy 2.0 leads to a mypy crash.
+    "dill",
+    "datasets", 
+    "transformers", 
+    "pyarrow",        
+    "cmake",
+    "xxhash",
+    "scipy",
+    "tenacity",
+    "xopen",
+    "duckdb",
+    "polars==1.15",
+    "webdataset",
+    "wids",
+    "pillow",
+    "pybind11",
+    "lz4"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-html",
+    "flake8",
+    "mypy",
+    "pylint",
+    "pytest-console-scripts",
+    "autopep8",
+    "isort",
+    "black",
+    "sphinx-autobuild",
+    "myst-parser",
+    "furo"
+]
+torch = [
+    "torch",
+    "torchvision"
+]
+
+[project.urls]
+Homepage = "https://github.com/eth-easl/mixtera"
+Documentation = "https://github.com/eth-easl/mixtera"
+Source = "https://github.com/eth-easl/mixtera"
+Tracker = "https://github.com/eth-easl/mixtera"
+
+
+[tool.pytest.ini_options]
+testpaths = ["mixtera"]
+addopts = [
+    "--cov=mixtera",
+    "--cov-report=html",
+    "--cov-report=term",
+    "--cache-clear",
+    "--ignore-glob=*/__init__.py"
+]
+
+[tool.flake8]
+max-line-length = 120
+exclude = ["*_grpc.py", "*_pb2.py", "build/**/*"]
+extend-ignore = ["E203"]
+
+[tool.isort]
+profile = "black"
+src_paths = ["mixtera"]
+line_length = 120
+skip_gitignore = true
+extend_skip_glob = ["**/*.pyi", "**/*_grpc.py", "**/*_pb2.py"]
+
+[tool.mypy]
+python_version = "3.10"
+namespace_packages = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+follow_imports = "skip"
+ignore_missing_imports = true
+pretty = true
+exclude = "(benchmark|tests|[0-9a-zA-Z_\\-. ]*\\.pyi|[0-9a-zA-Z_\\-. ]*_grpc\\.py|[0-9a-zA-Z_\\-. ]*_pb2\\.py)"

@@ -61,3 +61,6 @@ tmp/
 *.sqlite
 *.db
 .idea/
+# pixi environments
+.pixi
+*.egg-info

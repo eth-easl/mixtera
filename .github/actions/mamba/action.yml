@@ -10,16 +10,21 @@ runs:
         run: echo "CACHE_NUMBER=0" >> $GITHUB_ENV 
         shell: bash
 
-      - name: Setup micromamba
-        uses: mamba-org/setup-micromamba@v1
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@v0.8.10
         with:
           environment-file: environment.yml
-          cache-environment-key: environment-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
-          cache-downloads-key: downloads-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
-          init-shell: bash
+          cache-key: cache-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
+          pixi-version: latest
+          cache: true
 
-      - name: Install dev requirements 
-        run: | 
-          micromamba run -n mixtera pip install -e .
-          micromamba run -n mixtera pip install -r dev-requirements.txt
-        shell: bash -l {0}
+      - name: Create minimal Python 3.10 environment and install uv
+        run: |
+          pixi init python=3.10 --name mixtera
+          pixi add uv -n mixtera
+        shell: bash
+
+      - name: Install project with uv
+        run: |
+          pixi run -e mixtera uv pip install -e .[dev,torch]
+        shell: bash
