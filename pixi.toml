@@ -2,7 +2,7 @@
 authors = ["Maximilian Böther <maxi+git@boether.de>"]
 channels = ["conda-forge"]
 name = "mixtera-refactor"
-platforms = ["osx-arm64"]
+platforms = ["osx-arm64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
