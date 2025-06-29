@@ -18,7 +18,6 @@ runs:
 
       - name: Create minimal Python 3.10 environment and install uv
         run: |
-          pixi init --no-progress
           pixi add python=3.10  -n mixtera
           pixi add uv -n mixtera
         shell: bash
