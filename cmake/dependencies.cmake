@@ -59,6 +59,20 @@ target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant -
 
 message(STATUS "Searching for Python.")
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+
+execute_process(
+    COMMAND python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+    OUTPUT_VARIABLE PYARROW_LIB_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE PYARROW_RESULT
+)
+
+if(PYARROW_RESULT EQUAL 0)
+    set(CMAKE_PREFIX_PATH "${PYARROW_LIB_DIR}/../.." ${CMAKE_PREFIX_PATH})
+endif()
+
+message(STATUS "Got arrow lib dir: ${PYARROW_LIB_DIR}")
+
 message(STATUS "Searching for Arrow.")
 find_package(Arrow REQUIRED)
 message(STATUS "Getting arrow include path using python: ${Python3_EXECUTABLE}")
