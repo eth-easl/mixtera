@@ -18,11 +18,11 @@ runs:
 
       - name: Create minimal Python 3.10 environment and install uv
         run: |
-          pixi add python=3.10  -n mixtera
-          pixi add uv -n mixtera
+          pixi add python=3.10
+          pixi add uv
         shell: bash
 
       - name: Install project with uv
         run: |
-          pixi run -e mixtera uv pip install -e .[dev,torch]
+          pixi run uv pip install -e .[dev,torch]
         shell: bash
