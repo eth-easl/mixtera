@@ -1,0 +1,12 @@
+[workspace]
+authors = ["Maximilian Böther <maxi+git@boether.de>"]
+channels = ["conda-forge"]
+name = "mixtera-refactor"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "==3.10"
+uv = ">=0.7.15,<0.8"
