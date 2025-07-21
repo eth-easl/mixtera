@@ -1,7 +1,6 @@
 import asyncio
 import threading
 import time
-from datasets.distributed import split_dataset_by_node
 
 import numpy as np
 import pytest
@@ -16,6 +15,9 @@ from mixtera.utils import (
 
 
 def test_flatten():
+    import datasets
+    raise RuntimeError(datasets.__version__)
+
     assert flatten([[1, 2, 3, 4]]) == [1, 2, 3, 4]
     assert flatten([[1, 2], [3, 4]]) == [1, 2, 3, 4]
     assert flatten([[1, 2], [3, 4], [5, 6]]) == [1, 2, 3, 4, 5, 6]
