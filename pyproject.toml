@@ -37,7 +37,7 @@ dependencies = [
     "psutil",
     "numpy",
     "dill",
-    "datasets", 
+    "datasets>=4", 
     "transformers", 
     "pyarrow<21",        
     "cmake",

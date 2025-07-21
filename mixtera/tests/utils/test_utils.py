@@ -24,6 +24,7 @@ def test_flatten():
 
 
 def test_numpy_to_native_types():
+    import datasets.distributed
     np_array = np.array([1, 2, 3])
     result = numpy_to_native_type(np_array)
     assert isinstance(result, list)
