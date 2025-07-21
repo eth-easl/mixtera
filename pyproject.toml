@@ -58,6 +58,7 @@ dev = [
     "pytest-cov",
     "pytest-html",
     "flake8",
+    "pyproject-flake8",
     "mypy",
     "pylint",
     "pytest-console-scripts",
@@ -71,6 +72,10 @@ dev = [
 torch = [
     "torch",
     "torchvision"
+]
+torch_cpuonly = [
+    "torch-cpu",
+    "torchvision-cpu"
 ]
 
 [project.urls]
