@@ -11,23 +11,20 @@ Mixtera is an open-source data-centric training data plane built for modern LLM/
 
 ## ⚡️ Quickstart
 
-Mixtera can run as a server, or, for single-GPU training, in-process. In both cases, you will need to install the necessary dependencies and install Mixtera in your environment, for example as follows:
+Mixtera can run as a server, or, for single-GPU training, in-process. In both cases, you can install Mixtera simply using pip:
 
 ```bash
-# In case you don't have micromamba yet
-# macos:
-brew install micromamba
-# alternatively:
+# In case you don't have a Python environment yet
+# instead of micromamba, you might also consider pixi
 "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
-# Start here if you have micromamba already
-micromamba env create -f ./environment.yml
-micromamba activate mixtera
-pip install -e .
-pip install -r dev-requirements.txt
+# Start here if you have Python already set up
+pip install git+https://github.com/eth-easl/mixtera[torch,dev]
 ```
 
-The Mixtera server can then be started using the `mixtera-server` command.
+If you do not want to have pytorch in your environment, you can remove the optional `torch` flag.
+Similarily, you might want to disable the `dev` flag if you do not want to modify Mixtera. 
+After this installation, the Mixtera server can then be started using the `mixtera-server` command.
 
 ## 🔁 What is Mixtera used for?
 Modern large language and vision models rely on training datasets with fine-grained properties such as language, source, topic, or license. Traditionally, ML engineers have managed these datasets manually using ad hoc scripts and directory structures, which is time-consuming, tedious, and prone to errors. Mixtera addresses these issues by providing a lightweight, declarative data plane that lets you seamlessly filter and dynamically mix data on the fly without the overhead of redundant data processing.

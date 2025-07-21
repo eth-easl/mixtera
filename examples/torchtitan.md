@@ -8,26 +8,26 @@ We start by setting up dependencies and Mixtera. If you run on bare metal, you c
 
 ### 1.1 General setup
 
-We first need to install (micro)mamba, if you have not installed it already, and clone the Mixtera repository.
+We first need to install (micro)mamba, if you have not installed it already, to create a Python environment, and clone the Mixtera repository.
 
 ```bash
-# In case you don't have micromamba yet
+# In case you don't have a Python environment yet
 # macos:
 brew install micromamba
 # alternatively:
 "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
+# you might also consider pixi (which we use in CI)
 
-# Start here if you have micromamba already
+# Run this if you have Python already set up
 git clone https://github.com/eth-easl/mixtera
 cd mixtera
 
-micromamba env create -f ./environment.yml
-micromamba activate mixtera
-pip install -e .
-pip install -r dev-requirements.txt
+pip install -e ".[torch,dev]"
 ```
 
-At latest after restarting your shell, you should have access to the `mixtera-server` command. Next, also clone the torchtitan-mixtera repository and install it:
+Note that cloning the repo is not necessariy if you do not want to modify  Mixtera's code. In that case, you could also run `pip install git+https://github.com/eth-easl/mixtera[torch,dev]`.
+
+After restarting your shell, you should have access to the `mixtera-server` command. Next, also clone the torchtitan-mixtera repository and install it:
 
 ```bash
 git clone https://github.com/eth-easl/torchtitan-mixtera
@@ -37,7 +37,7 @@ pip install -e .
 
 ### 1.2 CSCS alps/clariden
 
-If you are running on clariden, we have prepared a [Dockerfile](clariden/Dockerfile) to build a container with all relevant dependencies. Start by copying that Dockerfile to clariden. Then, [ensure you have set up access to NGC](https://github.com/swiss-ai/documentation/blob/main/pages/setup_ngc.md). Obtain a new node and build the container
+If you are running on clariden--the CSCS Swiss AI cluster--we have prepared a [Dockerfile](clariden/Dockerfile) to build a container with all relevant dependencies. Start by copying that Dockerfile to clariden. Then, [ensure you have set up access to NGC](https://github.com/swiss-ai/documentation/blob/main/pages/setup_ngc.md). Obtain a new node and build the container
 
 ```bash
 srun --container-writable -p normal --pty bash
@@ -120,7 +120,7 @@ Note down the server IP to be able to register the dataset.
 
 ### 3.3 Registering the dataset
 
-We can now register the dataset, either on our local server (3.1) or, if you are on clariden (3.2), on a node with the mixtera environment activated (and mixtera installed via `pip install -e .`). To this end, copy&paste the following into a file, e.g., `register_slimpj.py`:
+We can now register the dataset, either on our local server (3.1) or, if you are on clariden (3.2), on a node with Mixtera installed. To this end, copy&paste the following into a file, e.g., `register_slimpj.py`:
 
 ```python
 from mixtera.core.client import MixteraClient
