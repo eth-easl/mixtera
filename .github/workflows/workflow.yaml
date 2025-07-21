@@ -73,7 +73,7 @@ jobs:
         run: |
           pixi run  isort --version
           pixi run  isort mixtera --check --diff
-          pixi run  isort integrationtests --check --diff
+          pixi run  isort mixtera_integrationtests --check --diff
 
   black:
     timeout-minutes: 15
@@ -129,4 +129,4 @@ jobs:
         uses: ./.github/actions/mamba
 
       - name: Run integrationtests
-        run: pixi run  bash integrationtests/run.sh
+        run: pixi run  bash mixtera_integrationtests/run.sh
