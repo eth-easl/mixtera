@@ -45,6 +45,7 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         datasets.iterable_dataset._BaseExamplesIterable.__init__(self)
         self._shard_call_count = _shard_call_count
         self._column_str = "input_ids" if self._returning_tokens else "text"
+        self._init_state_dict()
 
     def __getitem__(self, index: int) -> Any:
         raise NotImplementedError("This is just overwritten to satify pylint.")
