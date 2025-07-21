@@ -33,7 +33,7 @@ dependencies = [
     "tqdm",
     "loguru",
     "psutil",
-    "numpy==1.26.4",           # Numpy 2.0 leads to a mypy crash.
+    "numpy",
     "dill",
     "datasets", 
     "transformers", 
