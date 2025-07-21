@@ -11,11 +11,12 @@ from typing import Any, Generator
 
 import numpy as np
 from loguru import logger
+from numpy.typing import NDArray
+
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.query import Query
 from mixtera.core.query.mixture import Mixture
-from numpy.typing import NDArray
 from torch.utils.data import IterableDataset, get_worker_info  # pylint: disable=import-error,no-name-in-module
 
 _shared_memory_names: set[str] = set()

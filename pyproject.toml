@@ -95,6 +95,10 @@ max-line-length = 120
 exclude = ["*_grpc.py", "*_pb2.py", "build/**/*"]
 extend-ignore = ["E203"]
 
+[tool.autopep8]
+max_line_length = 120
+ignore = ["E203"]
+
 [tool.isort]
 profile = "black"
 src_paths = ["mixtera"]

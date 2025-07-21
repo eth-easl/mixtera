@@ -7,11 +7,12 @@ from unittest.mock import MagicMock, patch
 import polars as pl
 import pyarrow as pa
 from integrationtests.utils import TestMetadataParser as ExampleMetadataParser
+from polars.testing import assert_frame_equal
+
 from mixtera.core.client.mixtera_client import MixteraClient
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 from mixtera.core.query import Operator, Query, QueryPlan
 from mixtera.core.query.mixture import ArbitraryMixture
-from polars.testing import assert_frame_equal
 
 
 def parsing_func(sample):

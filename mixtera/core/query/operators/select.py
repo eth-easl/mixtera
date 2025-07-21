@@ -1,6 +1,7 @@
 from typing import Any, Tuple, Union
 
 from loguru import logger
+
 from mixtera.core.query.query import QueryPlan
 
 from ._base import Operator

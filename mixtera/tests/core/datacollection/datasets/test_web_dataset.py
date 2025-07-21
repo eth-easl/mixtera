@@ -4,8 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mixtera.core.datacollection.datasets import WebDataset  # Ensure this is the correct import path
 from PIL import Image
+
+from mixtera.core.datacollection.datasets import WebDataset  # Ensure this is the correct import path
 
 
 class TestWebDataset(unittest.TestCase):

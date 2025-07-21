@@ -1,12 +1,14 @@
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
-from setuptools.command.build import build
-import subprocess
-import pathlib
 import os
-import sysconfig
-import socket
+import pathlib
 import shutil
+import socket
+import subprocess
+import sysconfig
+
+from setuptools import Extension, setup
+from setuptools.command.build import build
+from setuptools.command.build_ext import build_ext
+
 
 def _get_env_variable(name: str, default: str = "OFF") -> str:
     if name not in os.environ.keys():

@@ -3,45 +3,49 @@ import io
 from functools import partial
 from typing import Any, Generic, Iterator, TypeVar
 
+
 def create_mock_dataset():
     """Create a mock Dataset class that supports generic subscripting"""
-    T = TypeVar('T')
-    
+    T = TypeVar("T")
+
     class MockDataset(Generic[T]):
         def __init__(self, *args, **kwargs):
             pass
-        
+
         def __len__(self):
             return 0
-        
+
         def __getitem__(self, idx):
             return None
-    
+
     return MockDataset
+
 
 # wids depends on torch in its imports, but we don't rely on torch-related functionality
 try:
     from wids.wids import group_by_key, splitname
     from wids.wids_mmtar import MMIndexedTar
 except ImportError as e:
-    torch_available = True
+    TORCH_AVAILABLE = True
     try:
-        import torch
+        import torch  # noqa: F401 # pylint: disable=unused-import
     except ImportError:
-        torch_available = False
+        TORCH_AVAILABLE = False
 
-    if not torch_available:
+    if not TORCH_AVAILABLE:
         # Mock torch and retry
         import sys
         from unittest.mock import MagicMock
-        sys.modules['torch'] = MagicMock()
-        sys.modules['torch.distributed'] = MagicMock()
+
+        sys.modules["torch"] = MagicMock()
+        sys.modules["torch.distributed"] = MagicMock()
         sys.modules["torch.utils.data"] = MagicMock()
         sys.modules["torch.utils.data"].Dataset = create_mock_dataset()
         from wids.wids import group_by_key, splitname
         from wids.wids_mmtar import MMIndexedTar
-        del sys.modules['torch']
-        del sys.modules['torch.distributed']
+
+        del sys.modules["torch"]
+        del sys.modules["torch.distributed"]
         del sys.modules["torch.utils.data"]
     else:
         raise ImportError("Non-torch related error in wids") from e

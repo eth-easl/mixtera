@@ -14,7 +14,7 @@ black mixtera integrationtests --verbose --config black.toml > /dev/null
 
 echo "Running linters"
 
-if flake8 mixtera ; then
+if pflake8 mixtera ; then
     echo "No flake8 errors"
 else
     echo "flake8 errors"

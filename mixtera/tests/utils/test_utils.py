@@ -4,6 +4,7 @@ import time
 
 import numpy as np
 import pytest
+
 from mixtera.utils import (
     distribute_by_ratio,
     flatten,

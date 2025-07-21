@@ -10,6 +10,7 @@ from integrationtests.utils import (
     setup_test_dataset,
 )
 from loguru import logger
+
 from mixtera.core.algo.loss_avg.loss_avg import SimpleAveragingAlgorithm
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs

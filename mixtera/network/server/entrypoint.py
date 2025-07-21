@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from loguru import logger
+
 from mixtera.network.server import MixteraServer
 
 

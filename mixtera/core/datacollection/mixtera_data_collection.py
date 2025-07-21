@@ -9,6 +9,7 @@ import polars as pl
 import psutil
 import pyarrow as pa
 from loguru import logger
+
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index.parser import MetadataParserFactory
 from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty

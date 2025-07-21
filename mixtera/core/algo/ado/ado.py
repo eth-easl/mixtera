@@ -9,12 +9,13 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
-from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
 from numpy.typing import NDArray
 from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 from scipy.special import logsumexp
 from tqdm import tqdm
+
+from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
 
 
 class AdoDynamicMixing(DynamicMixingAlgorithm):

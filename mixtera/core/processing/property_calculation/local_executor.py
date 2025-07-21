@@ -3,9 +3,10 @@ from typing import Any, Callable, Generator, Type
 
 import numpy as np
 from loguru import logger
+from tqdm import tqdm
+
 from mixtera.core.datacollection.datasets import Dataset, JSONLDataset
 from mixtera.core.processing.property_calculation import PropertyCalculationExecutor
-from tqdm import tqdm
 
 
 class LocalPropertyCalculationExecutor(PropertyCalculationExecutor):

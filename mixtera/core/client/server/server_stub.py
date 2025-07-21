@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Type
 
 from loguru import logger
+
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs
 from mixtera.core.datacollection import PropertyType

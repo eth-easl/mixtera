@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
 import duckdb
+
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets.jsonl_dataset import JSONLDataset
 

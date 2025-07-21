@@ -23,8 +23,8 @@ jobs:
 
       - name: Flake8
         run: |
-          pixi run  flake8 --version
-          pixi run  flake8 mixtera --statistics
+          pixi run pflake8 --version
+          pixi run pflake8 mixtera --statistics
 
   mypy-typechecking:
     timeout-minutes: 15

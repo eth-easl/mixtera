@@ -7,6 +7,7 @@ from typing import Any, Generator, Tuple
 import datasets
 import numpy as np
 from loguru import logger
+
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.query import Query
