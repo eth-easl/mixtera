@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from integrationtests.utils import (
+from loguru import logger
+from mixtera_integrationtests.utils import (
     REPRODUCIBILITY_ITERATIONS,
     TestMetadataParser,
     calc_func,
@@ -11,7 +12,6 @@ from integrationtests.utils import (
     setup_func,
     setup_test_dataset,
 )
-from loguru import logger
 
 from mixtera.core.algo.loss_avg.loss_avg import SimpleAveragingAlgorithm
 from mixtera.core.client import MixteraClient

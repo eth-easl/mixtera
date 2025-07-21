@@ -4,8 +4,8 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 
-from mixtera_integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
 from loguru import logger
+from mixtera_integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
 
 import torch
 from mixtera.core.client import MixteraClient

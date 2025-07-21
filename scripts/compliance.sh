@@ -9,8 +9,8 @@ pushd $PARENT_DIR
 echo "Running auto-formatters"
 
 isort . > /dev/null
-autopep8 mixtera integrationtests --recursive --in-place --pep8-passes 2000 > /dev/null
-black mixtera integrationtests --verbose --config black.toml > /dev/null
+autopep8 mixtera mixtera_integrationtests --recursive --in-place --pep8-passes 2000 > /dev/null
+black mixtera mixtera_integrationtests --verbose --config black.toml > /dev/null
 
 echo "Running linters"
 

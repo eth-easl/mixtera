@@ -3,13 +3,13 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from loguru import logger
 from mixtera_integrationtests.utils import (
     REPRODUCIBILITY_ITERATIONS,
     TestMetadataParser,
     get_expected_js_and_html_samples,
     setup_test_dataset,
 )
-from loguru import logger
 
 from mixtera.core.algo.loss_avg.loss_avg import SimpleAveragingAlgorithm
 from mixtera.core.client import MixteraClient
