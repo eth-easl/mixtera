@@ -19,7 +19,6 @@ version = "1.0.0"
 description = "A platform for LLM training data mixture."
 readme = "README.md"
 requires-python = ">=3.10"
-license-files = ["LICENSE"]
 authors = [
     {name = "ETH EASL Group", email = "maximilian.boether@inf.ethz.ch"}
 ]
