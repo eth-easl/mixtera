@@ -18,14 +18,17 @@ name = "mixtera"
 version = "1.0.0"
 description = "A platform for LLM training data mixture."
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [
     {name = "ETH EASL Group", email = "maximilian.boether@inf.ethz.ch"}
 ]
 keywords = ["LLM", "training", "data mixture"]
 classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: Implementation :: PyPy"
 ]
 
 dependencies = [

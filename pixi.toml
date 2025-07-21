@@ -1,5 +1,5 @@
 [workspace]
-authors = ["Maximilian Böther <maxi+git@boether.de>"]
+authors = ["Maximilian Böther <mboether@ethz.ch>"]
 channels = ["conda-forge"]
 name = "mixtera-refactor"
 platforms = ["osx-arm64", "linux-64"]
