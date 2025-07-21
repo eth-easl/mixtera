@@ -73,10 +73,6 @@ torch = [
     "torch",
     "torchvision"
 ]
-torch_cpuonly = [
-    "torch-cpu",
-    "torchvision-cpu"
-]
 
 [project.urls]
 Homepage = "https://github.com/eth-easl/mixtera"

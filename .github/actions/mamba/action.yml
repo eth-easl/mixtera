@@ -24,5 +24,5 @@ runs:
 
       - name: Install project with uv
         run: |
-          pixi run uv pip install -e .[dev,torch_cpuonly]
+          pixi run uv pip install -e .[dev,torch] --index-url https://download.pytorch.org/whl/cpu
         shell: bash
