@@ -15,16 +15,12 @@ from mixtera.utils import (
 
 
 def test_flatten():
-    import datasets
-    raise RuntimeError(datasets.__version__)
-
     assert flatten([[1, 2, 3, 4]]) == [1, 2, 3, 4]
     assert flatten([[1, 2], [3, 4]]) == [1, 2, 3, 4]
     assert flatten([[1, 2], [3, 4], [5, 6]]) == [1, 2, 3, 4, 5, 6]
 
 
 def test_numpy_to_native_types():
-    import datasets.distributed
     np_array = np.array([1, 2, 3])
     result = numpy_to_native_type(np_array)
     assert isinstance(result, list)
