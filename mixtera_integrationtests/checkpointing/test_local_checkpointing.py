@@ -5,7 +5,7 @@ from pathlib import Path
 from time import sleep
 from unittest import TestCase
 
-from integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
+from mixtera_integrationtests.utils import REPRODUCIBILITY_ITERATIONS, TestMetadataParser, setup_test_dataset
 from loguru import logger
 
 from mixtera.core.client.mixtera_client import MixteraClient, QueryExecutionArgs, ResultStreamingArgs

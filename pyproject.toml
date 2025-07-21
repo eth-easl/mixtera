@@ -10,7 +10,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["mixtera"]
+include = ["mixtera", "mixtera_integrationtests"]
 
 
 [project]

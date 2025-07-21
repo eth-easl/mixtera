@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from datasets import Dataset, Features, IterableDataset, Sequence, Value
 from datasets.distributed import split_dataset_by_node
-from integrationtests.utils import TestMetadataParser, setup_test_dataset
+from mixtera_integrationtests.utils import TestMetadataParser, setup_test_dataset
 from transformers import AutoTokenizer
 
 import torch

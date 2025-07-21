@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-from integrationtests.utils import (
+from mixtera_integrationtests.utils import (
     REPRODUCIBILITY_ITERATIONS,
     TestMetadataParser,
     get_expected_js_and_html_samples,

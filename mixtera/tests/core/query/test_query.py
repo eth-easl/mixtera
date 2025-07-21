@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import polars as pl
 import pyarrow as pa
-from integrationtests.utils import TestMetadataParser as ExampleMetadataParser
+from mixtera_integrationtests.utils import TestMetadataParser as ExampleMetadataParser
 from polars.testing import assert_frame_equal
 
 from mixtera.core.client.mixtera_client import MixteraClient
