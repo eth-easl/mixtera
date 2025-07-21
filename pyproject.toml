@@ -51,7 +51,7 @@ dependencies = [
     "wids",
     "pillow",
     "pybind11",
-    "lz4"
+    "lz4",
 ]
 
 [project.optional-dependencies]

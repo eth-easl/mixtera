@@ -22,7 +22,9 @@ runs:
           pixi add uv
         shell: bash
 
+      # We install torch not via [torch] to specify that we want the CPU version
       - name: Install project with uv
         run: |
-          pixi run uv pip install -e .[dev,torch]  --extra-index-url  https://download.pytorch.org/whl/cpu
+          pixi run uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pixi run uv pip install -e .[dev]
         shell: bash
