@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import time
+from datasets.distributed import split_dataset_by_node
 
 import numpy as np
 import pytest
