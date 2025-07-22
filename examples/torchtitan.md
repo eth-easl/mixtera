@@ -25,7 +25,7 @@ cd mixtera
 pip install -e ".[torch,dev]"
 ```
 
-Note that cloning the repo is not necessariy if you do not want to modify  Mixtera's code. In that case, you could also run `pip install git+https://github.com/eth-easl/mixtera[torch,dev]`.
+Note that cloning the repo is not necessariy if you do not want to modify  Mixtera's code. In that case, you could also run `pip install "git+https://github.com/eth-easl/mixtera.git#egg=mixtera[torch,dev]"`.
 
 After restarting your shell, you should have access to the `mixtera-server` command. Next, also clone the torchtitan-mixtera repository and install it:
 
