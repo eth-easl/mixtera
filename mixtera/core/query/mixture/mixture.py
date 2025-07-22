@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import numpy as np
+
 from mixtera.core.query.mixture.mixture_key import MixtureKey
 from mixtera.network.client.client_feedback import ClientFeedback
 

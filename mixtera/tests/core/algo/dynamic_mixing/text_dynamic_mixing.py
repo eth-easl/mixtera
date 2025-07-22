@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
 
 

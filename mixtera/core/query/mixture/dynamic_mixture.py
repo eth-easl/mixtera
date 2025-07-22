@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
+
 from mixtera.core.algo.dynamic_mixing.dynamic_mixing import DynamicMixingAlgorithm
 from mixtera.core.query.mixture.mixture import Mixture
 from mixtera.core.query.mixture.mixture_key import MixtureKey

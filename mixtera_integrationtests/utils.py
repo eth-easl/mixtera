@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import numpy as np
+
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.datacollection.index.parser.metadata_parser import MetadataProperty
 

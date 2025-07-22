@@ -1,6 +1,7 @@
 from typing import Any
 
 from loguru import logger
+
 from mixtera.network.client.client_feedback import ClientFeedback
 from mixtera.utils.dataset_utils import _recover_mixtera_dataset
 from mixtera.utils.utils import to_numpy_array

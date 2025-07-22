@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.query.operators._base import Operator
 from mixtera.core.query.query_plan import QueryPlan

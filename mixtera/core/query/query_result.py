@@ -11,6 +11,8 @@ from typing import Any, Callable, Generator, Type
 import dill
 import pyarrow as pa
 from loguru import logger
+from pyarrow import compute as pc
+
 from mixtera.core.datacollection import MixteraDataCollection
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, ChunkerIndexDatasetEntries
@@ -27,7 +29,6 @@ from mixtera.utils.utils import (
     seed_everything_from_list,
     serialize_chunker_index,
 )
-from pyarrow import compute as pc
 
 
 class QueryResult:

@@ -9,6 +9,7 @@ from typing import Any, Generator
 
 import dill
 from loguru import logger
+
 from mixtera.core.query.query_result import QueryResult
 from mixtera.core.query.result_chunk import ResultChunk
 

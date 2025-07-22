@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
 import numpy as np
+
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.datacollection.datasets.croissant_dataset import CroissantDataset
 from mixtera.core.processing.property_calculation import LocalPropertyCalculationExecutor

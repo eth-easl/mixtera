@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import numpy as np
+
 from mixtera.network import NUM_BYTES_FOR_IDENTIFIERS, NUM_BYTES_FOR_SIZES
 from mixtera.network.server import MixteraServer
 from mixtera.network.server_task import ServerTask

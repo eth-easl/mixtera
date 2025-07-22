@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from loguru import logger
+
 from mixtera.core.query.mixture import Mixture, MixtureKey
 
 if TYPE_CHECKING:

@@ -22,6 +22,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
+################### lz4 ####################
+
+FetchContent_Declare(
+  lz4
+  GIT_REPOSITORY https://github.com/lz4/lz4.git
+  GIT_TAG v1.10.0
+)
+FetchContent_MakeAvailable(lz4)
+
 ################### pybind11 ####################
 
 message(STATUS "Making pybind11 available.")
@@ -50,6 +59,7 @@ target_compile_options(indicators INTERFACE -Wno-zero-as-null-pointer-constant -
 
 message(STATUS "Searching for Python.")
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+
 message(STATUS "Searching for Arrow.")
 find_package(Arrow REQUIRED)
 message(STATUS "Getting arrow include path using python: ${Python3_EXECUTABLE}")

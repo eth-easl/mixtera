@@ -4,8 +4,9 @@ from pathlib import Path
 from time import sleep
 from unittest import TestCase
 
-from integrationtests.utils import TestMetadataParser, setup_test_dataset
 from loguru import logger
+from mixtera_integrationtests.utils import TestMetadataParser, setup_test_dataset
+
 from mixtera.core.client.mixtera_client import MixteraClient, QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.client.server.server_stub import ServerStub
 from mixtera.core.datacollection.datasets import JSONLDataset

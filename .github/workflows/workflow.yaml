@@ -23,8 +23,8 @@ jobs:
 
       - name: Flake8
         run: |
-          micromamba run -n mixtera flake8 --version
-          micromamba run -n mixtera flake8 mixtera --statistics
+          pixi run pflake8 --version
+          pixi run pflake8 mixtera --statistics
 
   mypy-typechecking:
     timeout-minutes: 15
@@ -39,8 +39,8 @@ jobs:
 
       - name: Mypy
         run: |
-          micromamba run -n mixtera mypy --version
-          micromamba run -n mixtera mypy mixtera
+          pixi run  mypy --version
+          pixi run  mypy mixtera
 
   pylint:
     timeout-minutes: 15
@@ -55,8 +55,8 @@ jobs:
 
       - name: Pylint
         run: |
-          micromamba run -n mixtera pylint --version
-          micromamba run -n mixtera pylint mixtera
+          pixi run  pylint --version
+          pixi run  pylint mixtera
 
   isort:
     timeout-minutes: 15
@@ -71,9 +71,9 @@ jobs:
 
       - name: Isort
         run: |
-          micromamba run -n mixtera isort --version
-          micromamba run -n mixtera isort mixtera --check --diff
-          micromamba run -n mixtera isort integrationtests --check --diff
+          pixi run  isort --version
+          pixi run  isort mixtera --check --diff
+          pixi run  isort mixtera_integrationtests --check --diff
 
   black:
     timeout-minutes: 15
@@ -88,8 +88,8 @@ jobs:
 
       - name: Black
         run: |
-          micromamba run -n mixtera black --version
-          micromamba run -n mixtera black --check mixtera --verbose --config black.toml
+          pixi run  black --version
+          pixi run  black --check mixtera --verbose --config black.toml
 
   unittests:
     timeout-minutes: 15
@@ -104,8 +104,8 @@ jobs:
 
       - name: Pytest
         run: |
-          micromamba run -n mixtera pytest mixtera --cov-reset --cache-clear --cov-fail-under=90
-          micromamba run -n mixtera pytest > pytest-coverage.txt
+          pixi run  pytest mixtera --cov-reset --cache-clear --cov-fail-under=90
+          pixi run  pytest > pytest-coverage.txt
 
       - name: Comment coverage
         uses: coroo/pytest-coverage-commentator@v1.0.2
@@ -129,4 +129,4 @@ jobs:
         uses: ./.github/actions/mamba
 
       - name: Run integrationtests
-        run: micromamba run -n mixtera bash integrationtests/run.sh
+        run: pixi run  bash mixtera_integrationtests/run.sh

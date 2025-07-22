@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Iter
 
 import dill
 from loguru import logger
+from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
+
 from mixtera.core.datacollection.datasets.dataset_type import DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.datacollection.property_type import PropertyType
@@ -25,7 +27,6 @@ from mixtera.network.network_utils import (
 )
 from mixtera.network.server_task import ServerTask
 from mixtera.utils import run_async_until_complete
-from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import QueryExecutionArgs

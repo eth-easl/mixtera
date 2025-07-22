@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, call
 
 import dill
 import numpy as np
+
 from mixtera.network.network_utils import (
     read_bytes,
     read_float,

@@ -6,17 +6,18 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 from datasets import Dataset, Features, IterableDataset, Sequence, Value
 from datasets.distributed import split_dataset_by_node
-from integrationtests.utils import TestMetadataParser, setup_test_dataset
+from mixtera_integrationtests.utils import TestMetadataParser, setup_test_dataset
+from transformers import AutoTokenizer
+
+import torch
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.datacollection.datasets import JSONLDataset
 from mixtera.core.query import Query
 from mixtera.core.query.mixture import ArbitraryMixture
 from mixtera.hf import MixteraHFDataset
-from transformers import AutoTokenizer
 
 # We test both 0 workers and 8 workers
 # Instantiating a tokenizer for 0 workers and then again for 8 workers apparently breaks

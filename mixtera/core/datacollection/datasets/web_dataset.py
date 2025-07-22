@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 from loguru import logger
+
 from mixtera.core.datacollection.datasets import Dataset, DatasetType
 from mixtera.core.datacollection.index.parser import MetadataParser
 from mixtera.core.filesystem import FileSystem

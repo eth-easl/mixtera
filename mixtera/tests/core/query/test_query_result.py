@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import polars as pl
+
 from mixtera.core.client import MixteraClient
 from mixtera.core.query import Query
 from mixtera.core.query.mixture import ArbitraryMixture, InferringMixture, MixtureKey, StaticMixture

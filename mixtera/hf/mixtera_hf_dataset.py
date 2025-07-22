@@ -7,6 +7,7 @@ from typing import Any, Generator, Tuple
 import datasets
 import numpy as np
 from loguru import logger
+
 from mixtera.core.client import MixteraClient
 from mixtera.core.client.mixtera_client import QueryExecutionArgs, ResultStreamingArgs
 from mixtera.core.query import Query
@@ -44,13 +45,15 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
         datasets.iterable_dataset._BaseExamplesIterable.__init__(self)
         self._shard_call_count = _shard_call_count
         self._column_str = "input_ids" if self._returning_tokens else "text"
+        self._init_state_dict()
 
     def __getitem__(self, index: int) -> Any:
         raise NotImplementedError("This is just overwritten to satify pylint.")
 
     def _init_state_dict(self) -> dict:
         logger.info("_init_state_dict called.")
-        return {"key": "random item to make huggingface happy"}
+        self._state_dict = {"key": "random item to make huggingface happy"}
+        return self._state_dict
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> datasets.iterable_dataset._BaseExamplesIterable:
         del generator
@@ -146,7 +149,7 @@ class MixteraHFDataset(datasets.IterableDataset):
             )
         )
         if result_streaming_args.chunk_reading_mixture_type == "token":
-            seq_len = result_streaming_args.tunnel_via_server + 1
+            seq_len = result_streaming_args.chunk_reading_sequence_len + 1
             self.info.features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value(dtype="int64"), length=seq_len),

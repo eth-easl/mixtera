@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Ty
 
 import dill
 from loguru import logger
+from tenacity import Retrying, stop_after_attempt, wait_random_exponential
+
 from mixtera.core.datacollection.datasets import Dataset
 from mixtera.core.datacollection.index import ChunkerIndex, IndexRowRangeType, infer_mixture_from_chunkerindex
 from mixtera.core.query.mixture import MixtureKey, StaticMixture
@@ -22,7 +24,6 @@ from mixtera.utils import (
     is_on_github_actions,
     seed_everything_from_list,
 )
-from tenacity import Retrying, stop_after_attempt, wait_random_exponential
 
 if TYPE_CHECKING:
     from mixtera.core.client.mixtera_client import MixteraClient, ResultStreamingArgs

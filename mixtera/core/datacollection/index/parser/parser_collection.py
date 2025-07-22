@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from loguru import logger
+
 from mixtera.core.datacollection.index.parser import MetadataParser, MetadataProperty
 
 

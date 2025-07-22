@@ -2,8 +2,9 @@ import os
 from pathlib import Path
 from typing import Generator, Iterable
 
-from mixtera.core.filesystem import FileSystem
 from xopen import xopen
+
+from mixtera.core.filesystem import FileSystem
 
 
 class LocalFileSystem(FileSystem):

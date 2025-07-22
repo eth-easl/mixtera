@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from loguru import logger
+
 from mixtera.core.datacollection.mixtera_data_collection import MixteraDataCollection
 from mixtera.core.query.query import Query
 from mixtera.core.query.query_result import QueryResult
