@@ -149,7 +149,7 @@ class MixteraHFDataset(datasets.IterableDataset):
             )
         )
         if result_streaming_args.chunk_reading_mixture_type == "token":
-            seq_len = result_streaming_args.tunnel_via_server + 1
+            seq_len = result_streaming_args.chunk_reading_sequence_len + 1
             self.info.features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value(dtype="int64"), length=seq_len),
