@@ -19,7 +19,7 @@ Mixtera can run as a server, or, for single-GPU training, in-process. In both ca
 "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
 # Start here if you have Python already set up
-pip install git+https://github.com/eth-easl/mixtera[torch,dev]
+pip install "git+https://github.com/eth-easl/mixtera.git#egg=mixtera[torch,dev]"
 ```
 
 If you do not want to have pytorch in your environment, you can remove the optional `torch` flag.
