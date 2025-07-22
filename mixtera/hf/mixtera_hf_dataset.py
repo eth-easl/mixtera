@@ -52,7 +52,8 @@ class _MixteraHFIterable(MixteraTorchDataset, datasets.iterable_dataset._BaseExa
 
     def _init_state_dict(self) -> dict:
         logger.info("_init_state_dict called.")
-        return {"key": "random item to make huggingface happy"}
+        self._state_dict = {"key": "random item to make huggingface happy"}
+        return self._state_dict
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> datasets.iterable_dataset._BaseExamplesIterable:
         del generator
