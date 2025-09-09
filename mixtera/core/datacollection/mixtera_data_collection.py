@@ -177,10 +177,11 @@ class MixteraDataCollection:
         # Determine the number of worker processes
         num_cores = os.cpu_count() or 1
         num_workers = max(num_cores - 4, 1)
-        logger.info("Prepared tasks for reading")
+        logger.info("Prepared tasks for reading.")
 
         # We should make this configurable at some point, but it is not on the hot path of query execution...
         chunk_size = 2000
+        logger.info(f"Using chunk_size={chunk_size} and num_workers={num_workers} for {len(tasks)} tasks.")
 
         # If we used mocking in unit tests, they get lost when we use a mp.Pool
         # Hence, we need to disable multiprocessing for tests here
