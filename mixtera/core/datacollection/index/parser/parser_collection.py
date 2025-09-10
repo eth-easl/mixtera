@@ -121,14 +121,15 @@ class MsCocoParser(MetadataParser):
         self.add_metadata(sample_id=line_number, parity=parity)
 
 
-class PileaMetadataParser(MetadataParser):
+class PileParserTemplate(MetadataParser):
     """
     Metadata parser class for The Pile dataset.
     """
+    num_random_attrs: int = 0  
 
     @classmethod
     def get_properties(cls) -> list[MetadataProperty]:
-        return [
+        properties = [
             MetadataProperty(
                 name="pile_set_name",
                 dtype="ENUM",
@@ -160,13 +161,51 @@ class PileaMetadataParser(MetadataParser):
                 },
             ),
         ]
+        
+        random_attr_options = {
+            "attr1", "attr2", "attr3", "attr4", "attr5",
+            "attr6", "attr7", "attr8", "attr9", "attr10"
+        }
+        
+        for i in range(cls.num_random_attrs):
+            properties.append(
+                MetadataProperty(
+                    name=f"random_attr_{i+1}",
+                    dtype="ENUM",
+                    multiple=False,
+                    nullable=True,
+                    enum_options=random_attr_options,
+                )
+            )
+        
+        return properties
 
     def parse(self, line_number: int, payload: Any, **kwargs: Optional[dict[Any, Any]]) -> None:
         pile_set_name = payload.get("meta", {}).get("pile_set_name")
         if pile_set_name is None:
             raise RuntimeError("Property 'pile_set_name' is not nullable and is missing.")
 
-        self.add_metadata(sample_id=line_number, pile_set_name=pile_set_name)
+        metadata = {"pile_set_name": pile_set_name}
+        
+        for i in range(self.num_random_attrs):
+            attr_name = f"random_attr_{i+1}"
+            attr_value = payload.get("meta", {}).get(attr_name)
+            if attr_value:
+                metadata[attr_name] = attr_value
+
+        self.add_metadata(sample_id=line_number, **metadata)
+
+class PileMetadataParser(PileParserTemplate):
+    """
+    Metadata parser class for The Pile dataset
+    """
+    num_random_attrs = 0
+
+class Pile10Parser(PileParserTemplate):
+    """
+    Metadata parser class for Pile10 dataset with 9 additional random attributes.
+    """
+    num_random_attrs = 9
 
 
 class MetadataParserFactory:
@@ -180,7 +219,8 @@ class MetadataParserFactory:
             "IMAGENET_WEB_DATASET": ImagenetWebDatasetMetadataParser,
             "FINEWEB": FineWebMetadataParser,
             "MSCOCO": MsCocoParser,
-            "PILE": PileaMetadataParser,
+            "PILE": PileMetadataParser,
+            "PILE10": Pile10Parser
         }
 
     def add_parser(self, parser_name: str, parser: type[MetadataParser], overwrite: bool = False) -> bool:
