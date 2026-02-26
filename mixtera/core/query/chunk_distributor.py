@@ -607,6 +607,8 @@ class ChunkDistributor:
 
         logger.debug("Instantiating class.")
 
+        # constructs the ChunkDistributor state, 
+        # not accounting for any new topology from the caller.
         chunk_distributor = cls(
             dp_groups=state["_dp_groups"],
             nodes_per_group=state["_nodes_per_group"],
