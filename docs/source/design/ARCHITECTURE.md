@@ -52,7 +52,7 @@ One-time ingestion, query and chunk generation, distributed training loop with d
 | Phase 2 | Purple | Query submission, SQL execution, ChunkerIndex build |
 | Phase 3 | Green | Static mixture training loop (steps 0–999) |
 | Phase 4 | Orange | ADO dynamic mixing with per-domain loss feedback |
-| Phase 5 | Pink | Checkpoint and elastic resume on different cluster size |
+| Phase 5 | Pink | Checkpoint and resume from saved state |
 
 | # | Component | Part of Mixtera? | Description |
 |---|---|---|---|
@@ -79,7 +79,9 @@ sequenceDiagram
 
     rect rgba(96,165,250,0.10)
     Note over Dev,DB: PHASE 1 - One-Time Metadata Ingestion
-    Dev->>MS: Register MetadataParser for The Pile. Schema: source, language, license, toxicity_score
+    Dev->>MS: Register MetadataParser. Schema: source, language, license, toxicity_score
+    MS-->>Dev: Parser registered
+    Dev->>MS: Register dataset The Pile. Location /data/pile/, type JSONL, parser identifier
     MS->>DFS: Scan all jsonl.zst files in /data/pile/
     DFS-->>MS: Stream file contents
     MS->>MS: Worker pool extracts metadata per sample. source=Pile-CC, lang=en, license=CC-BY
@@ -91,7 +93,7 @@ sequenceDiagram
     rect rgba(167,139,250,0.10)
     Note over Dev,CI: PHASE 2 - Query Submission and Index Build
     Dev->>MC: Define query: filter license IN CC-BY, MIT, Apache. MixtureSchedule: StaticMixture at step 0 then ADO DynamicMixture at step 1000. chunk_size=2048
-    MC->>MS: Submit query + MixtureSchedule. Register node 0..31, dp_group 0..15
+    MC->>MS: Submit query + MixtureSchedule. dp_groups=16, nodes_per_group=8, num_workers=1
     MS->>DB: Execute SQL: filter by license, detect intervals via window functions, group consecutive samples by file and source
     DB-->>MS: QueryResult: 185M samples in 1.2M intervals. Example: file_42 rows 100-347 source=Pile-CC
     MS->>CI: Build ChunkerIndex in parallel via C++ threads. Map component_key to dataset to file to intervals
@@ -103,7 +105,7 @@ sequenceDiagram
     rect rgba(52,211,153,0.10)
     Note over CD,GPU: PHASE 3 - Static Mixture Training Steps 0-999
     loop Each chunk request. Chunk = 2048 sample pointers
-        MC->>MS: Request next chunk for node 0, dp_group 0
+        MC->>MS: Request next chunk for job_id, dp_group 0, node 0, worker 0
         MS->>CI: Run Algorithm 1: for each MixtureKey find matching component keys, take intervals up to target. 614 ptrs for Pile-CC at 30 pct
         CI-->>MS: Chunk of intervals: file_42 rows 100-347 Pile-CC, file_91 rows 0-210 Books3
         MS->>CD: Pass chunk to ChunkDistributor
@@ -121,8 +123,8 @@ sequenceDiagram
     Note over GPU,MS: PHASE 4 - ADO Dynamic Mixing from Step 1000
     GPU->>GPU: Compute per-domain cross-entropy loss without reduction. Aggregate per source domain
     GPU->>GPU: all-reduce per-domain losses across all 128 GPUs
-    GPU->>MC: Per-domain losses: Pile-CC=2.31, Books3=1.87, ArXiv=3.12, GitHub=2.95, PubMed=2.68
-    MC->>MS: Forward per-domain losses to server
+    GPU->>MC: Per-domain losses and counts as numpy arrays plus mixture_id
+    MC->>MS: Forward ClientFeedback: training_steps, mixture_id, losses array, counts array
     MS->>MS: ADO: fit scaling law per domain, compute learning speed, update credit assignment, get new mixture. ArXiv rises 10 to 18 pct, GitHub drops 8 to 3 pct
     loop Subsequent chunks use updated mixture
         MC->>MS: Request next chunk
@@ -139,16 +141,16 @@ sequenceDiagram
     end
 
     rect rgba(244,114,182,0.10)
-    Note over Dev,MS: PHASE 5 - Checkpoint and Elastic Resume
+    Note over Dev,MS: PHASE 5 - Checkpoint and Resume
     Dev->>GPU: Trigger checkpoint at step 15000
     GPU->>MC: Signal checkpoint
-    MC->>MS: Call checkpoint endpoint
-    MS->>MS: Persist: chunks sent to each node, ADO params, ChunkerIndex iterator positions
-    MC->>MC: Record per-worker sample offsets via shared memory
-    Note over Dev,GPU: Later - resume on 64 GPUs 16 nodes instead of 128
-    Dev->>MS: Restore checkpoint with new topology. 16 nodes x 4 GPUs, 8 DP groups
-    MS->>CD: Redistribute chunks to new DP group mapping
-    MS-->>MC: Resume streaming from exact same data sequence
+    MC->>MS: Call checkpoint with job_id, dp_group_id, node_id, worker_status list
+    MS->>MS: Wait for all nodes to report, then persist ChunkDistributor state and QueryResult
+    MC->>MC: Worker sample offsets tracked via shared memory between DataLoader workers
+    Note over Dev,GPU: Later - resume training from checkpoint
+    Dev->>MS: Restore checkpoint with job_id and checkpoint_id
+    MS->>MS: Restore ChunkDistributor and QueryResult state from disk
+    MS-->>MC: Resume streaming from exact same data position
     end
 ```
 
@@ -164,58 +166,64 @@ sequenceDiagram
 
 **Dynamic mixing without re-materialization** — When ADO shifts the mixture (e.g., ArXiv from 10% to 18%), the server simply generates the next chunk with new proportions from the same ChunkerIndex. No data is rewritten on disk.
 
-**Elastic resume** — Checkpoints capture the full iterator state. Training can resume on a different number of nodes while preserving the exact data sequence.
+**Checkpointed resume** — Checkpoints capture the full iterator state (ChunkDistributor positions, QueryResult generator state, and per-worker sample indices). Training can be paused and resumed from the exact same data position.
 
 ---
 
 ## Server API
 
-The Mixtera server exposes a TCP-based, message-oriented protocol (Python `asyncio`). Each message carries a task identifier followed by task-specific payload data. The client library (`MixteraClient`) wraps these calls behind a Python API. Below are the six distinct operations visible in the sequence diagrams.
+The Mixtera server exposes a TCP-based, message-oriented protocol (Python `asyncio`). Each message carries a task identifier (an integer `ServerTask` enum value) followed by task-specific payload data. The client library (`MixteraClient`) wraps these calls behind a Python API. The server defines 16 distinct `ServerTask` operations in total; the seven below are the ones visible in the sequence diagrams.
 
 ### Register MetadataParser
 
-Registers a dataset and its schema with the server, triggering a one-time scan of all data files. A worker pool reads every sample, extracts property values using the parser, and bulk-inserts the metadata into DuckDB as columnar Arrow tables.
+Registers a metadata parser class with the server. The parser defines the property schema (property names, types, `nullable` flag, `multiple` flag) and how to extract property values from raw samples. This does **not** trigger any data scanning — it only makes the parser available for subsequent dataset registrations.
 
-- **Request:** `MetadataParser` — a Python class defining the property schema (property names, types such as `string` or `enum`, `nullable` flag, `multiple` flag) and the file locations to scan.
-- **Response:** Confirmation with total sample count (e.g., "210 M samples indexed").
+- **Request:** `identifier` (string) + `source_code` (the Python class source as a string).
+- **Response:** Boolean success flag.
+
+### Register Dataset
+
+Registers a dataset with the server, triggering a one-time asynchronous scan of all data files. A worker pool reads every sample, extracts property values using a previously registered metadata parser, and bulk-inserts the metadata into DuckDB as columnar Arrow tables.
+
+- **Request:** `identifier` (dataset name), `location` (path to data files), `dataset_type_id` (one of JSONL, Parquet, WebDataset, etc.), `parsing_func` (sample-to-text callable), `metadata_parser_identifier` (reference to a previously registered parser).
+- **Response:** A `job_id` for tracking the asynchronous registration. The client polls `DATASET_REGISTRATION_STATUS` to check completion.
 
 ### Submit Query
 
-Submits a declarative query that combines static filter predicates with a mixture specification and the training job's topology. The server executes the filter via SQL, detects sample intervals using window functions, builds the ChunkerIndex, and writes an initial checkpoint.
+Submits a declarative query that combines static filter predicates with a mixture specification and the training job's topology. The server executes the filter via SQL, detects sample intervals using window functions, builds the ChunkerIndex, and caches the `QueryResult`. Query execution is asynchronous — the client polls `QUERY_EXEC_STATUS` until it completes.
 
 - **Request:**
-  - `Query` — SPJ-style filter predicates, e.g., `Query.for_job(job_id).select(("license", "==", "CC"))`.
-  - `QueryExecutionArgs` — mixture definition (a `StaticMixture`, `DynamicMixture`, `MixtureSchedule`, etc. mapping `MixtureKey`s to proportions), `chunk_size`, `num_workers`, `dp_groups`, `nodes_per_group`.
-  - `ResultStreamingArgs` — `node_id`, `dp_group_id`, `job_id`.
-- **Response:** Confirmation that the query is prepared and the server is ready to stream chunks.
+  - `Query` — filter predicates built via `Query.for_job(job_id).select(("license", "==", "CC"))`.
+  - `QueryExecutionArgs` — `mixture` (a `StaticMixture`, `DynamicMixture`, `MixtureSchedule`, etc. mapping `MixtureKey`s to proportions; `chunk_size` is a parameter of the mixture, not of the execution args), `dp_groups`, `nodes_per_group`, `num_workers`.
+- **Response:** The `job_id` string. The client then calls `stream_results` with `ResultStreamingArgs` (`job_id`, `dp_group_id`, `node_id`, `worker_id`, plus options for mixture type, tokenization, and parallelism) to begin consuming chunks.
 
 ### Request Next Chunk
 
-Pulls the next chunk of sample pointers for a specific node and data-parallel group. The ChunkDistributor guarantees that all nodes within the same DP group receive identical chunks in identical order, while nodes in different DP groups receive different chunks.
+Pulls the next chunk of sample pointers for a specific worker. The ChunkDistributor guarantees that all nodes within the same DP group receive identical chunks in identical order, while nodes in different DP groups receive different chunks. Each worker within a node starts at a different chunk offset and advances by `num_workers` to avoid overlap.
 
-- **Request:** `node_id`, `dp_group_id`.
-- **Response:** A `Chunk` — a fixed-size list of intervals `(file_id, sample_start, sample_end, component_key)` whose aggregate proportions match the current mixture.
+- **Request:** `job_id`, `dp_group_id`, `node_id`, `worker_id`.
+- **Response:** A serialized `ResultChunk` — contains a `ChunkerIndex` (a nested dict `{MixtureKey → {dataset_id → {file_id → [(start, end), ...]}}}`) plus `dataset_type_dict`, `file_path_dict`, and `parsing_func_dict` so the client can read samples directly from storage.
 
 ### Send Training Feedback
 
 Forwards per-domain losses from the training loop to the server, enabling dynamic mixing algorithms (e.g., ADO) to update the mixture weights. The server incorporates the feedback internally; the updated mixture takes effect on the next chunk generated.
 
-- **Request:** Per-domain losses — a mapping from domain (MixtureKey) to aggregated loss value, e.g., `{Pile-CC: 2.31, Books3: 1.87, ArXiv: 3.12, ...}`.
-- **Response:** Implicit acknowledgement. No new chunk is returned — the mixture update is applied asynchronously to subsequent `Request Next Chunk` calls.
+- **Request:** A `ClientFeedback` object containing `job_id`, `training_steps` (int), `mixture_id` (int identifying the chunk's mixture snapshot), `losses` (numpy array of per-`MixtureKey` loss values), and `counts` (numpy array of per-`MixtureKey` token/sample counts).
+- **Response:** Boolean success flag. The mixture update is applied asynchronously to subsequent `Request Next Chunk` calls.
 
 ### Checkpoint
 
-Persists the full server-side iterator state so training can be paused and resumed without data loss or duplication. On the client side, per-worker sample offsets are recorded via shared memory.
+Persists the full server-side iterator state so training can be paused and resumed without data loss or duplication. On the client side, per-worker sample offsets are tracked via shared memory between the main process and DataLoader workers.
 
-- **Request:** Trigger signal (no payload).
-- **Response:** Server persists: chunks already distributed to each node, current ADO parameters, and ChunkerIndex iterator positions. After the initial checkpoint (which serializes the full index), subsequent checkpoints complete in milliseconds.
+- **Request:** `job_id`, `dp_group_id`, `node_id`, `worker_status` (list of per-worker sample indices). Each node in each DP group reports independently; the server waits until all nodes have reported before writing the checkpoint to disk.
+- **Response:** A `checkpoint_id` string (e.g., `chkpnt_1`). The client can poll `CHECKPOINT_COMPLETED` to check whether the on-disk write has finished. The server persists: ChunkDistributor state (chunk caches, usage counters, per-worker next-chunk pointers), QueryResult generator state, and per-worker sample positions.
 
 ### Restore Checkpoint
 
-Resumes a previously checkpointed query, optionally with a different cluster topology. The server restores its in-memory state, the ChunkDistributor remaps chunks to the new DP group layout, and clients resume streaming from the exact point where training stopped.
+Resumes a previously checkpointed query. The server restores the ChunkDistributor and QueryResult from disk (including chunk caches, iterator positions, and mixture state), and clients resume streaming from the exact point where training stopped. The topology (dp_groups, nodes_per_group, num_workers) is restored from the checkpoint state.
 
-- **Request:** Checkpoint identifier + new training topology (`num_nodes`, DP group mapping).
-- **Response:** Server restores state and begins streaming chunks to the new set of registered nodes.
+- **Request:** `job_id`, `checkpoint_id`.
+- **Response:** The `job_id` string. Restoration is asynchronous — the client polls `QUERY_EXEC_STATUS` until the restore completes, then resumes calling `Request Next Chunk`.
 
 ---
 
